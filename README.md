@@ -35,4 +35,9 @@ like this:
 eigengen --model-alias gpt4 "your prompt content"
 ```
 
+You may wish to create a shell alias to avoid having to type it in all the time:
+```.bashrc
+alias eigengen='eigengen --model-alias gpt4'
+```
+
 Pull Requests are welcome!
