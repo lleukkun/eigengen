@@ -15,4 +15,9 @@ python3 -m venv .venv
 pip install -e .
 ```
 
+Example Usage:
+```
+eigengen --diff --file eigengen/eigengen.py "Add OpenAI API support for gpt4o model, please!" | patch -p1
+```
+
 Pull Requests are welcome!
