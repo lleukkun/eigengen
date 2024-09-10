@@ -7,6 +7,13 @@ colorama==0.4.6
 distro==1.9.0
 filelock==3.16.0
 fsspec==2024.9.0
+google-ai-generativelanguage==0.6.9
+google-api-core==2.19.2
+google-api-python-client==2.144.0
+google-auth==2.34.0
+google-auth-httplib2==0.2.0
+google-generativeai==0.8.0
+googleapis-common-protos==1.65.0
 groq==0.11.0
 h11==0.14.0
 httpcore==1.0.5

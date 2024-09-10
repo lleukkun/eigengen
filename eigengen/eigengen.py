@@ -12,6 +12,7 @@ import colorama
 from anthropic import Anthropic, RateLimitError as AnthropicRateLimitError
 from groq import Groq, RateLimitError as GroqRateLimitError
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError
+import google.generativeai as google_genai
 
 # Define the base URL of your Ollama API
 OLLAMA_BASE_URL = "http://localhost:11434"
@@ -259,6 +260,17 @@ def main():
             raise ValueError("OPENAI_API_KEY environment variable is not set")
 
         client = OpenAI(api_key=api_key)
+
+    elif provider == "google":
+        # setup Google client
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            print("GOOGLE_API_KEY environment variable is not set.")
+            print("To set it, use the following command in your terminal:")
+            print("export GOOGLE_API_KEY='your_api_key_here'")
+            raise ValueError("GOOGLE_API_KEY environment variable is not set")
+
+        google_genai.configure(api_key=api_key)
 
     system = PROMPTS["system"]
 
