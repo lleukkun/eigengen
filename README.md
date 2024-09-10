@@ -17,7 +17,8 @@ pip install -e .
 
 Example Usage:
 ```
-eigengen --diff --file eigengen/eigengen.py "Add OpenAI API support for gpt4o model, please!" | patch -p1
+# add new review feature and apply it blindly with patch -p1
+eigengen --diff --file eigengen/eigengen.py "Add --review flag and make it write a code review for the file given with --file argument. Please implement this by having --review fill in a default prompt with text 'Please write a code review for the given file. --review should not be used together with --diff flag." | patch -p1
 ```
 
 Pull Requests are welcome!
