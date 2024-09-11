@@ -22,7 +22,7 @@ class OllamaProvider(Provider):
         self.model: str = model
 
     def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
-                     temperature: float = 0.7) -> str:
+                     temperature: float = 0.5) -> str:
         full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
@@ -68,7 +68,7 @@ class GroqProvider(Provider):
         self.model: str = model
 
     def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
-                     temperature: float = 0.7, max_retries: int = 5, base_delay: int = 1) -> str:
+                     temperature: float = 0.5, max_retries: int = 5, base_delay: int = 1) -> str:
         full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         for attempt in range(max_retries):
             try:
