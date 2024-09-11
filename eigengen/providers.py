@@ -3,13 +3,13 @@ import requests
 import json
 import time
 import random
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Union
 
 from anthropic import Anthropic, RateLimitError as AnthropicRateLimitError
 from groq import Groq, RateLimitError as GroqRateLimitError
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 class Provider(ABC):
     @abstractmethod
@@ -19,13 +19,13 @@ class Provider(ABC):
 
 class OllamaProvider(Provider):
     def __init__(self, model: str = "llama3.1:latest"):
-        self.model = model
+        self.model: str = model
 
     def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
                      temperature: float = 0.7) -> str:
-        full_messages = [{"role": "system", "content": system_prompt}] + messages
-        headers = {'Content-Type': 'application/json'}
-        data = {
+        full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
+        headers: Dict[str, str] = {'Content-Type': 'application/json'}
+        data: Dict[str, Any] = {
             "model": self.model,
             "messages": full_messages,
             "stream": False,
@@ -39,8 +39,8 @@ class OllamaProvider(Provider):
 
 class AnthropicProvider(Provider):
     def __init__(self, client: Anthropic, model: str = "claude-3-haiku-20240307"):
-        self.client = client
-        self.model = model
+        self.client: Anthropic = client
+        self.model: str = model
 
     def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
                      temperature: float = 0.7, max_retries: int = 5, base_delay: int = 1) -> str:
@@ -64,12 +64,12 @@ class AnthropicProvider(Provider):
 
 class GroqProvider(Provider):
     def __init__(self, client: Groq, model: str = "llama-3.1-70b-versatile"):
-        self.client = client
-        self.model = model
+        self.client: Groq = client
+        self.model: str = model
 
     def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
                      temperature: float = 0.7, max_retries: int = 5, base_delay: int = 1) -> str:
-        full_messages = [{"role": "system", "content": system_prompt}] + messages
+        full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
@@ -88,12 +88,12 @@ class GroqProvider(Provider):
 
 class OpenAIProvider(Provider):
     def __init__(self, client: OpenAI, model: str = "gpt-4-0613"):
-        self.client = client
-        self.model = model
+        self.client: OpenAI = client
+        self.model: str = model
 
     def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
                      temperature: float = 0.7, max_retries: int = 5, base_delay: int = 1) -> str:
-        full_messages = [{"role": "system", "content": system_prompt}] + messages
+        full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
@@ -110,14 +110,20 @@ class OpenAIProvider(Provider):
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
-def create_provider(provider: str, model: str, client: Any = None) -> Provider:
+def create_provider(provider: str, model: str, client: Optional[Union[Anthropic, Groq, OpenAI]] = None) -> Provider:
     if provider == "ollama":
         return OllamaProvider(model)
     elif provider == "anthropic":
+        if not isinstance(client, Anthropic):
+            raise ValueError("Invalid client type for Anthropic provider")
         return AnthropicProvider(client, model)
     elif provider == "groq":
+        if not isinstance(client, Groq):
+            raise ValueError("Invalid client type for Groq provider")
         return GroqProvider(client, model)
     elif provider == "openai":
+        if not isinstance(client, OpenAI):
+            raise ValueError("Invalid client type for OpenAI provider")
         return OpenAIProvider(client, model)
     else:
         raise ValueError("Invalid provider specified. Choose 'ollama', 'anthropic', 'groq', or 'openai'.")

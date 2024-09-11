@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 import requests
 import json
 import argparse
@@ -20,7 +20,7 @@ import google.generativeai as google_genai
 from eigengen.prompts import PROMPTS, wrap_file
 from eigengen.providers import create_provider, Provider
 
-def extract_filename(tag):
+def extract_filename(tag: str) -> Optional[str]:
     pattern = r'<eigengen_file\s+name="([^"]*)">'
     match = re.search(pattern, tag)
     if match:
@@ -28,10 +28,10 @@ def extract_filename(tag):
     return None
 
 def extract_file_content(output: str) -> Dict[str, str]:
-    files = {}
-    file_content = []
-    file_started = False
-    file_name = None
+    files: Dict[str, str] = {}
+    file_content: List[str] = []
+    file_started: bool = False
+    file_name: Optional[str] = None
     for line in output.splitlines():
         if not file_started and line.strip().startswith("<eigengen_file name="):
             file_started = True
@@ -40,17 +40,13 @@ def extract_file_content(output: str) -> Dict[str, str]:
             if line == "</eigengen_file>":
                 # file is complete
                 if file_name is not None:
-                    files[file_name] = file_content
+                    files[file_name] = "\n".join(file_content) + "\n"
                 file_content = []
                 file_started = False
                 file_name = None
             else:
                 # Strip trailing whitespace from each line
                 file_content.append(line.rstrip())
-    # Join lines and add a single newline at the end
-    for f in files.keys():
-        files[f] = "\n".join(files[f]) + "\n"
-
     return files
 
 def generate_diff(original_content: str, new_content: str, file_name: str, use_color: bool = True) -> str:
@@ -61,7 +57,7 @@ def generate_diff(original_content: str, new_content: str, file_name: str, use_c
     if not use_color:
         return ''.join(diff)
 
-    colored_diff = []
+    colored_diff: List[str] = []
     for line in diff:
         if line.startswith('---') or line.startswith('+++'):
             colored_diff.append(colorama.Fore.CYAN + line + colorama.Fore.RESET)
@@ -76,16 +72,16 @@ def generate_diff(original_content: str, new_content: str, file_name: str, use_c
 
     return ''.join(colored_diff)
 
-def is_output_to_terminal():
+def is_output_to_terminal() -> bool:
     return sys.stdout.isatty()
 
-def apply_patch(diff: str):
+def apply_patch(diff: str) -> None:
     with tempfile.NamedTemporaryFile(delete=False, mode='w') as temp_diff_file:
         temp_diff_file.write(diff)
         temp_diff_file_path = temp_diff_file.name
 
     editor = os.environ.get("EDITOR", "vi")
-    subprocess.run([editor, temp_diff_file_path])
+    subprocess.run([editor, temp_diff_file_path], check=True)
 
     apply = input("Do you want to apply the changes? (Y/n): ").strip().lower()
     if apply == 'y' or apply == '':
@@ -99,7 +95,7 @@ def apply_patch(diff: str):
 
     os.remove(temp_diff_file_path)
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("--model-alias", choices=["claude-sonnet",
                                                   "claude-haiku",
@@ -122,9 +118,9 @@ def main():
     # Initialize colorama for cross-platform color support
     colorama.init()
 
-    model = "ollama;llama3.1:latest"
+    model: str = "ollama;llama3.1:latest"
 
-    model_map = {
+    model_map: Dict[str, str] = {
         "claude-sonnet": "anthropic;claude-3-5-sonnet-20240620",
         "claude-haiku": "anthropic;claude-3-haiku-20240307",
         "llama3.1": "ollama;llama3.1:latest",
@@ -140,7 +136,7 @@ def main():
 
     # Determine the provider based on the model and remove prefixes if necessary
     provider, model = model.split(";")
-    client = None
+    client: Optional[Union[Anthropic, Groq, OpenAI]] = None
     if provider == "anthropic":
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
@@ -174,17 +170,17 @@ def main():
             raise ValueError("GOOGLE_API_KEY environment variable is not set")
         google_genai.configure(api_key=api_key)
 
-    provider_instance = create_provider(provider, model, client)
+    provider_instance: Provider = create_provider(provider, model, client)
 
-    system = PROMPTS["system"]
+    system: str = PROMPTS["system"]
 
     if args.diff:
         system += PROMPTS["diff"]
     else:
         system += PROMPTS["non_diff"]
 
-    messages = []
-    original_files = {}
+    messages: List[Dict[str, str]] = []
+    original_files: Dict[str, str] = {}
 
     if args.files is not None:
         for fname in args.files:
@@ -197,7 +193,7 @@ def main():
                         original_content = f.read()
                         original_files[fname] = original_content
 
-                        messages += [{"role": "user", "content": wrap_file(fname, original_content) },
+                        messages += [{"role": "user", "content": wrap_file(fname, original_content)},
                                      {"role": "assistant", "content": "ok"}]
             except Exception as e:
                 print(f"Error {e} reading from file: {fname}")
@@ -205,7 +201,7 @@ def main():
 
     messages += [{"role": "user", "content": args.prompt}]
 
-    final_answer = provider_instance.make_request(system, messages)
+    final_answer: str = provider_instance.make_request(system, messages)
 
     if args.debug:
         print(final_answer)
@@ -213,14 +209,14 @@ def main():
     if not args.diff:
         print(final_answer)
     else:
-        new_files = extract_file_content(final_answer)
-        diff = ""
+        new_files: Dict[str, str] = extract_file_content(final_answer)
+        diff: str = ""
         if original_files and new_files:
-            use_color = False
+            use_color: bool = False
             if not args.interactive:
                 use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
             for fname in new_files.keys():
-                original_content = ""
+                original_content: str = ""
                 if fname in original_files:
                     original_content = original_files[fname]
 
