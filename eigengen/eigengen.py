@@ -8,6 +8,8 @@ import time
 import random
 import difflib
 import colorama
+import tempfile
+import subprocess
 
 from anthropic import Anthropic, RateLimitError as AnthropicRateLimitError
 from groq import Groq, RateLimitError as GroqRateLimitError
@@ -43,10 +45,10 @@ PROMPTS = {
 """,
     "diff": """
 ##External File Output
-    - Produce output as the full new version of the file.
+    - Write the full new version of the file.
+    - Include all of the original file.
     - Write the file as-is without any delimiters or codeblock markers.
     - Continuing from your thoughts and reflections, produce the output here.
-    - Do not remove lines that are not related to your modifications.
     - Make sure you address the user prompt.
     - No textual explanations beyond source code comments.
 """,
@@ -188,6 +190,26 @@ def generate_diff(original_content: str, new_content: str, file_name: str, use_c
 def is_output_to_terminal():
     return sys.stdout.isatty()
 
+def apply_patch(diff: str):
+    with tempfile.NamedTemporaryFile(delete=False, mode='w') as temp_diff_file:
+        temp_diff_file.write(diff)
+        temp_diff_file_path = temp_diff_file.name
+
+    editor = os.environ.get("EDITOR", "vi")
+    subprocess.run([editor, temp_diff_file_path])
+
+    apply = input("Do you want to apply the changes? (Y/n): ").strip().lower()
+    if apply == 'y' or apply == '':
+        try:
+            subprocess.run(['patch', '-p1', '-i', temp_diff_file_path], check=True)
+            print("Changes applied successfully.")
+        except subprocess.CalledProcessError:
+            print("Failed to apply changes. Please check the patch file and try again.")
+    else:
+        print("Changes not applied.")
+
+    os.remove(temp_diff_file_path)
+
 def main():
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("prompt")
@@ -201,8 +223,9 @@ def main():
                                                   "groq",
                                                   "gpt4"],
                         default="claude-sonnet", help="Choose Model")
-    parser.add_argument("--file", default=None, help="Attach the file to the request")
-    parser.add_argument("--diff", action="store_true", help="Enable diff output mode")
+    parser.add_argument("--file", "-f", default=None, help="Attach the file to the request")
+    parser.add_argument("--diff", "-d", action="store_true", help="Enable diff output mode")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive mode")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
     args = parser.parse_args()
@@ -304,9 +327,13 @@ def main():
     else:
         new_content = extract_file_content(final_answer)
         if original_content and new_content:
-            use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
+            use_color = False
+            if not args.interactive:
+                use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
             diff = generate_diff(original_content, new_content, args.file, use_color)
             print(diff)
+            if args.interactive:
+                apply_patch(diff)
         else:
             print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
 
