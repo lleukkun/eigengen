@@ -6,6 +6,7 @@ and supports an --interactive mode that allows editing the produced diff before 
 EigenGen works with 
   - Anthropic claude-3-5-sonnet
   - OpenAI GPT4o
+  - llama3.1:70b by Groq
 
 
 You must export your API key using:
@@ -13,6 +14,8 @@ You must export your API key using:
 export ANTHROPIC_API_KEY=<your-api-key>
 or
 export OPENAI_API_KEY=<your-api-key>
+or
+export GROQ_API_KEY=<your-api-key>
 ```
 
 and then create a venv and install this package with:
@@ -47,6 +50,5 @@ alias eigengen='eigengen --model-alias gpt4'
 
 
 TODO:
-  - Get llama3.1:70b from Groq/Ollama working with our system prompts.
   - Figure out why Mistral's models just hate our system prompts.
 
