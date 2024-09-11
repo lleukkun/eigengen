@@ -1,12 +1,14 @@
 EigenGen
 ========
 
-EigenGen is a command line driven code generator. It works with 
+EigenGen is a CLI Large Language Model frontend. It is geared towards working with code,
+and supports an --interactive mode that allows editing the produced diff before applying.
+EigenGen works with 
   - Anthropic claude-3-5-sonnet
   - OpenAI GPT4o
 
 
-You must
+You must export your API key using:
 ```
 export ANTHROPIC_API_KEY=<your-api-key>
 or
@@ -22,8 +24,8 @@ pip install -e .
 
 Example Usage:
 ```
-# add new review feature and apply it blindly with patch -p1
-eigengen --diff --file eigengen/eigengen.py "Add --review flag and make it write a code review for the file given with --file argument. Please implement this by having --review fill in a default prompt with text 'Please write a code review for the given file'. --review should not be used together with --diff flag." | patch -p1
+# add new review feature using interactive mode
+eigengen --interactive --diff --file eigengen/eigengen.py "Add --review flag and make it write a code review for the file given with --file argument. Please implement this by having --review fill in a default prompt with text 'Please write a code review for the given file'. --review should not be used together with --diff flag."
 
 # pipe file content in through stdin
 cat setup.py | eigengen --file - "Please review the given source file, thank you!"
@@ -43,4 +45,8 @@ You may wish to create a shell alias to avoid having to type it in all the time:
 alias eigengen='eigengen --model-alias gpt4'
 ```
 
-Pull Requests are welcome!
+
+TODO:
+  - Get llama3.1:70b from Groq/Ollama working with our system prompts.
+  - Figure out why Mistral's models just hate our system prompts.
+
