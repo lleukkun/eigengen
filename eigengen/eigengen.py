@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict
 import requests
 import json
 import argparse
@@ -9,155 +9,49 @@ import random
 import difflib
 import colorama
 import tempfile
+import re
 import subprocess
 
-from anthropic import Anthropic, RateLimitError as AnthropicRateLimitError
-from groq import Groq, RateLimitError as GroqRateLimitError
-from openai import OpenAI, RateLimitError as OpenAIRateLimitError
+from anthropic import Anthropic
+from groq import Groq
+from openai import OpenAI
 import google.generativeai as google_genai
 
-# Define the base URL of your Ollama API
-OLLAMA_BASE_URL = "http://localhost:11434"
+from eigengen.prompts import PROMPTS, wrap_file
+from eigengen.providers import create_provider, Provider
 
-# Define prompts dictionary
-PROMPTS = {
-    "system": """
-    You are an AI assistant tasked with writing a polished AI assistant answer to the user prompt.
-    Your tasks are to:
-    - Write careful, considered language.
+def extract_filename(tag):
+    pattern = r'<eigengen_file\s+name="([^"]*)">'
+    match = re.search(pattern, tag)
+    if match:
+        return match.group(1)
+    return None
 
-    - Your output must follow this template and must include the segment headings:
-
-##Internal Thoughts
-    - Write your initial thoughts on the polished AI assistant answer.
-    - You should consider the topic from various angles.
-    - Enumerate your thoughts as a list
-
-##Internal Reflections
-    - Write your reflections on your thoughts. Consider if you are omitting something.
-    - Enumerate your reflections as a list
-
-""",
-    "diff": """
-##External File Output
-    - Write the full new version of the file.
-    - Include all of the original file.
-    - Write the file as-is without any delimiters or codeblock markers.
-    - Continuing from your thoughts and reflections, produce the output here.
-    - Make sure you address the user prompt.
-    - No textual explanations beyond source code comments.
-""",
-    "non_diff": """
-##External Output
-    - Continuing from your thoughts and reflections, write the output.
-    - Make sure you address the user prompt.
-    - Write the full answer.
-    - Write the answer so that it is self-contained.
-
-"""
-}
-
-def make_request(system_prompt, messages, temperature=0.7, provider="ollama",
-                 model="llama3.1:latest", max_retries=5, base_delay=1, client: Any=None) -> str:
-    if provider == "ollama":
-        messages = [ { "role": "system", "content": system_prompt }] + messages
-        return make_ollama_request(messages, model, temperature)
-    elif provider == "anthropic":
-        return make_anthropic_request(client, system_prompt, messages, model,
-                                      temperature, max_retries, base_delay)
-    elif provider == "groq":
-        messages = [ { "role": "system", "content": system_prompt }] + messages
-        return make_groq_request(client, messages, model, temperature, max_retries, base_delay)
-    elif provider == "openai":
-        messages = [ { "role": "system", "content": system_prompt }] + messages
-        return make_openai_request(client, messages, model, temperature, max_retries, base_delay)
-    else:
-        raise ValueError("Invalid provider specified. Choose 'ollama', 'anthropic', 'groq', or 'openai'.")
-
-def make_ollama_request(messages, model="llama3.1:latest", temperature=0.7) -> str:
-    headers = {
-        'Content-Type': 'application/json',
-    }
-    data = {
-        "model": model,
-        "messages": messages,
-        "stream": False,
-        "options": {
-            "temperature": temperature,
-            "max_tokens": 128000
-        }
-    }
-    response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data))
-    text = response.json()["message"]["content"]
-    return text
-
-def make_groq_request(client, messages, model="llama-3.1-70b-versatile",
-                      temperature=0.7, max_retries=5, base_delay=1) -> str:
-    for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                messages=messages,
-                model=model,
-                temperature=temperature
-            )
-            return response.choices[0].message.content
-        except GroqRateLimitError as e:
-            if attempt == max_retries - 1:
-                raise e
-            delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-            print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
-            time.sleep(delay)
-    raise IOError(f"Unable to complete API call in {max_retries} retries")
-
-def make_anthropic_request(client, system_prompt, messages, model="claude-3-haiku-20240307", temperature=0.7, max_retries=5, base_delay=1) -> str:
-    for attempt in range(max_retries):
-        try:
-            response = client.messages.create(
-                model=model,
-                max_tokens=4000,
-                temperature=temperature,
-                system=system_prompt,
-                messages=messages
-            )
-            return response.content[0].text
-        except AnthropicRateLimitError as e:
-            if attempt == max_retries - 1:
-                raise e
-            delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-            print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
-            time.sleep(delay)
-    raise IOError(f"Unable to complete API call in {max_retries} retries")
-
-def make_openai_request(client, messages, model="gpt-4-0613", temperature=0.7, max_retries=5, base_delay=1) -> str:
-    for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature
-            )
-            return response.choices[0].message.content
-        except OpenAIRateLimitError as e:
-            if attempt == max_retries - 1:
-                raise e
-            delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-            print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
-            time.sleep(delay)
-    raise IOError(f"Unable to complete API call in {max_retries} retries")
-
-def extract_file_content(output: str) -> str:
+def extract_file_content(output: str) -> Dict[str, str]:
+    files = {}
     file_content = []
     file_started = False
+    file_name = None
     for line in output.splitlines():
-        if not file_started and line.strip() == "##External File Output":
+        if not file_started and line.strip().startswith("<eigengen_file name="):
             file_started = True
+            file_name = extract_filename(line.strip())
         elif file_started:
-            if line.startswith("```"):
-                continue  # Skip the opening and closing diff markers
-            # Strip trailing whitespace from each line
-            file_content.append(line.rstrip())
+            if line == "</eigengen_file>":
+                # file is complete
+                if file_name is not None:
+                    files[file_name] = file_content
+                file_content = []
+                file_started = False
+                file_name = None
+            else:
+                # Strip trailing whitespace from each line
+                file_content.append(line.rstrip())
     # Join lines and add a single newline at the end
-    return "\n".join(file_content) + "\n"
+    for f in files.keys():
+        files[f] = "\n".join(files[f]) + "\n"
+
+    return files
 
 def generate_diff(original_content: str, new_content: str, file_name: str, use_color: bool = True) -> str:
     original_lines = original_content.splitlines(keepends=True)
@@ -207,7 +101,6 @@ def apply_patch(diff: str):
 
 def main():
     parser = argparse.ArgumentParser("eigengen")
-    parser.add_argument("prompt")
     parser.add_argument("--model-alias", choices=["claude-sonnet",
                                                   "claude-haiku",
                                                   "llama3.1",
@@ -218,11 +111,13 @@ def main():
                                                   "groq",
                                                   "gpt4"],
                         default="claude-sonnet", help="Choose Model")
-    parser.add_argument("--file", "-f", default=None, help="Attach the file to the request")
+    parser.add_argument("--file", "-f", action="append", dest="files", help="Attach the file to the request")
+    parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--diff", "-d", action="store_true", help="Enable diff output mode")
     parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive mode")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
+    parser.add_argument("--debug", action="store_true", help="enable debug output")
     args = parser.parse_args()
     # Initialize colorama for cross-platform color support
     colorama.init()
@@ -247,48 +142,39 @@ def main():
     provider, model = model.split(";")
     client = None
     if provider == "anthropic":
-        # setup Anthropic client
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
             print("ANTHROPIC_API_KEY environment variable is not set.")
             print("To set it, use the following command in your terminal:")
             print("export ANTHROPIC_API_KEY='your_api_key_here'")
             raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
-
         client = Anthropic(api_key=api_key)
-
     elif provider == "groq":
-        # setup Groq client
         api_key = os.environ.get("GROQ_API_KEY")
         if not api_key:
             print("GROQ_API_KEY environment variable is not set.")
             print("To set it, use the following command in your terminal:")
             print("export GROQ_API_KEY='your_api_key_here'")
             raise ValueError("GROQ_API_KEY environment variable is not set")
-
         client = Groq(api_key=api_key)
-
     elif provider == "openai":
-        # setup OpenAI client
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             print("OPENAI_API_KEY environment variable is not set.")
             print("To set it, use the following command in your terminal:")
             print("export OPENAI_API_KEY='your_api_key_here'")
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-
         client = OpenAI(api_key=api_key)
-
     elif provider == "google":
-        # setup Google client
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             print("GOOGLE_API_KEY environment variable is not set.")
             print("To set it, use the following command in your terminal:")
             print("export GOOGLE_API_KEY='your_api_key_here'")
             raise ValueError("GOOGLE_API_KEY environment variable is not set")
-
         google_genai.configure(api_key=api_key)
+
+    provider_instance = create_provider(provider, model, client)
 
     system = PROMPTS["system"]
 
@@ -298,34 +184,47 @@ def main():
         system += PROMPTS["non_diff"]
 
     messages = []
-    original_content = None
-    if args.file is not None:
-        try:
-            if args.file == "-":
-                original_content = sys.stdin.read()
-            else:
-                with open(args.file, "r") as f:
-                    original_content = f.read()
+    original_files = {}
 
-            messages += [{"role": "user", "content": f"""```{args.file}\n{original_content}```""" },
-                         {"role": "assistant", "content": "ok"}]
-        except Exception as e:
-            print(f"Error {e} reading from file: {args.file}")
-            sys.exit(1)
+    if args.files is not None:
+        for fname in args.files:
+            try:
+                if fname == "-":
+                    original_content = sys.stdin.read()
+                    original_files["-"] = original_content
+                else:
+                    with open(fname, "r") as f:
+                        original_content = f.read()
+                        original_files[fname] = original_content
+
+                        messages += [{"role": "user", "content": wrap_file(fname, original_content) },
+                                     {"role": "assistant", "content": "ok"}]
+            except Exception as e:
+                print(f"Error {e} reading from file: {fname}")
+                sys.exit(1)
 
     messages += [{"role": "user", "content": args.prompt}]
 
-    final_answer = make_request(system, messages, provider=provider, model=model, client=client)
+    final_answer = provider_instance.make_request(system, messages)
+
+    if args.debug:
+        print(final_answer)
 
     if not args.diff:
         print(final_answer)
     else:
-        new_content = extract_file_content(final_answer)
-        if original_content and new_content:
+        new_files = extract_file_content(final_answer)
+        diff = ""
+        if original_files and new_files:
             use_color = False
             if not args.interactive:
                 use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-            diff = generate_diff(original_content, new_content, args.file, use_color)
+            for fname in new_files.keys():
+                original_content = ""
+                if fname in original_files:
+                    original_content = original_files[fname]
+
+                diff += generate_diff(original_content, new_files[fname], fname, use_color)
             print(diff)
             if args.interactive:
                 apply_patch(diff)
