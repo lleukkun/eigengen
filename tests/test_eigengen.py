@@ -1,6 +1,7 @@
 import pytest
 from io import StringIO
 import sys
+import os
 from eigengen.eigengen import main
 
 def test_main_prints_help(capsys):
@@ -23,3 +24,67 @@ def test_main_prints_help(capsys):
     assert "--interactive" in captured.out
     assert "--color" in captured.out
     assert "--debug" in captured.out
+
+@pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set")
+def test_claude_sonnet_hello_world(capsys, monkeypatch):
+    # Simulate command-line arguments
+    monkeypatch.setattr(sys, 'argv', [
+        "eigengen",
+        "--model-alias", "claude-sonnet",
+        "--prompt", "Print out 'hello, world.' as the only output."
+    ])
+
+    # Call the main function
+    main()
+
+    # Capture the output
+    captured = capsys.readouterr()
+
+    # Split the output into lines and remove empty lines
+    output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
+
+    # Check if the last non-empty line is exactly 'hello, world.'
+    assert output_lines[-1] == 'hello, world.'
+
+@pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
+def test_gpt4_hello_world(capsys, monkeypatch):
+    # Simulate command-line arguments
+    monkeypatch.setattr(sys, 'argv', [
+        "eigengen",
+        "--model-alias", "gpt4",
+        "--prompt", "Print out 'hello, world.' as the only output."
+    ])
+
+    # Call the main function
+    main()
+
+    # Capture the output
+    captured = capsys.readouterr()
+
+    # Split the output into lines and remove empty lines
+    output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
+
+    # Check if the last non-empty line is exactly 'hello, world.'
+    assert output_lines[-1] == 'hello, world.'
+
+@pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set")
+def test_groq_hello_world(capsys, monkeypatch):
+    # Simulate command-line arguments
+    monkeypatch.setattr(sys, 'argv', [
+        "eigengen",
+        "--model-alias", "groq",
+        "--prompt", "Print out 'hello, world.' as the only output."
+    ])
+
+    # Call the main function
+    main()
+
+    # Capture the output
+    captured = capsys.readouterr()
+
+    # Split the output into lines and remove empty lines
+    output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
+
+    # Check if the last non-empty line is exactly 'hello, world.'
+    assert output_lines[-1] == 'hello, world.'
+
