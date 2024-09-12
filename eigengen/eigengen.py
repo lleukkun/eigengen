@@ -185,6 +185,7 @@ def main() -> None:
     if args.files is not None:
         for fname in args.files:
             try:
+                original_content: str = ""
                 if fname == "-":
                     original_content = sys.stdin.read()
                     original_files["-"] = original_content
@@ -193,8 +194,8 @@ def main() -> None:
                         original_content = f.read()
                         original_files[fname] = original_content
 
-                        messages += [{"role": "user", "content": wrap_file(fname, original_content)},
-                                     {"role": "assistant", "content": "ok"}]
+                messages += [{"role": "user", "content": wrap_file(fname, original_content)},
+                             {"role": "assistant", "content": "ok"}]
             except Exception as e:
                 print(f"Error {e} reading from file: {fname}")
                 sys.exit(1)
