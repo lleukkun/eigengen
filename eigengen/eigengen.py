@@ -152,7 +152,7 @@ def process_request(provider: str, model: str, files: Optional[List[str]], promp
 
 def main() -> None:
     parser = argparse.ArgumentParser("eigengen")
-    parser.add_argument("--model-alias", choices=["claude-sonnet",
+    parser.add_argument("--model", "-m", choices=["claude-sonnet",
                                                   "claude-haiku",
                                                   "llama3.1",
                                                   "codestral",
@@ -188,7 +188,7 @@ def main() -> None:
         "o1-preview": "openai;o1-preview",
         "o1-mini": "openai;o1-mini"
     }
-    model: str = model_map.get(args.model_alias, "ollama;llama3.1:latest")
+    model: str = model_map.get(args.model, "ollama;llama3.1:latest")
 
     provider, model = model.split(";")
 
@@ -223,3 +223,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

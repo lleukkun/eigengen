@@ -17,7 +17,8 @@ def test_main_prints_help(capsys):
 
     # Check if help text is in the output
     assert "usage: eigengen" in captured.out
-    assert "--model-alias" in captured.out
+    assert "--model" in captured.out
+    assert "-m" in captured.out
     assert "--files" in captured.out
     assert "--prompt" in captured.out
     assert "--diff" in captured.out
@@ -30,7 +31,7 @@ def test_claude_sonnet_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
     monkeypatch.setattr(sys, 'argv', [
         "eigengen",
-        "--model-alias", "claude-sonnet",
+        "--model", "claude-sonnet",
         "--prompt", "Print out 'hello, world.' as the only output."
     ])
 
@@ -51,7 +52,7 @@ def test_gpt4_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
     monkeypatch.setattr(sys, 'argv', [
         "eigengen",
-        "--model-alias", "gpt4",
+        "--model", "gpt4",
         "--prompt", "Print out 'hello, world.' as the only output."
     ])
 
@@ -72,7 +73,7 @@ def test_groq_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
     monkeypatch.setattr(sys, 'argv', [
         "eigengen",
-        "--model-alias", "groq",
+        "--model", "groq",
         "--prompt", "Print out 'hello, world.' as the only output."
     ])
 
