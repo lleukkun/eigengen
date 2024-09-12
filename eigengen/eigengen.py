@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import requests
 import json
 import argparse
@@ -95,6 +95,61 @@ def apply_patch(diff: str) -> None:
 
     os.remove(temp_diff_file_path)
 
+def process_request(provider: str, model: str, files: Optional[List[str]], prompt: str, diff_mode: bool) -> Tuple[str, Dict[str, str]]:
+    client: Optional[Union[Anthropic, Groq, OpenAI]] = None
+    if provider == "anthropic":
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+        client = Anthropic(api_key=api_key)
+    elif provider == "groq":
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY environment variable is not set")
+        client = Groq(api_key=api_key)
+    elif provider == "openai":
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is not set")
+        client = OpenAI(api_key=api_key)
+    elif provider == "google":
+        api_key = os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY environment variable is not set")
+        google_genai.configure(api_key=api_key)
+
+    provider_instance: Provider = create_provider(provider, model, client)
+
+    system: str = PROMPTS["system"]
+    system += PROMPTS["diff"] if diff_mode else PROMPTS["non_diff"]
+
+    messages: List[Dict[str, str]] = []
+    original_files: Dict[str, str] = {}
+
+    if files is not None:
+        for fname in files:
+            try:
+                original_content: str = ""
+                if fname == "-":
+                    original_content = sys.stdin.read()
+                    original_files["-"] = original_content
+                else:
+                    with open(fname, "r") as f:
+                        original_content = f.read()
+                        original_files[fname] = original_content
+
+                messages += [{"role": "user", "content": wrap_file(fname, original_content)},
+                             {"role": "assistant", "content": "ok"}]
+            except Exception as e:
+                raise IOError(f"Error reading from file: {fname}") from e
+
+    messages += [{"role": "user", "content": prompt}]
+
+    final_answer: str = provider_instance.make_request(system, messages)
+    new_files: Dict[str, str] = extract_file_content(final_answer) if diff_mode else {}
+
+    return final_answer, new_files
+
 def main() -> None:
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("--model-alias", choices=["claude-sonnet",
@@ -118,8 +173,6 @@ def main() -> None:
     # Initialize colorama for cross-platform color support
     colorama.init()
 
-    model: str = "ollama;llama3.1:latest"
-
     model_map: Dict[str, str] = {
         "claude-sonnet": "anthropic;claude-3-5-sonnet-20240620",
         "claude-haiku": "anthropic;claude-3-haiku-20240307",
@@ -131,103 +184,38 @@ def main() -> None:
         "groq": "groq;llama-3.1-70b-versatile",
         "gpt4": "openai;gpt-4o-2024-08-06"
     }
-    if args.model_alias in model_map.keys():
-        model = model_map[args.model_alias]
+    model: str = model_map.get(args.model_alias, "ollama;llama3.1:latest")
 
-    # Determine the provider based on the model and remove prefixes if necessary
     provider, model = model.split(";")
-    client: Optional[Union[Anthropic, Groq, OpenAI]] = None
-    if provider == "anthropic":
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            print("ANTHROPIC_API_KEY environment variable is not set.")
-            print("To set it, use the following command in your terminal:")
-            print("export ANTHROPIC_API_KEY='your_api_key_here'")
-            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
-        client = Anthropic(api_key=api_key)
-    elif provider == "groq":
-        api_key = os.environ.get("GROQ_API_KEY")
-        if not api_key:
-            print("GROQ_API_KEY environment variable is not set.")
-            print("To set it, use the following command in your terminal:")
-            print("export GROQ_API_KEY='your_api_key_here'")
-            raise ValueError("GROQ_API_KEY environment variable is not set")
-        client = Groq(api_key=api_key)
-    elif provider == "openai":
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            print("OPENAI_API_KEY environment variable is not set.")
-            print("To set it, use the following command in your terminal:")
-            print("export OPENAI_API_KEY='your_api_key_here'")
-            raise ValueError("OPENAI_API_KEY environment variable is not set")
-        client = OpenAI(api_key=api_key)
-    elif provider == "google":
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            print("GOOGLE_API_KEY environment variable is not set.")
-            print("To set it, use the following command in your terminal:")
-            print("export GOOGLE_API_KEY='your_api_key_here'")
-            raise ValueError("GOOGLE_API_KEY environment variable is not set")
-        google_genai.configure(api_key=api_key)
 
-    provider_instance: Provider = create_provider(provider, model, client)
+    try:
+        final_answer, new_files = process_request(provider, model, args.files, args.prompt, args.diff)
 
-    system: str = PROMPTS["system"]
+        if args.debug:
+            print(final_answer)
 
-    if args.diff:
-        system += PROMPTS["diff"]
-    else:
-        system += PROMPTS["non_diff"]
-
-    messages: List[Dict[str, str]] = []
-    original_files: Dict[str, str] = {}
-
-    if args.files is not None:
-        for fname in args.files:
-            try:
-                original_content: str = ""
-                if fname == "-":
-                    original_content = sys.stdin.read()
-                    original_files["-"] = original_content
-                else:
-                    with open(fname, "r") as f:
-                        original_content = f.read()
-                        original_files[fname] = original_content
-
-                messages += [{"role": "user", "content": wrap_file(fname, original_content)},
-                             {"role": "assistant", "content": "ok"}]
-            except Exception as e:
-                print(f"Error {e} reading from file: {fname}")
-                sys.exit(1)
-
-    messages += [{"role": "user", "content": args.prompt}]
-
-    final_answer: str = provider_instance.make_request(system, messages)
-
-    if args.debug:
-        print(final_answer)
-
-    if not args.diff:
-        print(final_answer)
-    else:
-        new_files: Dict[str, str] = extract_file_content(final_answer)
-        diff: str = ""
-        if original_files and new_files:
-            use_color: bool = False
-            if not args.interactive:
-                use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-            for fname in new_files.keys():
-                original_content: str = ""
-                if fname in original_files:
-                    original_content = original_files[fname]
-
-                diff += generate_diff(original_content, new_files[fname], fname, use_color)
-            print(diff)
-            if args.interactive:
-                apply_patch(diff)
+        if not args.diff:
+            print(final_answer)
         else:
-            print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
+            diff: str = ""
+            if args.files and new_files:
+                use_color: bool = False
+                if not args.interactive:
+                    use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
+                for fname in new_files.keys():
+                    original_content: str = ""
+                    if fname in args.files:
+                        with open(fname, "r") as f:
+                            original_content = f.read()
+                    diff += generate_diff(original_content, new_files[fname], fname, use_color)
+                print(diff)
+                if args.interactive:
+                    apply_patch(diff)
+            else:
+                print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
-
