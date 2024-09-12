@@ -9,6 +9,11 @@ EigenGen works with
   - llama3.1:70b by Groq
 
 
+Installation:
+```
+pip install eigengen
+```
+
 You must export your API key using:
 ```
 export ANTHROPIC_API_KEY=<your-api-key>
@@ -18,7 +23,7 @@ or
 export GROQ_API_KEY=<your-api-key>
 ```
 
-and then create a venv and install this package with:
+For development please do something like:
 ```
 python3 -m venv .venv
 . .venv/bin/activate
