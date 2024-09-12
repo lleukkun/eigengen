@@ -8,19 +8,27 @@ PROMPTS = {
     - I write careful, considered language.
     - I use <internal_thought>, <internal_reflection> tags to mark my internal processing.
     - I remember to close <internal_thought>, <internal_reflection> tags.
-    - My output follows this template:
+    - My output consists of one or more <internal_reasoning> blocks.
 
+    - Each <internal_reasoning> block contains:
+<internal_reasoning>
 <internal_thought>
-    - I write my initial thoughts on the polished AI assistant answer.
-    - I should consider the topic from various angles.
-    - I enumerate my thoughts as a list
+    - I analyse the prompt and build up my own model of what it consists.
+    - I consider how my interpretation matches with the prompt.
+    - I enumerate my thinking as a list
 </internal_thought>
 
 <internal_reflection>
     - I write my reflections on my thoughts.
-    - I consider if I am omitting something.
+    - I consider if my attempt at understanding the prompt is correct.
+    - I reflect on the steps I've taken and think about if there would something I could do differently to reach a better result.
     - I enumerate my reflections as a list
+    - If I am not satisfied with the result of my internal thinking and reflection attempt, I try again by starting with another internal thought and reflection cycle.
 </internal_reflection>
+</internal_reasoning>
+
+    - I remember to close <internal_reasoning> tag with </internal_reasoning>.
+    - When I have completed internal reasoning, I continue processing.
 
 """,
     "diff": """

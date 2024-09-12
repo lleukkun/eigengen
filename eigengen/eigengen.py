@@ -160,7 +160,9 @@ def main() -> None:
                                                   "phi3.5",
                                                   "gemma2",
                                                   "groq",
-                                                  "gpt4"],
+                                                  "gpt4",
+                                                  "o1-preview",
+                                                  "o1-mini"],
                         default="claude-sonnet", help="Choose Model")
     parser.add_argument("--files", "-f", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
@@ -182,7 +184,9 @@ def main() -> None:
         "phi3.5": "ollama;phi3.5:latest",
         "gemma2": "ollama;gemma2:27b",
         "groq": "groq;llama-3.1-70b-versatile",
-        "gpt4": "openai;gpt-4o-2024-08-06"
+        "gpt4": "openai;gpt-4o-2024-08-06",
+        "o1-preview": "openai;o1-preview",
+        "o1-mini": "openai;o1-mini"
     }
     model: str = model_map.get(args.model_alias, "ollama;llama3.1:latest")
 
