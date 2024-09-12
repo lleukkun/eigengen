@@ -56,4 +56,5 @@ alias eigengen='eigengen --model-alias gpt4'
 
 TODO:
   - Figure out why Mistral's models just hate our system prompts.
+  - Add some kind of directory indexing machinery to lessen the need to list files manually.
 
