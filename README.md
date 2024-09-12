@@ -33,13 +33,13 @@ pip install -e .
 Example Usage:
 ```
 # add new review feature using interactive mode
-eigengen --interactive --diff --file eigengen/eigengen.py "Add --review flag and make it write a code review for the file given with --file argument. Please implement this by having --review fill in a default prompt with text 'Please write a code review for the given file'. --review should not be used together with --diff flag."
+eigengen --interactive --diff --files eigengen/eigengen.py "Add --review flag and make it write a code review for the file given with --files argument. Please implement this by having --review fill in a default prompt with text 'Please write a code review for the given file'. --review should not be used together with --diff flag."
 
 # pipe file content in through stdin
-cat setup.py | eigengen --file - "Please review the given source file, thank you!"
+cat setup.py | eigengen -f - "Please review the given source file, thank you!"
 
 # pipe a git diff output and write a review for it
-git diff origin/main^^..HEAD | eigengen --file - "Please write a code review for the given diff, thank you!
+git diff origin/main^^..HEAD | eigengen -f - "Please write a code review for the given diff, thank you!
 ```
 
 By default eigengen uses claude-3-5-sonnet. In order to use OpenAI GPT4o model, please give --model-alias argument
