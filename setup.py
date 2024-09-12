@@ -14,7 +14,7 @@ setup(
     },
     author="Lauri Leukkunen",
     author_email="lauri.leukkunen@gmail.com",
-    description="EigenGen is a CLI code generator supporting Anthropic Claude 3.5 Sonnet model.",
+    description="EigenGen is a CLI LLM frontend for code generation with support for claude, gpt4 and llama3.1:70b.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/lleukkun/eigengen",
