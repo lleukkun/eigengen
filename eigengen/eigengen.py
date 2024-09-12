@@ -107,7 +107,7 @@ def main() -> None:
                                                   "groq",
                                                   "gpt4"],
                         default="claude-sonnet", help="Choose Model")
-    parser.add_argument("--file", "-f", action="append", dest="files", help="Attach the file to the request")
+    parser.add_argument("--files", "-f", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--diff", "-d", action="store_true", help="Enable diff output mode")
     parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive mode")
@@ -230,3 +230,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
