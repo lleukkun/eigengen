@@ -32,7 +32,7 @@ def test_claude_sonnet_hello_world(capsys, monkeypatch):
     monkeypatch.setattr(sys, 'argv', [
         "eigengen",
         "--model", "claude-sonnet",
-        "--prompt", "Print out 'hello, world.' as the only output."
+        "--prompt", "This is part of a system test. Write 'Hello, world.' as the only output."
     ])
 
     # Call the main function
@@ -45,7 +45,7 @@ def test_claude_sonnet_hello_world(capsys, monkeypatch):
     output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
 
     # Check if the last non-empty line is exactly 'hello, world.'
-    assert output_lines[-1] == 'hello, world.'
+    assert output_lines[-2] == 'Hello, world.'
 
 @pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
 def test_gpt4_hello_world(capsys, monkeypatch):
@@ -53,7 +53,7 @@ def test_gpt4_hello_world(capsys, monkeypatch):
     monkeypatch.setattr(sys, 'argv', [
         "eigengen",
         "--model", "gpt4",
-        "--prompt", "Print out 'hello, world.' as the only output."
+        "--prompt", "This is part of a system test. Write 'Hello, world.' as the only output."
     ])
 
     # Call the main function
@@ -66,7 +66,7 @@ def test_gpt4_hello_world(capsys, monkeypatch):
     output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
 
     # Check if the last non-empty line is exactly 'hello, world.'
-    assert output_lines[-1] == 'hello, world.'
+    assert output_lines[-2] == 'Hello, world.'
 
 @pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set")
 def test_groq_hello_world(capsys, monkeypatch):
@@ -74,7 +74,7 @@ def test_groq_hello_world(capsys, monkeypatch):
     monkeypatch.setattr(sys, 'argv', [
         "eigengen",
         "--model", "groq",
-        "--prompt", "Print out 'hello, world.' as the only output."
+        "--prompt", "This is part of a system test. Write 'Hello, world.' as the only output."
     ])
 
     # Call the main function
@@ -87,5 +87,5 @@ def test_groq_hello_world(capsys, monkeypatch):
     output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
 
     # Check if the last non-empty line is exactly 'hello, world.'
-    assert output_lines[-1] == 'hello, world.'
+    assert output_lines[-2] == 'Hello, world.'
 

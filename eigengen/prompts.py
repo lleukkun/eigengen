@@ -42,11 +42,12 @@ PROMPTS = {
         - I add no textual explanations beyond source code comments.
 """,
     "non_diff": """
-##External Output
+    - I write <external_output> segment for my output.
     - I continue from my thoughts and reflections, writing the output here.
     - I make sure I address the user prompt.
     - I write the full answer.
     - I write the answer so that it is self-contained.
+    - I close <external_output> segment.
 
 """
 }
