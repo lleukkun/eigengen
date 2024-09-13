@@ -6,10 +6,11 @@ with open("requirements.txt") as f:
 setup(
     name="eigengen",
     version="0.1.2",
-    packages=find_packages(),
+    package_dir={"": "src"},  # Tell setuptools packages are under src/
+    packages=find_packages(where="src"),  # Look for packages under src/
     entry_points={
         "console_scripts": [
-            "eigengen=eigengen.eigengen:main",
+            "eigengen=eigengen.eigengen:main",  # Update if main script location changes
         ],
     },
     author="Lauri Leukkunen",

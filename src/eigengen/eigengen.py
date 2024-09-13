@@ -1,18 +1,14 @@
-from typing import Any, Dict, List, Optional, Tuple, Union
-import requests
-import json
+from typing import Dict, List, Optional, Tuple
 import argparse
 import os
 import sys
-import time
-import random
 import difflib
 import colorama
 import tempfile
 import re
 import subprocess
 
-from eigengen.prompts import PROMPTS, wrap_file
+from eigengen.prompts import PROMPTS, MAGIC_STRINGS, wrap_file
 from eigengen.providers import create_provider, Provider, get_model_config, MODEL_CONFIGS
 
 def extract_filename(tag: str) -> Optional[str]:
@@ -28,11 +24,11 @@ def extract_file_content(output: str) -> Dict[str, str]:
     file_started: bool = False
     file_name: Optional[str] = None
     for line in output.splitlines():
-        if not file_started and line.strip().startswith("<eigengen_file name="):
+        if not file_started and line.strip().startswith(MAGIC_STRINGS["file_start"]):
             file_started = True
             file_name = extract_filename(line.strip())
         elif file_started:
-            if line == "</eigengen_file>":
+            if line == MAGIC_STRINGS["file_end"]:
                 # file is complete
                 if file_name is not None:
                     files[file_name] = "\n".join(file_content) + "\n"

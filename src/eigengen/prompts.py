@@ -1,6 +1,11 @@
 def wrap_file(filename: str, content: str) -> str:
     return f"<eigengen_file name=\"{filename}\">\n{content}\n</eigengen_file>"
 
+MAGIC_STRINGS = {
+    "file_start": "<eigengen_file name=",
+    "file_end": "</eigengen_file>"
+}
+
 PROMPTS = {
     "system": """
     I am an AI assistant tasked with writing a polished AI assistant answer to the user prompt.
