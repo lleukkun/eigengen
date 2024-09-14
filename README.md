@@ -8,8 +8,18 @@ EigenGen works with
   - OpenAI GPT4o
   - llama3.1:70b by Groq
 
+## Features
 
-Installation:
+  - Basic prompt/answer flow with -p "Type your prompt here"
+  - Diff output mode with -d that prints out the changes to files as a diff
+  - Interactive Diff mode with -i -d flags. This allows reviewing/editing the diff in text editor before applying.
+  - Code Review flow with -r that gives you the option to continue discussing the changes with the LLM
+    by typing your comments in-line with '> ' quoted diff. This is a bit like software development used to be before Pull Requests.
+  - Add 'git ls-files' files to context automatically with -g
+  - Exclude files from automatic context inclusion by listing patterns in .eigengen_ignore
+
+
+## Installation
 ```
 pip install eigengen
 ```
@@ -23,14 +33,17 @@ or
 export GROQ_API_KEY=<your-api-key>
 ```
 
-For development please do something like:
+## Development
+
+Please do something like:
 ```
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e .
 ```
 
-Example Usage:
+## Example Usage
+
 ```
 # add new review feature using interactive mode
 eigengen --interactive --diff --files eigengen/eigengen.py "Add --review flag and make it write a code review for the file given with --files argument. Please implement this by having --review fill in a default prompt with text 'Please write a code review for the given file'. --review should not be used together with --diff flag."
