@@ -46,6 +46,20 @@ PROMPTS = {
         - I make sure I address the user prompt.
         - I add no textual explanations beyond source code comments.
 """,
+    "code_review": """
+    - I have been provided the original proposed changes as a diff
+    - The user has responded to the diff with their comments in the style of a quoted email
+    - I need to carefully find the user's review comments from in between the '> ' quoted diff lines.
+    - I use <eigengen_file name="filename"> tag to mark the content of the files I write.
+    - I remember to close <eigengen_file> tags.
+    - I write <eigengen_file> </eigengen_file> segments for each file I modify.
+    - I write each <eigengen_file> </eigengen_file> segment like this:
+        - I write the full new version of the file.
+        - I include all of the original file.
+        - I continue from my thoughts and reflections and write the output.
+        - I make sure I address the user prompt.
+        - I add no textual explanations beyond source code comments.
+""",
     "non_diff": """
     - I write <external_output> segment for my output.
     - I continue from my thoughts and reflections, writing the output here.

@@ -67,63 +67,64 @@ def generate_diff(original_content: str, new_content: str, file_name: str, use_c
 def is_output_to_terminal() -> bool:
     return sys.stdout.isatty()
 
-def apply_patch(diff: str) -> None:
+def apply_patch(diff: str, auto_apply: bool = False) -> None:
     with tempfile.NamedTemporaryFile(delete=False, mode='w') as temp_diff_file:
         temp_diff_file.write(diff)
         temp_diff_file_path = temp_diff_file.name
 
-    editor = os.environ.get("EDITOR", "vi")
-    subprocess.run([editor, temp_diff_file_path], check=True)
+    if not auto_apply:
+        editor = os.environ.get("EDITOR", "vi")
+        subprocess.run([editor, temp_diff_file_path], check=True)
 
-    apply = input("Do you want to apply the changes? (Y/n): ").strip().lower()
-    if apply == 'y' or apply == '':
-        try:
-            subprocess.run(['patch', '-p1', '-i', temp_diff_file_path], check=True)
-            print("Changes applied successfully.")
-        except subprocess.CalledProcessError:
-            print("Failed to apply changes. Please check the patch file and try again.")
-    else:
-        print("Changes not applied.")
+        apply = input("Do you want to apply the changes? (Y/n): ").strip().lower()
+        if apply != 'y' and apply != '':
+            print("Changes not applied.")
+            os.remove(temp_diff_file_path)
+            return
+
+    try:
+        subprocess.run(['patch', '-p1', '-i', temp_diff_file_path], check=True)
+        print("Changes applied successfully.")
+    except subprocess.CalledProcessError:
+        print("Failed to apply changes. Please check the patch file and try again.")
 
     os.remove(temp_diff_file_path)
 
-def process_request(model: str, files: Optional[List[str]], prompt: str, diff_mode: bool) -> Tuple[str, Dict[str, str]]:
+def process_request(model: str, messages: List[Dict[str, str]], mode: str = "default") -> Tuple[str, Dict[str, str]]:
     provider_instance: Provider = create_provider(model)
     model_config = get_model_config(model)
 
     system: str = PROMPTS["system"]
-    system += PROMPTS["diff"] if diff_mode else PROMPTS["non_diff"]
-
-    messages: List[Dict[str, str]] = []
-    original_files: Dict[str, str] = {}
-
-    if files is not None:
-        for fname in files:
-            try:
-                original_content: str = ""
-                if fname == "-":
-                    original_content = sys.stdin.read()
-                    original_files["-"] = original_content
-                else:
-                    with open(fname, "r") as f:
-                        original_content = f.read()
-                        original_files[fname] = original_content
-
-                messages += [{"role": "user", "content": wrap_file(fname, original_content)},
-                             {"role": "assistant", "content": "ok"}]
-            except Exception as e:
-                raise IOError(f"Error reading from file: {fname}") from e
-
-    messages += [{"role": "user", "content": prompt}]
+    if mode == "default":
+        system += PROMPTS["non_diff"]
+    elif mode == "diff":
+        system += PROMPTS["diff"]
+    elif mode == "code_review":
+        system += PROMPTS["code_review"]
 
     final_answer: str = provider_instance.make_request(system, messages, model_config.max_tokens, model_config.temperature)
-    new_files: Dict[str, str] = extract_file_content(final_answer) if diff_mode else {}
+    new_files: Dict[str, str] = extract_file_content(final_answer) if mode == "diff" or mode == "code_review" else {}
 
     return final_answer, new_files
 
 def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
+    system_prompt_mode = "diff"
+    review_messages = []
     while True:
-        final_answer, new_files = process_request(model, files, prompt, True)
+        messages: List[Dict[str, str]] = []
+        if files:
+            for fname in files:
+                with open(fname, "r") as f:
+                    original_content = f.read()
+                messages += [{"role": "user", "content": wrap_file(fname, original_content)},
+                             {"role": "assistant", "content": "ok"}]
+        messages.append({"role": "user", "content": prompt})
+        messages += review_messages
+
+        final_answer, new_files = process_request(model, messages, system_prompt_mode)
+        # switch to review mode for later rounds
+        system_prompt_mode = "code_review"
+        print(final_answer)
         diff = ""
         for fname in new_files.keys():
             original_content = ""
@@ -134,9 +135,13 @@ def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
 
         # Present the diff to the user for review
         with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+            temp_file.write("Hello, here are my code review comments in-line. Please address them and resubmit, thank you!\n\n")
             for line in diff.splitlines():
                 temp_file.write(f"> {line}\n")
             temp_file_path = temp_file.name
+
+        with open(temp_file_path, 'r') as temp_file:
+            original_review_content = temp_file.read()
 
         editor = os.environ.get("EDITOR", "vi")
         subprocess.run([editor, temp_file_path], check=True)
@@ -146,26 +151,56 @@ def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
 
         os.unlink(temp_file_path)
 
-        if review_content.strip() == diff.strip():
+        if review_content.strip() == original_review_content.strip():
             # No changes made, ask if we should apply the diff
             apply = input("No changes made to the review. Do you want to apply the changes? (Y/n): ").strip().lower()
             if apply == 'y' or apply == '':
-                apply_patch(diff)
+                apply_patch(diff, auto_apply=True)
             break
         else:
             # Changes made, continue the review process
-            messages = []
-            for fname in files:
+            review_messages = [{"role": "assistant", "content": diff},
+                               {"role": "user", "content": review_content}]
+
+def diff_mode(model: str, files: Optional[List[str]], prompt: str, use_color: bool, interactive: bool, debug: bool) -> None:
+    messages: List[Dict[str, str]] = []
+    if files:
+        for fname in files:
+            with open(fname, "r") as f:
+                original_content = f.read()
+            messages += [{"role": "user", "content": wrap_file(fname, original_content)},
+                         {"role": "assistant", "content": "ok"}]
+    messages.append({"role": "user", "content": prompt})
+
+    final_answer, new_files = process_request(model, messages, "diff")
+
+    diff: str = ""
+    if new_files:
+        for fname in new_files.keys():
+            original_content: str = ""
+            if files and fname in files:
                 with open(fname, "r") as f:
                     original_content = f.read()
-                messages += [{"role": "user", "content": wrap_file(fname, original_content)},
-                             {"role": "assistant", "content": "ok"}]
-            messages += [
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": diff},
-                {"role": "user", "content": review_content}
-            ]
-            prompt = "Please review the changes and comments, and provide an updated version of the files."
+            diff += generate_diff(original_content, new_files[fname], fname, use_color)
+        if debug:
+            print(diff)
+        if interactive:
+            apply_patch(diff)
+    else:
+        print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
+
+def default_mode(model: str, files: Optional[List[str]], prompt: str) -> None:
+    messages: List[Dict[str, str]] = []
+    if files:
+        for fname in files:
+            with open(fname, "r") as f:
+                original_content = f.read()
+            messages += [{"role": "user", "content": wrap_file(fname, original_content)},
+                         {"role": "assistant", "content": "ok"}]
+    messages.append({"role": "user", "content": prompt})
+
+    final_answer, _ = process_request(model, messages, "default")
+    print(final_answer)
 
 def main() -> None:
     parser = argparse.ArgumentParser("eigengen")
@@ -195,34 +230,16 @@ def main() -> None:
 
         if args.code_review:
             code_review(args.model, files_list, args.prompt)
+        elif args.diff:
+            use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
+            diff_mode(args.model, files_list, args.prompt, use_color, args.interactive, args.debug)
         else:
-            final_answer, new_files = process_request(args.model, files_list, args.prompt, args.diff)
+            default_mode(args.model, files_list, args.prompt)
 
-            if args.debug:
-                print(final_answer)
-
-            if not args.diff:
-                print(final_answer)
-            else:
-                diff: str = ""
-                if new_files:
-                    use_color: bool = False
-                    if not args.interactive:
-                        use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-                    for fname in new_files.keys():
-                        original_content: str = ""
-                        if files_list and fname in files_list:
-                            with open(fname, "r") as f:
-                                original_content = f.read()
-                        diff += generate_diff(original_content, new_files[fname], fname, use_color)
-                    print(diff)
-                    if args.interactive:
-                        apply_patch(diff)
-                else:
-                    print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
     main()
+
