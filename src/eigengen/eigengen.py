@@ -73,7 +73,7 @@ def apply_patch(diff: str, auto_apply: bool = False) -> None:
         temp_diff_file_path = temp_diff_file.name
 
     if not auto_apply:
-        editor = os.environ.get("EDITOR", "vi")
+        editor = os.environ.get("EDITOR", "nano")
         subprocess.run([editor, temp_diff_file_path], check=True)
 
         apply = input("Do you want to apply the changes? (Y/n): ").strip().lower()
@@ -143,7 +143,7 @@ def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
         with open(temp_file_path, 'r') as temp_file:
             original_review_content = temp_file.read()
 
-        editor = os.environ.get("EDITOR", "vi")
+        editor = os.environ.get("EDITOR", "nano")
         subprocess.run([editor, temp_file_path], check=True)
 
         with open(temp_file_path, 'r') as temp_file:
