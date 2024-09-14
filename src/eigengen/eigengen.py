@@ -211,7 +211,7 @@ def main() -> None:
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--diff", "-d", action="store_true", help="Enable diff output mode")
     parser.add_argument("--code-review", "-r", action="store_true", help="Enable code review mode")
-    parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive mode")
+    parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive mode (only used with --diff, not with --code-review)")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
     parser.add_argument("--debug", action="store_true", help="enable debug output")
@@ -229,6 +229,8 @@ def main() -> None:
         files_list = list(files_set) if files_set else None
 
         if args.code_review:
+            if args.interactive:
+                print("Warning: --interactive mode is not supported with --code-review. Ignoring --interactive flag.")
             code_review(args.model, files_list, args.prompt)
         elif args.diff:
             use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
