@@ -10,6 +10,7 @@ import subprocess
 
 from eigengen.prompts import PROMPTS, MAGIC_STRINGS, wrap_file
 from eigengen.providers import create_provider, Provider, get_model_config, MODEL_CONFIGS
+from eigengen.gitfiles import get_filtered_git_files
 
 def extract_filename(tag: str) -> Optional[str]:
     pattern = r'<eigengen_file\s+name="([^"]*)">'
@@ -120,13 +121,61 @@ def process_request(model: str, files: Optional[List[str]], prompt: str, diff_mo
 
     return final_answer, new_files
 
+def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
+    while True:
+        final_answer, new_files = process_request(model, files, prompt, True)
+        diff = ""
+        for fname in new_files.keys():
+            original_content = ""
+            if files and fname in files:
+                with open(fname, "r") as f:
+                    original_content = f.read()
+            diff += generate_diff(original_content, new_files[fname], fname, False)
+
+        # Present the diff to the user for review
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+            for line in diff.splitlines():
+                temp_file.write(f"> {line}\n")
+            temp_file_path = temp_file.name
+
+        editor = os.environ.get("EDITOR", "vi")
+        subprocess.run([editor, temp_file_path], check=True)
+
+        with open(temp_file_path, 'r') as temp_file:
+            review_content = temp_file.read()
+
+        os.unlink(temp_file_path)
+
+        if review_content.strip() == diff.strip():
+            # No changes made, ask if we should apply the diff
+            apply = input("No changes made to the review. Do you want to apply the changes? (Y/n): ").strip().lower()
+            if apply == 'y' or apply == '':
+                apply_patch(diff)
+            break
+        else:
+            # Changes made, continue the review process
+            messages = []
+            for fname in files:
+                with open(fname, "r") as f:
+                    original_content = f.read()
+                messages += [{"role": "user", "content": wrap_file(fname, original_content)},
+                             {"role": "assistant", "content": "ok"}]
+            messages += [
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": diff},
+                {"role": "user", "content": review_content}
+            ]
+            prompt = "Please review the changes and comments, and provide an updated version of the files."
+
 def main() -> None:
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("--model", "-m", choices=list(MODEL_CONFIGS.keys()),
                         default="claude-sonnet", help="Choose Model")
     parser.add_argument("--files", "-f", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
+    parser.add_argument("--git-files", "-g", action="store_true", help="Include files from git ls-files, filtered by .eigengen_ignore")
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--diff", "-d", action="store_true", help="Enable diff output mode")
+    parser.add_argument("--code-review", "-r", action="store_true", help="Enable code review mode")
     parser.add_argument("--interactive", "-i", action="store_true", help="Enable interactive mode")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
@@ -136,30 +185,41 @@ def main() -> None:
     colorama.init()
 
     try:
-        final_answer, new_files = process_request(args.model, args.files, args.prompt, args.diff)
+        files_set = set(args.files) if args.files else set()
 
-        if args.debug:
-            print(final_answer)
+        if args.git_files:
+            git_files = set(get_filtered_git_files())
+            files_set.update(git_files)
 
-        if not args.diff:
-            print(final_answer)
+        files_list = list(files_set) if files_set else None
+
+        if args.code_review:
+            code_review(args.model, files_list, args.prompt)
         else:
-            diff: str = ""
-            if args.files and new_files:
-                use_color: bool = False
-                if not args.interactive:
-                    use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-                for fname in new_files.keys():
-                    original_content: str = ""
-                    if fname in args.files:
-                        with open(fname, "r") as f:
-                            original_content = f.read()
-                    diff += generate_diff(original_content, new_files[fname], fname, use_color)
-                print(diff)
-                if args.interactive:
-                    apply_patch(diff)
+            final_answer, new_files = process_request(args.model, files_list, args.prompt, args.diff)
+
+            if args.debug:
+                print(final_answer)
+
+            if not args.diff:
+                print(final_answer)
             else:
-                print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
+                diff: str = ""
+                if new_files:
+                    use_color: bool = False
+                    if not args.interactive:
+                        use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
+                    for fname in new_files.keys():
+                        original_content: str = ""
+                        if files_list and fname in files_list:
+                            with open(fname, "r") as f:
+                                original_content = f.read()
+                        diff += generate_diff(original_content, new_files[fname], fname, use_color)
+                    print(diff)
+                    if args.interactive:
+                        apply_patch(diff)
+                else:
+                    print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         sys.exit(1)
