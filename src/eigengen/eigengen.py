@@ -117,6 +117,36 @@ def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, 
     except Exception as e:
         print(f"Warning: Failed to log request/response: {str(e)}", file=sys.stderr)
 
+def log_prompt(prompt: str) -> None:
+    log_dir = os.path.expanduser("~/.eigengen")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "prompt_history.jsonl")
+
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "prompt": prompt
+    }
+
+    try:
+        with open(log_file, "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        print(f"Warning: Failed to log prompt: {str(e)}", file=sys.stderr)
+
+def list_prompt_history(n: int) -> None:
+    log_file = os.path.expanduser("~/.eigengen/prompt_history.jsonl")
+    if not os.path.exists(log_file):
+        print("No prompt history found.")
+        return
+
+    with open(log_file, "r") as f:
+        lines = f.readlines()
+
+    prompts = [json.loads(line) for line in reversed(lines)]
+    for i, entry in enumerate(prompts[:n], 1):
+        timestamp = datetime.fromisoformat(entry["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{i}. [{timestamp}] {entry['prompt']}")
+
 def process_request(model: str, messages: List[Dict[str, str]], mode: str = "default") -> Tuple[str, Dict[str, str]]:
     provider_instance: Provider = create_provider(model)
     model_config = get_model_config(model)
@@ -245,9 +275,15 @@ def main() -> None:
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
     parser.add_argument("--debug", action="store_true", help="enable debug output")
+    parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
+                        help="List the last N prompts (default 5)")
     args = parser.parse_args()
     # Initialize colorama for cross-platform color support
     colorama.init()
+
+    if args.list_history is not None:
+        list_prompt_history(args.list_history)
+        return
 
     try:
         files_set = set(args.files) if args.files else set()
@@ -257,6 +293,9 @@ def main() -> None:
             files_set.update(git_files)
 
         files_list = list(files_set) if files_set else None
+
+        if args.prompt:
+            log_prompt(args.prompt)
 
         if args.code_review:
             if args.interactive:
