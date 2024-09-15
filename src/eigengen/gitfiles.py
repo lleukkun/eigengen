@@ -35,4 +35,5 @@ def get_filtered_git_files():
     ignore_file = find_eigengen_ignore()
     ignore_patterns = read_ignore_patterns(ignore_file)
     git_files = get_git_files()
-    return filter_files(git_files, ignore_patterns)
+    filtered_list = filter_files(git_files, ignore_patterns)
+    return filtered_list

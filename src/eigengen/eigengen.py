@@ -8,7 +8,7 @@ import tempfile
 import re
 import subprocess
 
-from eigengen.prompts import PROMPTS, MAGIC_STRINGS, wrap_file
+from eigengen.prompts import ALT_PROMPTS as PROMPTS, MAGIC_STRINGS, wrap_file
 from eigengen.providers import create_provider, Provider, get_model_config, MODEL_CONFIGS
 from eigengen.gitfiles import get_filtered_git_files
 

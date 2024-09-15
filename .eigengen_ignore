@@ -1,7 +1,10 @@
 src/eigengen/prompts.py
-dist
-build
+dist/**
+build/**
 README.md
 LICENSE
-tests/
+tests/**
 setup.py
+requirements.txt
+.gitignore
+.eigengen_ignore
