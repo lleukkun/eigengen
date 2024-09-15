@@ -7,6 +7,8 @@ import colorama
 import tempfile
 import re
 import subprocess
+import json
+from datetime import datetime
 
 from eigengen.prompts import ALT_PROMPTS as PROMPTS, MAGIC_STRINGS, wrap_file
 from eigengen.providers import create_provider, Provider, get_model_config, MODEL_CONFIGS
@@ -90,6 +92,31 @@ def apply_patch(diff: str, auto_apply: bool = False) -> None:
 
     os.remove(temp_diff_file_path)
 
+def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, final_answer: str, new_files: Dict[str, str]) -> None:
+    log_dir = os.path.expanduser("~/.eigengen")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, "log.jsonl")
+
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "current_dir": os.getcwd(),
+        "request": {
+            "model": model,
+            "messages": messages,
+            "mode": mode
+        },
+        "response": {
+            "final_answer": final_answer,
+            "new_files": new_files
+        }
+    }
+
+    try:
+        with open(log_file, "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        print(f"Warning: Failed to log request/response: {str(e)}", file=sys.stderr)
+
 def process_request(model: str, messages: List[Dict[str, str]], mode: str = "default") -> Tuple[str, Dict[str, str]]:
     provider_instance: Provider = create_provider(model)
     model_config = get_model_config(model)
@@ -104,6 +131,9 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
 
     final_answer: str = provider_instance.make_request(system, messages, model_config.max_tokens, model_config.temperature)
     new_files: Dict[str, str] = extract_file_content(final_answer) if mode == "diff" or mode == "code_review" else {}
+
+    # Log the request and response
+    log_request_response(model, messages, mode, final_answer, new_files)
 
     return final_answer, new_files
 

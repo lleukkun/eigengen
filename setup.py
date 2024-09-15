@@ -11,6 +11,7 @@ setup(
     entry_points={
         "console_scripts": [
             "eigengen=eigengen.eigengen:main",  # Update if main script location changes
+            "egg=eigengen.eigengen:main"
         ],
     },
     author="Lauri Leukkunen",
