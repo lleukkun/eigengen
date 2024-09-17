@@ -2,7 +2,8 @@ import pytest
 from io import StringIO
 import sys
 import os
-from eigengen.eigengen import main, generate_diff
+from eigengen.eigengen import main
+from eigengen.operations import generate_diff
 import re
 
 def test_main_prints_help(capsys):
@@ -23,9 +24,13 @@ def test_main_prints_help(capsys):
     assert "--files" in captured.out
     assert "--prompt" in captured.out
     assert "--diff" in captured.out
-    assert "--interactive" in captured.out
     assert "--color" in captured.out
     assert "--debug" in captured.out
+    assert "--git-files" in captured.out
+    assert "--code-review" in captured.out
+    assert "--list-history" in captured.out
+    assert "--web" in captured.out
+
 
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set")
 def test_claude_sonnet_hello_world(capsys, monkeypatch):

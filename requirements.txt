@@ -5,6 +5,7 @@ certifi==2024.8.30
 charset-normalizer==3.3.2
 colorama==0.4.6
 distro==1.9.0
+fastapi==0.114.2
 filelock==3.16.0
 fsspec==2024.9.0
 google-ai-generativelanguage==0.6.9
@@ -33,3 +34,4 @@ tokenizers==0.20.0
 tqdm==4.66.5
 typing_extensions==4.12.2
 urllib3==2.2.2
+uvicorn==0.30.6
