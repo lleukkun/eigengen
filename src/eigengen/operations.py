@@ -6,7 +6,7 @@ import subprocess
 import difflib
 import colorama
 
-from eigengen import logging, providers, utils, prompts, gitfiles
+from eigengen import log, providers, utils, prompts, gitfiles
 from eigengen.prompts import PROMPTS as PROMPTS
 
 
@@ -74,7 +74,7 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     new_files: Dict[str, str] = utils.extract_file_content(final_answer) if mode == "diff" or mode == "code_review" else {}
 
     # Log the request and response
-    logging.log_request_response(model, messages, mode, final_answer, new_files)
+    log.log_request_response(model, messages, mode, final_answer, new_files)
 
     return final_answer, new_files
 
@@ -157,5 +157,4 @@ def get_file_list(use_git_files: bool=True, extra_files: List[str]=[]) -> List[s
 
     file_list = list(file_set) if file_set else []
     return file_list
-
 

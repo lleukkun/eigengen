@@ -27,9 +27,9 @@ PROMPTS = {
     - You write each <eigengen_file> </eigengen_file> segment like this:
         - You write the full new version of the file.
         - You include all of the original file.
-        - You continue from my thoughts and reflections and write the output.
-        - You make sure I address the user prompt.
-        - You add no textual explanations beyond source code comments.
+        - You continue from your thoughts and reflections and write the output.
+        - You make sure you address the user prompt.
+        - You add comments sparingly only where they add value.
 """,
     "code_review": """
     - You have been provided the original proposed changes as a diff
@@ -43,7 +43,7 @@ PROMPTS = {
         - You include all of the original file.
         - You continue from my thoughts and reflections and write the output.
         - You make sure you address the user prompt.
-        - You include comments where they add value.
+        - You add comments sparingly only where they add value.
 """,
     "non_diff": """
     - You write <external_output> segment for output.

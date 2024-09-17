@@ -8,23 +8,19 @@ import subprocess
 import colorama
 
 from eigengen.providers import MODEL_CONFIGS
-from eigengen import operations, logging, api
+from eigengen import operations, log, api
 
 
 def is_output_to_terminal() -> bool:
     return sys.stdout.isatty()
 
 
-def get_prompt_from_editor() -> Optional[str]:
+def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
     editor = os.environ.get("EDITOR", "nano")
-
-    # Define pre-fill content
-    prefill_line1 = "# Enter your prompt here. These first two lines will be ignored."
-    prefill_line2 = "# Save and close the editor when you're done."
 
     with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
         temp_file_path = temp_file.name
-        temp_file.write(f"{prefill_line1}\n{prefill_line2}\n\n")
+        temp_file.write(prefill_content + "\n")
 
     try:
         subprocess.run([editor, temp_file_path], check=True)
@@ -32,9 +28,9 @@ def get_prompt_from_editor() -> Optional[str]:
         with open(temp_file_path, 'r') as file:
             lines = file.readlines()
 
-        # Remove the first two lines if they match the pre-filled content
-        if len(lines) >= 2 and lines[0].strip() == prefill_line1 and lines[1].strip() == prefill_line2:
-            lines = lines[2:]
+        # Remove the prefill content
+        prefill_lines = prefill_content.count('\n')
+        lines = lines[prefill_lines:]
 
         # Keep all lines, including empty ones and lines starting with #
         prompt_lines = [line.rstrip('\n') for line in lines]
@@ -48,29 +44,14 @@ def get_prompt_from_editor() -> Optional[str]:
         os.unlink(temp_file_path)
 
 
+def get_prompt_from_editor() -> Optional[str]:
+    prefill_content = "# Enter your prompt here. These first two lines will be ignored.\n# Save and close the editor when you're done.\n"
+    return get_prompt_from_editor_with_prefill(prefill_content)
+
+
 def get_prompt_from_editor_for_review() -> Optional[str]:
-    editor = os.environ.get("EDITOR", "nano")
-    with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
-        temp_file_path = temp_file.name
-        temp_file.write("# Code Review Workflow: Enter your prompt here. Lines starting with # will be ignored.\n")
-        temp_file.write("# Save and close the editor when you're done.\n\n")
-
-    try:
-        subprocess.run([editor, temp_file_path], check=True)
-
-        with open(temp_file_path, 'r') as file:
-            lines = file.readlines()
-
-        # Filter out comments and empty lines
-        prompt_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
-
-        if not prompt_lines:
-            print("No prompt entered. Exiting.")
-            return None
-
-        return "\n".join(prompt_lines)
-    finally:
-        os.unlink(temp_file_path)
+    prefill_content = "# Code Review Workflow: Enter your prompt here. Lines starting with # will be ignored.\n# Save and close the editor when you're done.\n"
+    return get_prompt_from_editor_with_prefill(prefill_content)
 
 
 def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
@@ -112,7 +93,12 @@ def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
                                    {"role": "user", "content": review_content}]
                 is_first_round = False
 
-        # After completing a review round, re-prompt for a new review cycle
+        # After completing a review round, ask if the user wants to continue
+        continue_review = input("\nDo you want to start a new code review cycle? (y/N): ").strip().lower()
+        if continue_review != 'y':
+            break
+
+        # If continuing, re-prompt for a new review cycle
         print("\nStarting a new code review cycle.")
         prompt = get_prompt_from_editor_for_review()
         if not prompt:
@@ -140,7 +126,7 @@ def main() -> None:
     colorama.init()
 
     if args.list_history is not None:
-        logging.list_prompt_history(args.list_history)
+        log.list_prompt_history(args.list_history)
         return
 
     files_list = operations.get_file_list(args.git_files, args.files)
@@ -155,7 +141,7 @@ def main() -> None:
         if not prompt:
             return
 
-    logging.log_prompt(prompt)
+    log.log_prompt(prompt)
 
     if args.code_review:
         code_review(args.model, files_list, prompt)
@@ -168,5 +154,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
