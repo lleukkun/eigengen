@@ -17,6 +17,10 @@ EigenGen works with
   - Code Review flow with -r that gives you the option to continue discussing the changes with the LLM
     by typing your comments in-line with '> ' quoted diff. This is a bit like software development used to be before Pull Requests.
   - Add 'git ls-files' files to context automatically with -g, filtered by .eigengen_ignore.
+  - eigengen -g --index creates an index cache in .eigengen_cache for automatic context narrowing.
+    It is used if it exists. Useful for projects with twenty to two hundred files.
+    Currently doesn't get updated automatically. This is still work-in-progress and goal is something
+    that scales to large projects. Good ideas are welcome.
 
 
 ## Installation
