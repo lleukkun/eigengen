@@ -8,7 +8,7 @@ import subprocess
 import colorama
 
 from eigengen.providers import MODEL_CONFIGS
-from eigengen import operations, log, api
+from eigengen import operations, log, api, indexing
 
 
 def is_output_to_terminal() -> bool:
@@ -132,6 +132,7 @@ def main() -> None:
     parser.add_argument("--web", "-w", nargs="?", const="localhost:10366", metavar="HOST:PORT",
                         help="Start the API service (default: localhost:10366)")
     parser.add_argument("--quote", "-q", metavar="FILE", help="Quote the content of the specified file in the prompt")
+    parser.add_argument("--index", action="store_true", help="Index the files for future use")
     args = parser.parse_args()
     # Initialize colorama for cross-platform color support
     colorama.init()
@@ -141,6 +142,11 @@ def main() -> None:
         return
 
     files_list = operations.get_file_list(args.git_files, args.files)
+
+    if args.index:
+        operations.index_files_mode(args.model, files_list)
+        return
+
     if args.web:
         host, port = args.web.split(':') if ':' in args.web else ("localhost", "10366")
         api.start_api(args.model, files_list, host, int(port))
@@ -168,3 +174,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

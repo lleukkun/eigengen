@@ -6,7 +6,7 @@ import subprocess
 import difflib
 import colorama
 
-from eigengen import log, providers, utils, prompts, gitfiles
+from eigengen import log, providers, utils, prompts, gitfiles, indexing
 from eigengen.prompts import PROMPTS as PROMPTS
 
 
@@ -69,6 +69,10 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
         system += PROMPTS["diff"]
     elif mode == "code_review":
         system += PROMPTS["code_review"]
+    elif mode == "indexing":
+        system += PROMPTS["indexing"]
+    elif mode == "get_context":
+        system += PROMPTS["get_context"]
 
     steering_messages = [ {"role": "user", "content": f"Your operating instructions are here:\n {system}"},
                           {"role": "assistant", "content": "Understood. I now have my operating instructions."} ]
@@ -89,8 +93,10 @@ def do_code_review_round(model: str, files: Optional[List[str]], prompt: str,
     system_prompt_mode = "diff" if is_first_round else "code_review"
     messages: List[Dict[str, str]] = []
 
-    if files:
-        for fname in files:
+    relevant_files = get_context_aware_files(model, prompt, files)
+
+    if relevant_files:
+        for fname in relevant_files:
             with open(fname, "r") as f:
                 original_content = f.read()
             messages += [{"role": "user", "content": prompts.wrap_file(fname, original_content)},
@@ -104,7 +110,7 @@ def do_code_review_round(model: str, files: Optional[List[str]], prompt: str,
     diff = ""
     for fname in new_files.keys():
         original_content = ""
-        if files and fname in files:
+        if relevant_files and fname in relevant_files:
             with open(fname, "r") as f:
                 original_content = f.read()
         diff += generate_diff(original_content, new_files[fname], fname, False)
@@ -114,8 +120,10 @@ def do_code_review_round(model: str, files: Optional[List[str]], prompt: str,
 
 def diff_mode(model: str, files: Optional[List[str]], prompt: str, use_color: bool, debug: bool) -> None:
     messages: List[Dict[str, str]] = []
-    if files:
-        for fname in files:
+    relevant_files = get_context_aware_files(model, prompt, files)
+
+    if relevant_files:
+        for fname in relevant_files:
             with open(fname, "r") as f:
                 original_content = f.read()
             messages += [{"role": "user", "content": prompts.wrap_file(fname, original_content)},
@@ -128,7 +136,7 @@ def diff_mode(model: str, files: Optional[List[str]], prompt: str, use_color: bo
     if new_files:
         for fname in new_files.keys():
             original_content: str = ""
-            if files and fname in files:
+            if relevant_files and fname in relevant_files:
                 with open(fname, "r") as f:
                     original_content = f.read()
             diff += generate_diff(original_content, new_files[fname], fname, use_color)
@@ -140,8 +148,12 @@ def diff_mode(model: str, files: Optional[List[str]], prompt: str, use_color: bo
 
 def default_mode(model: str, files: Optional[List[str]], prompt: str) -> None:
     messages: List[Dict[str, str]] = []
-    if files:
-        for fname in files:
+
+    # Get context-aware file selection
+    relevant_files = get_context_aware_files(model, prompt, files)
+
+    if relevant_files:
+        for fname in relevant_files:
             with open(fname, "r") as f:
                 original_content = f.read()
             messages += [{"role": "user", "content": prompts.wrap_file(fname, original_content)},
@@ -162,4 +174,37 @@ def get_file_list(use_git_files: bool=True, extra_files: List[str]=[]) -> List[s
     file_list = list(file_set) if file_set else []
     return file_list
 
+
+def index_files_mode(model: str, files: List[str]) -> None:
+    indexing.index_files(model, files)
+    print(f"Indexed {len(files)} files.")
+
+
+def get_context_aware_files(model: str, prompt: str, all_files: Optional[List[str]]) -> List[str]:
+    if not all_files:
+        return []
+
+    # Check if the cache directory exists
+    if not os.path.exists(indexing.CACHE_DIR):
+        print("Cache directory doesn't exist. Returning all files without filtering.")
+        return all_files
+
+    # Use whatever summaries are available in the cache
+    available_summaries = indexing.get_summaries(all_files)
+    if not available_summaries:
+        print("No summaries available in the cache. Returning all files without filtering.")
+        return all_files
+
+    all_summaries = "\n\n\n".join(available_summaries.values())
+    messages = [
+        {"role": "user", "content": f"<eigengen_file name=\"summaries\">\n{all_summaries}\n</eigengen_file>"},
+        {"role": "assistant", "content": "ok"},
+        {"role": "user", "content": f"Based on the following prompt, list the relevant files:\n{prompt}"}
+    ]
+
+    relevant_files, _ = process_request(model, messages, "get_context")
+    relevant_files_list = [file.strip() for file in relevant_files.split('\n') if file.strip()]
+    print(f"All files: {all_files}")
+    print(f"Relevant files: {relevant_files_list}")
+    return [file for file in relevant_files_list if file in all_files]
 
