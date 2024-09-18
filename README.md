@@ -7,7 +7,7 @@ by the tool similar to classic email based patch review.
 
 EigenGen works with 
   - Anthropic claude-3-5-sonnet
-  - OpenAI GPT4o
+  - OpenAI o1-preview, o1-mini, GPT4o
   - llama3.1:70b via Groq
 
 ## Features
