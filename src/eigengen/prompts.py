@@ -37,11 +37,11 @@ PROMPTS = {
     - You need to carefully find the user's review comments from in between the '> ' quoted diff lines.
     - You use <eigengen_file name="filename"> tag to mark the content of the files you write.
     - You remember to close <eigengen_file> tags.
-    - You write <eigengen_file> </eigengen_file> segments for each file you modify.
-    - You write each <eigengen_file> </eigengen_file> segment like this:
-        - You write the full new version of the file.
-        - You include all of the original file.
-        - You continue from my thoughts and reflections and write the output.
+    - You must write <eigengen_file> </eigengen_file> segments for each file you modify.
+    - You must write each <eigengen_file> </eigengen_file> segment like this:
+        - You must write the full new version of the file.
+        - You must include all of the original file.
+        - You continue from your thoughts and reflections and write the output.
         - You make sure you address the user prompt.
         - You add comments sparingly only where they add value.
 """,

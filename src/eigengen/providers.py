@@ -36,7 +36,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
 
 class Provider(ABC):
     @abstractmethod
-    def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
+    def make_request(self, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float) -> str:
         pass
 
@@ -44,13 +44,12 @@ class OllamaProvider(Provider):
     def __init__(self, model: str):
         self.model: str = model
 
-    def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
+    def make_request(self, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float) -> str:
-        full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
             "model": self.model,
-            "messages": full_messages,
+            "messages": messages,
             "stream": False,
             "options": {
                 "temperature": temperature,
@@ -65,7 +64,7 @@ class AnthropicProvider(Provider):
         self.client: Anthropic = client
         self.model: str = model
 
-    def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
+    def make_request(self, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
         for attempt in range(max_retries):
             try:
@@ -73,7 +72,7 @@ class AnthropicProvider(Provider):
                     model=self.model,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    system=system_prompt,
+                    system="",
                     messages=messages
                 )
                 return response.content[0].text
@@ -90,13 +89,12 @@ class GroqProvider(Provider):
         self.client: Groq = client
         self.model: str = model
 
-    def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
+    def make_request(self, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
-        full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
-                    messages=full_messages,
+                    messages=messages,
                     model=self.model,
                     max_tokens=max_tokens,
                     temperature=temperature
@@ -115,14 +113,13 @@ class OpenAIProvider(Provider):
         self.client: OpenAI = client
         self.model: str = model
 
-    def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
+    def make_request(self, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
-        full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
                     model=self.model,
-                    messages=full_messages,
+                    messages=messages,
                     # max_tokens=max_tokens,
                     temperature=temperature
                 )
@@ -139,20 +136,19 @@ class GoogleProvider(Provider):
     def __init__(self, model: str):
         self.model: str = model
 
-    def make_request(self, system_prompt: str, messages: List[Dict[str, str]],
+    def make_request(self, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
-        full_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}] + messages
         for attempt in range(max_retries):
             try:
                 model = google_genai.GenerativeModel(self.model)
                 chat = model.start_chat(history=[])
-                for message in full_messages:
+                for message in messages[:-1]:
                     if message["role"] == "user":
-                        chat.send_message(message["content"])
+                        chat.history.append(message["content"])
                     elif message["role"] == "assistant":
                         # Simulate assistant messages in the chat history
                         chat.history.append(google_genai.types.ContentType(role="model", parts=[message["content"]]))
-                response = chat.send_message(full_messages[-1]["content"], max_output_tokens=max_tokens, temperature=temperature)
+                response = chat.send_message(messages[-1]["content"], max_output_tokens=max_tokens, temperature=temperature)
                 return response.text
             except Exception as e:
                 if attempt == max_retries - 1:

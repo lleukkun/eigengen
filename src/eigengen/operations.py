@@ -70,7 +70,11 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     elif mode == "code_review":
         system += PROMPTS["code_review"]
 
-    final_answer: str = provider_instance.make_request(system, messages, model_config.max_tokens, model_config.temperature)
+    steering_messages = [ {"role": "user", "content": f"Your operating instructions are here:\n {system}"},
+                          {"role": "assistant", "content": "Understood. I now have my operating instructions."} ]
+    combined_messages = steering_messages + messages
+
+    final_answer: str = provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature)
     new_files: Dict[str, str] = utils.extract_file_content(final_answer) if mode == "diff" or mode == "code_review" else {}
 
     # Log the request and response
