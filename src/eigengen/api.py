@@ -44,7 +44,7 @@ async def filenames_endpoint():
 
 @app.post("/api/v1/reload_filenames", response_model=FileNamesResponse)
 async def reload_filenames():
-    app.state.filelist = operations.get_file_list(app.state.git_files, app.state.extra_files) 
+    app.state.filelist = operations.get_file_list(app.state.git_files, app.state.extra_files)
     return FileNamesResponse(filenames=app.state.filenames)
 
 
@@ -113,4 +113,3 @@ def start_api(selected_model: str, filenames: List[str], host: str = "localhost"
     app.state.filenames = filenames
 
     uvicorn.run(app, host=host, port=port)
-

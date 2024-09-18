@@ -17,31 +17,25 @@ def is_output_to_terminal() -> bool:
 
 def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
     editor = os.environ.get("EDITOR", "nano")
-
+    prefill_content += "\n"
+    prompt_content = ""
     with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
         temp_file_path = temp_file.name
-        temp_file.write(prefill_content + "\n")
+        temp_file.write(prefill_content)
 
     try:
         subprocess.run([editor, temp_file_path], check=True)
 
         with open(temp_file_path, 'r') as file:
-            lines = file.readlines()
+            prompt_content = file.read()
 
-        # Remove the prefill content
-        prefill_lines = prefill_content.count('\n')
-        lines = lines[prefill_lines:]
-
-        # Keep all lines, including empty ones and lines starting with #
-        prompt_lines = [line.rstrip('\n') for line in lines]
-
-        if not ''.join(prompt_lines).strip():
+        if prefill_content == prompt_content:
             print("No prompt entered. Exiting.")
             return None
 
-        return '\n'.join(prompt_lines)
+        return prompt_content
     finally:
-        os.unlink(temp_file_path)
+        os.remove(temp_file_path)
 
 
 def get_prompt_from_editor() -> Optional[str]:
@@ -51,6 +45,22 @@ def get_prompt_from_editor() -> Optional[str]:
 
 def get_prompt_from_editor_for_review() -> Optional[str]:
     prefill_content = "# Code Review Workflow: Enter your prompt here. Lines starting with # will be ignored.\n# Save and close the editor when you're done.\n"
+    return get_prompt_from_editor_with_prefill(prefill_content)
+
+
+def get_prompt_from_editor_with_quoted_file(file_path: str) -> Optional[str]:
+    try:
+        with open(file_path, 'r') as file:
+            file_content = file.read()
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' not found.")
+        return None
+    except IOError:
+        print(f"Error: Unable to read file '{file_path}'.")
+        return None
+
+    quoted_content = f"quoted file: {file_path}\n> " + '\n> '.join(file_content.splitlines())
+    prefill_content = f"Hello,\nPlease see inline comments for details on what must be changed.\nBe sure to change all other files that may be affected.\n\n{quoted_content}"
     return get_prompt_from_editor_with_prefill(prefill_content)
 
 
@@ -79,7 +89,7 @@ def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
             with open(temp_file_path, 'r') as temp_file:
                 review_content = temp_file.read()
 
-            os.unlink(temp_file_path)
+            os.remove(temp_file_path)
 
             if review_content.strip() == original_review_content.strip():
                 # No changes made, ask if we should apply the diff
@@ -121,6 +131,7 @@ def main() -> None:
                         help="List the last N prompts (default 5)")
     parser.add_argument("--web", "-w", nargs="?", const="localhost:10366", metavar="HOST:PORT",
                         help="Start the API service (default: localhost:10366)")
+    parser.add_argument("--quote", "-q", metavar="FILE", help="Quote the content of the specified file in the prompt")
     args = parser.parse_args()
     # Initialize colorama for cross-platform color support
     colorama.init()
@@ -137,7 +148,10 @@ def main() -> None:
 
     prompt = args.prompt
     if not prompt:
-        prompt = get_prompt_from_editor()
+        if args.quote:
+            prompt = get_prompt_from_editor_with_quoted_file(args.quote)
+        else:
+            prompt = get_prompt_from_editor()
         if not prompt:
             return
 
@@ -154,4 +168,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -117,11 +117,14 @@ class OpenAIProvider(Provider):
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
         for attempt in range(max_retries):
             try:
+                params = { }
+                if not self.model.startswith("o1"):
+                    params["temperature"] = temperature
+
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    # max_tokens=max_tokens,
-                    temperature=temperature
+                    **params
                 )
                 return response.choices[0].message.content
             except OpenAIRateLimitError as e:

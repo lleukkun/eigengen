@@ -58,4 +58,3 @@ def list_prompt_history(n: int) -> None:
     for i, entry in enumerate(prompts[:n], 1):
         timestamp = datetime.fromisoformat(entry["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
         print(f"{i}. [{timestamp}] {entry['prompt']}")
-

@@ -31,4 +31,3 @@ def extract_file_content(output: str) -> Dict[str, str]:
                 # Strip trailing whitespace from each line
                 file_content.append(line.rstrip())
     return files
-
