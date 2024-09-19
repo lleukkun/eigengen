@@ -37,8 +37,8 @@ def generate_diff(original_content: str, new_content: str, file_name: str, use_c
 
 def apply_patch(diff: str, auto_apply: bool = False) -> None:
     with tempfile.NamedTemporaryFile(delete=False, mode='w') as temp_diff_file:
-        temp_diff_file.write(diff)
         temp_diff_file_path = temp_diff_file.name
+        temp_diff_file.write(diff)
 
     if not auto_apply:
         editor = os.environ.get("EDITOR", "nano")
@@ -205,7 +205,11 @@ def get_context_aware_files(model: str, prompt: str, all_files: Optional[List[st
 
     relevant_files, _ = process_request(model, messages, "get_context")
     relevant_files_list = [file.strip() for file in relevant_files.split('\n') if file.strip()]
-    print(f"All files: {all_files}")
-    print(f"Relevant files: {relevant_files_list}")
     return [file for file in relevant_files_list if file in all_files]
+
+
+def update_index(files: List[str]) -> None:
+    print("Updating index...")
+    indexing.index_files(files)
+    print(f"Updated index for {len(files)} files.")
 

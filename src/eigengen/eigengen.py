@@ -96,6 +96,8 @@ def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
                 apply = input("No changes made to the review. Do you want to apply the changes? (Y/n): ").strip().lower()
                 if apply == 'y' or apply == '':
                     operations.apply_patch(diff, auto_apply=True)
+                    # Update index after applying changes
+                    operations.update_index(files)
                 break
             else:
                 # Changes made, continue the review process
@@ -146,6 +148,10 @@ def main() -> None:
     if args.index:
         operations.index_files_mode(args.model, files_list)
         return
+
+    # Update index if --git-files or --files flags are used
+    if args.git_files or args.files:
+        operations.update_index(files_list)
 
     if args.web:
         host, port = args.web.split(':') if ':' in args.web else ("localhost", "10366")
