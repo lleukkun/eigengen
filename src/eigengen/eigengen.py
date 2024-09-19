@@ -64,13 +64,13 @@ def get_prompt_from_editor_with_quoted_file(file_path: str) -> Optional[str]:
     return get_prompt_from_editor_with_prefill(prefill_content)
 
 
-def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
+def code_review(model: str, files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
     while True:
         review_messages: List[Dict[str, str]] = []
         is_first_round = True
 
         while True:
-            full_answer, _, diff, _ = operations.do_code_review_round(model, files, prompt, review_messages, is_first_round)
+            full_answer, _, diff, _ = operations.do_code_review_round(model, files, user_files, prompt, review_messages, is_first_round)
             print(full_answer)
 
             # Present the diff to the user for review
@@ -96,8 +96,12 @@ def code_review(model: str, files: Optional[List[str]], prompt: str) -> None:
                 apply = input("No changes made to the review. Do you want to apply the changes? (Y/n): ").strip().lower()
                 if apply == 'y' or apply == '':
                     operations.apply_patch(diff, auto_apply=True)
-                    # Update index after applying changes
-                    operations.update_index(files)
+                    # Update index after applying changes, but only for git files
+                    if files:
+                        git_files = set(operations.gitfiles.get_filtered_git_files())
+                        files_to_index = [f for f in files if f in git_files]
+                        if files_to_index:
+                            operations.update_index(files_to_index)
                 break
             else:
                 # Changes made, continue the review process
@@ -143,15 +147,18 @@ def main() -> None:
         log.list_prompt_history(args.list_history)
         return
 
-    files_list = operations.get_file_list(args.git_files, args.files)
+    files_list, user_files = operations.get_file_list(args.git_files, args.files)
 
     if args.index:
-        operations.index_files_mode(args.model, files_list)
+        # Only index git files, not user-specified files
+        git_files = operations.gitfiles.get_filtered_git_files() if args.git_files else []
+        operations.index_files_mode(args.model, git_files)
         return
 
-    # Update index if --git-files or --files flags are used
-    if args.git_files or args.files:
-        operations.update_index(files_list)
+    # Update index only for git files, not user-specified files
+    if args.git_files:
+        git_files = operations.gitfiles.get_filtered_git_files()
+        operations.update_index(git_files)
 
     if args.web:
         host, port = args.web.split(':') if ':' in args.web else ("localhost", "10366")
@@ -170,14 +177,13 @@ def main() -> None:
     log.log_prompt(prompt)
 
     if args.code_review:
-        code_review(args.model, files_list, prompt)
+        code_review(args.model, files_list, user_files, prompt)
     elif args.diff:
         use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-        operations.diff_mode(args.model, files_list, prompt, use_color, args.debug)
+        operations.diff_mode(args.model, files_list, user_files, prompt, use_color, args.debug)
     else:
-        operations.default_mode(args.model, files_list, prompt)
+        operations.default_mode(args.model, files_list, user_files, prompt)
 
 
 if __name__ == "__main__":
     main()
-

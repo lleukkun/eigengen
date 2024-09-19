@@ -88,13 +88,13 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     return final_answer, new_files
 
 
-def do_code_review_round(model: str, files: Optional[List[str]], prompt: str,
+def do_code_review_round(model: str, files: Optional[List[str]], user_files: Optional[List[str]], prompt: str,
                          review_messages: List[Dict[str, str]],
                          is_first_round: bool) -> Tuple[str, Dict[str, str], str, List[Dict[str, str]]]:
     system_prompt_mode = "diff" if is_first_round else "code_review"
     messages: List[Dict[str, str]] = []
 
-    relevant_files = get_context_aware_files(model, prompt, files)
+    relevant_files = get_context_aware_files(model, prompt, files, user_files)
 
     if relevant_files:
         for fname in relevant_files:
@@ -119,9 +119,9 @@ def do_code_review_round(model: str, files: Optional[List[str]], prompt: str,
     return full_answer, new_files, diff, messages
 
 
-def diff_mode(model: str, files: Optional[List[str]], prompt: str, use_color: bool, debug: bool) -> None:
+def diff_mode(model: str, files: Optional[List[str]], user_files: Optional[List[str]], prompt: str, use_color: bool, debug: bool) -> None:
     messages: List[Dict[str, str]] = []
-    relevant_files = get_context_aware_files(model, prompt, files)
+    relevant_files = get_context_aware_files(model, prompt, files, user_files)
 
     if relevant_files:
         for fname in relevant_files:
@@ -147,11 +147,11 @@ def diff_mode(model: str, files: Optional[List[str]], prompt: str, use_color: bo
         print("Error: Unable to generate diff. Make sure both original and new file contents are available.")
 
 
-def default_mode(model: str, files: Optional[List[str]], prompt: str) -> None:
+def default_mode(model: str, files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
     messages: List[Dict[str, str]] = []
 
     # Get context-aware file selection
-    relevant_files = get_context_aware_files(model, prompt, files)
+    relevant_files = get_context_aware_files(model, prompt, files, user_files)
 
     if relevant_files:
         for fname in relevant_files:
@@ -165,15 +165,16 @@ def default_mode(model: str, files: Optional[List[str]], prompt: str) -> None:
     print(final_answer)
 
 
-def get_file_list(use_git_files: bool=True, extra_files: List[str]=[]) -> List[str]:
+def get_file_list(use_git_files: bool=True, extra_files: Optional[List[str]]=None) -> Tuple[List[str], List[str]]:
     file_set = set(extra_files) if extra_files else set()
+    user_files = list(file_set)
 
     if use_git_files:
         git_files = set(gitfiles.get_filtered_git_files())
         file_set.update(git_files)
 
     file_list = list(file_set) if file_set else []
-    return file_list
+    return file_list, user_files
 
 
 def index_files_mode(model: str, files: List[str]) -> None:
@@ -181,20 +182,26 @@ def index_files_mode(model: str, files: List[str]) -> None:
     print(f"Indexed {len(files)} files.")
 
 
-def get_context_aware_files(model: str, prompt: str, all_files: Optional[List[str]]) -> List[str]:
+def get_context_aware_files(model: str, prompt: str, all_files: Optional[List[str]], user_files: Optional[List[str]]) -> List[str]:
     if not all_files:
-        return []
+        return user_files or []
+
+    # Ensure user_files are always included
+    user_files = user_files or []
+    relevant_files = set(user_files)
 
     # Check if the cache directory exists
     if not os.path.exists(indexing.CACHE_DIR):
         print("Cache directory doesn't exist. Returning all files without filtering.")
-        return all_files
+        relevant_files.update(all_files)
+        return list(relevant_files)
 
     # Use whatever summaries are available in the cache
     available_summaries = indexing.get_summaries(all_files)
     if not available_summaries:
         print("No summaries available in the cache. Returning all files without filtering.")
-        return all_files
+        relevant_files.update(all_files)
+        return list(relevant_files)
 
     all_summaries = json.dumps(available_summaries, indent=2)
     messages = [
@@ -203,13 +210,16 @@ def get_context_aware_files(model: str, prompt: str, all_files: Optional[List[st
         {"role": "user", "content": f"Based on the following prompt, list the relevant files:\n{prompt}"}
     ]
 
-    relevant_files, _ = process_request(model, messages, "get_context")
-    relevant_files_list = [file.strip() for file in relevant_files.split('\n') if file.strip()]
-    return [file for file in relevant_files_list if file in all_files]
+    index_relevant_files, _ = process_request(model, messages, "get_context")
+    index_relevant_files_list = [file.strip() for file in index_relevant_files.split('\n') if file.strip()]
+    relevant_files.update([file for file in index_relevant_files_list if file in all_files])
+
+    return list(relevant_files)
 
 
 def update_index(files: List[str]) -> None:
     print("Updating index...")
     indexing.index_files(files)
     print(f"Updated index for {len(files)} files.")
+
 
