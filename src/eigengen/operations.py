@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Tuple
 import tempfile
 import os
 import subprocess
+import json
 
 import difflib
 import colorama
@@ -176,7 +177,7 @@ def get_file_list(use_git_files: bool=True, extra_files: List[str]=[]) -> List[s
 
 
 def index_files_mode(model: str, files: List[str]) -> None:
-    indexing.index_files(model, files)
+    indexing.index_files(files)
     print(f"Indexed {len(files)} files.")
 
 
@@ -195,7 +196,7 @@ def get_context_aware_files(model: str, prompt: str, all_files: Optional[List[st
         print("No summaries available in the cache. Returning all files without filtering.")
         return all_files
 
-    all_summaries = "\n\n\n".join(available_summaries.values())
+    all_summaries = json.dumps(available_summaries, indent=2)
     messages = [
         {"role": "user", "content": f"<eigengen_file name=\"summaries\">\n{all_summaries}\n</eigengen_file>"},
         {"role": "assistant", "content": "ok"},
