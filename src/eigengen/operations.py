@@ -164,21 +164,32 @@ def default_mode(model: str, files: Optional[List[str]], user_files: Optional[Li
     print(final_answer)
 
 
-def get_file_list(use_git_files: bool=True, extra_files: Optional[List[str]]=None) -> Tuple[List[str], List[str]]:
-    file_set = set(extra_files) if extra_files else set()
-    user_files = list(file_set)
+def get_file_list(use_git_files: bool=True, user_files: Optional[List[str]]=None) -> Tuple[List[str], List[str]]:
+    file_set = set(user_files) if user_files else set()
 
     if use_git_files:
         git_files = set(gitfiles.get_filtered_git_files())
         file_set.update(git_files)
 
     file_list = list(file_set) if file_set else []
-    return file_list, user_files
+    return file_list
 
 
-def index_files_mode(model: str, files: List[str]) -> None:
-    indexing.index_files(files)
-    print(f"Indexed {len(files)} files.")
+def get_locally_modified_git_files() -> List[str]:
+    try:
+        # Get staged files
+        staged = subprocess.check_output(['git', 'diff', '--cached', '--name-only']).decode().splitlines()
+        # Get unstaged files
+        unstaged = subprocess.check_output(['git', 'diff', '--name-only']).decode().splitlines()
+
+        # Combine and remove duplicates
+        modified_files = list(set(staged + unstaged))
+
+        # Filter using .eigengen_ignore
+        return gitfiles.filter_files(modified_files)
+    except subprocess.CalledProcessError:
+        print("Error: Unable to get locally modified git files. Are you in a git repository?")
+        return []
 
 
 def get_context_aware_files(all_files: Optional[List[str]], user_files: Optional[List[str]]) -> List[str]:
@@ -189,15 +200,15 @@ def get_context_aware_files(all_files: Optional[List[str]], user_files: Optional
     user_files = user_files or []
     relevant_files = set(user_files)
 
-    # Get default context (top-3 files with highest total_refcount)
-    default_context = indexing.get_default_context(all_files)
-    relevant_files.update(default_context)
+    # Get locally modified git files
+    local_modifications = get_locally_modified_git_files()
+    relevant_files.update(local_modifications)
+
+    # If there are no user_files and no local modifications, add default context
+    if not user_files and not local_modifications:
+        # Get default context (top-3 files with highest total_refcount)
+        default_context = indexing.get_default_context(all_files)
+        relevant_files.update(default_context)
 
     return list(relevant_files)
-
-
-def update_index(files: List[str]) -> None:
-    print("Updating index...")
-    indexing.index_files(files)
-    print(f"Updated index for {len(files)} files.")
 

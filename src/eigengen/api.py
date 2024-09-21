@@ -51,16 +51,17 @@ async def reload_filenames():
 @app.post("/api/v1/prompt", response_model=PromptResponse)
 async def prompt_endpoint(request: PromptRequest):
     messages = []
-    if request.files:
-        for fname in request.files:
-            if not os.path.exists(fname):
-                raise HTTPException(status_code=404, detail=f"File not found: {fname}")
-            with open(fname, 'r') as f:
-                content = f.read()
-            messages.extend([
-                {"role": "user", "content": f"<eigengen_file name=\"{fname}\">\n{content}\n</eigengen_file>"},
-                {"role": "assistant", "content": "ok"}
-            ])
+    relevant_files = operations.get_context_aware_files(app.state.filenames, request.files)
+
+    for fname in relevant_files:
+        if not os.path.exists(fname):
+            raise HTTPException(status_code=404, detail=f"File not found: {fname}")
+        with open(fname, 'r') as f:
+            content = f.read()
+        messages.extend([
+            {"role": "user", "content": f"<eigengen_file name=\"{fname}\">\n{content}\n</eigengen_file>"},
+            {"role": "assistant", "content": "ok"}
+        ])
     messages.append({"role": "user", "content": request.prompt})
 
     final_answer, _ = operations.process_request(model, messages, "default")
@@ -69,7 +70,9 @@ async def prompt_endpoint(request: PromptRequest):
 @app.post("/api/v1/diff", response_model=DiffResponse)
 async def diff_endpoint(request: DiffRequest, background_tasks: BackgroundTasks):
     messages = []
-    for fname in request.files:
+    relevant_files = operations.get_context_aware_files(app.state.filenames, request.files)
+
+    for fname in relevant_files:
         if not os.path.exists(fname):
             raise HTTPException(status_code=404, detail=f"File not found: {fname}")
         with open(fname, 'r') as f:
@@ -89,17 +92,18 @@ async def diff_endpoint(request: DiffRequest, background_tasks: BackgroundTasks)
                 original_content = f.read()
         else:
             original_content = ""
-        diff += generate_diff(original_content, new_content, fname, use_color=False)
+        diff += operations.generate_diff(original_content, new_content, fname, use_color=False)
 
     # Automatically apply the patch in the background
-    background_tasks.add_task(apply_patch, diff, auto_apply=True)
+    background_tasks.add_task(operations.apply_patch, diff, auto_apply=True)
 
     return DiffResponse(diff=diff)
 
 @app.post("/api/v1/code_review", response_model=ReviewResponse)
 async def code_review_endpoint(request: ReviewRequest):
-    final_answer, new_files, diff, _ = do_code_review_round(
+    final_answer, new_files, diff, _ = operations.do_code_review_round(
         model,
+        app.state.filenames,
         request.files,
         request.prompt,
         request.review_messages,
@@ -113,3 +117,4 @@ def start_api(selected_model: str, filenames: List[str], host: str = "localhost"
     app.state.filenames = filenames
 
     uvicorn.run(app, host=host, port=port)
+

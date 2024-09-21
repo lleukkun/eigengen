@@ -98,10 +98,8 @@ def code_review(model: str, files: Optional[List[str]], user_files: Optional[Lis
                     operations.apply_patch(diff, auto_apply=True)
                     # Update index after applying changes, but only for git files
                     if files:
-                        git_files = set(operations.gitfiles.get_filtered_git_files())
-                        files_to_index = [f for f in files if f in git_files]
-                        if files_to_index:
-                            operations.update_index(files_to_index)
+                        git_files = operations.gitfiles.get_filtered_git_files()
+                        indexing.index_files(git_files)
                 break
             else:
                 # Changes made, continue the review process
@@ -147,18 +145,19 @@ def main() -> None:
         log.list_prompt_history(args.list_history)
         return
 
-    files_list, user_files = operations.get_file_list(args.git_files, args.files)
+    user_files = args.files
+    files_list = operations.get_file_list(args.git_files, args.files)
 
     if args.index:
         # Only index git files, not user-specified files
         git_files = operations.gitfiles.get_filtered_git_files() if args.git_files else []
-        operations.index_files_mode(args.model, git_files)
+        indexing.index_files(git_files)
         return
 
     # Update index only for git files, not user-specified files
     if args.git_files:
-        git_files = operations.gitfiles.get_filtered_git_files()
-        operations.update_index(git_files)
+        git_files = operations.gitfiles.get_filtered_git_files() if args.git_files else []
+        indexing.index_files(git_files)
 
     if args.web:
         host, port = args.web.split(':') if ':' in args.web else ("localhost", "10366")
@@ -187,3 +186,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
