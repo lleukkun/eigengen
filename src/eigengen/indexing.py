@@ -458,5 +458,4 @@ def get_default_context(filepaths: List[str], top_n: int = 3) -> List[str]:
     summaries = get_summaries(filepaths)
     sorted_files = sorted(summaries.items(), key=lambda x: x[1].get('total_usecount', 0) * x[1].get('total_refcount', 0), reverse=True)
     output = [filepath for filepath, _ in sorted_files[:top_n]]
-    print(output)
     return output
