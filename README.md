@@ -76,8 +76,10 @@ You may wish to create a shell alias to avoid having to type it in all the time:
 alias eigengen='eigengen -m gpt4'
 ```
 
+## Work In Progress
+  - Google Gemini integration
+  - HTTP API interface
 
-TODO:
-  - Figure out why Mistral's models just hate our system prompts.
-  - Add some kind of directory indexing machinery to lessen the need to list files manually.
+## TODO:
+  - Figure out why Mistral's models just hate our prompts.
 
