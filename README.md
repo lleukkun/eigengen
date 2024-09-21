@@ -17,9 +17,13 @@ EigenGen works with
   - Code Review flow with -r that gives you the option to continue discussing the changes with the LLM
     by typing your comments in-line with '> ' quoted diff. This is a bit like software development used to be before Pull Requests.
   - Add 'git ls-files' files to context automatically with -g, filtered by .eigengen_ignore.
-  - eigengen -g --index creates an index cache in .eigengen_cache for automatic context narrowing.
-    It is used if it exists. Useful for projects up to hundreds of files probably. Large projects still need to be tested.
-    This is still work-in-progress and goal is something that scales to large projects.
+  - eigengen -g --index creates an index cache in .eigengen_cache for semi-automatic context detection. When
+    using -g switch after creating the index, eigengen includes any locally modified files as determined by git
+    plus any files listed with -f argument, and then further adds those files that reference symbols defined in
+    this list of files. Performance is good enough to work with pytorch repo, but linux kernel is still a bit too much,
+    having a 12 second index cache load time. This would indicate that thousands of files are ok, but tens of thousands
+    require patience. Rewriting the cache logic in C/C++/Rust/Zig would probably help but design must be validated
+    more first.
 
 
 ## Installation
