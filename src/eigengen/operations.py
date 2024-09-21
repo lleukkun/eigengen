@@ -186,7 +186,7 @@ def get_locally_modified_git_files() -> List[str]:
         modified_files = list(set(staged + unstaged))
 
         # Filter using .eigengen_ignore
-        return gitfiles.filter_files(modified_files)
+        return gitfiles.get_filtered_files(modified_files)
     except subprocess.CalledProcessError:
         print("Error: Unable to get locally modified git files. Are you in a git repository?")
         return []
@@ -210,5 +210,22 @@ def get_context_aware_files(all_files: Optional[List[str]], user_files: Optional
         default_context = indexing.get_default_context(all_files)
         relevant_files.update(default_context)
 
+    # Read the cache state
+    cache_state = indexing.read_cache_state()
+
+    # Find files that use symbols defined in the relevant files
+    files_using_relevant_symbols = set()
+    for file in relevant_files:
+        if file in cache_state.entries:
+            entry = cache_state.entries[file]
+            for symbol in entry.provides:
+                for using_file, using_entry in cache_state.entries.items():
+                    if symbol in using_entry.uses and using_file not in relevant_files:
+                        files_using_relevant_symbols.add(using_file)
+
+    # Add the files using relevant symbols to the relevant_files set
+    relevant_files.update(files_using_relevant_symbols)
+    print(f"relevant files: {relevant_files}")
     return list(relevant_files)
+
 
