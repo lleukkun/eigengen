@@ -142,14 +142,12 @@ def main() -> None:
     parser.add_argument("--test-cache-loading", action="store_true", help="Test cache loading")
     parser.add_argument("--profile", action="store_true", help="Profile cache loading")
     args = parser.parse_args()
+
     # Initialize colorama for cross-platform color support
     colorama.init()
 
     if args.test_cache_loading:
-        if args.profile:
-            cProfile.run("from eigengen import indexing\n_ = indexing.read_cache_state()")
-        else:
-            _ = indexing.read_cache_state()
+        test_cache_loading(args.profile)
         return
 
     if args.list_history is not None:
@@ -160,32 +158,53 @@ def main() -> None:
     files_list = operations.get_file_list(args.git_files, args.files)
 
     if args.index:
-        # Only index git files, not user-specified files
-        git_files = operations.gitfiles.get_filtered_git_files() if args.git_files else []
-        indexing.index_files(git_files)
+        index_files(args.git_files)
         return
 
-    # Update index only for git files, not user-specified files
     if args.git_files:
-        git_files = operations.gitfiles.get_filtered_git_files() if args.git_files else []
-        indexing.index_files(git_files)
+        index_files(args.git_files)
 
     if args.web:
-        host, port = args.web.split(':') if ':' in args.web else ("localhost", "10366")
-        api.start_api(args.model, files_list, host, int(port))
+        start_api_service(args.model, files_list, args.web)
         return
 
-    prompt = args.prompt
+    prompt = prepare_prompt(args)
     if not prompt:
-        if args.quote:
-            prompt = get_prompt_from_editor_with_quoted_file(args.quote)
-        else:
-            prompt = get_prompt_from_editor()
-        if not prompt:
-            return
+        return
 
     log.log_prompt(prompt)
 
+    execute_mode(args, prompt, files_list, user_files)
+
+
+def test_cache_loading(profile: bool) -> None:
+    if profile:
+        cProfile.run("from eigengen import indexing\n_ = indexing.read_cache_state()")
+    else:
+        _ = indexing.read_cache_state()
+
+
+def index_files(use_git_files: bool) -> None:
+    git_files = operations.gitfiles.get_filtered_git_files() if use_git_files else []
+    indexing.index_files(git_files)
+
+
+def start_api_service(model: str, filenames: List[str], web_arg: str) -> None:
+    host, port = web_arg.split(':') if ':' in web_arg else ("localhost", "10366")
+    api.start_api(model, filenames, host, int(port))
+
+
+def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
+    if args.prompt:
+        return args.prompt
+
+    if args.quote:
+        return get_prompt_from_editor_with_quoted_file(args.quote)
+
+    return get_prompt_from_editor()
+
+
+def execute_mode(args: argparse.Namespace, prompt: str, files_list: List[str], user_files: Optional[List[str]]) -> None:
     if args.code_review:
         code_review(args.model, files_list, user_files, prompt)
     elif args.diff:
