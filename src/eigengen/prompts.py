@@ -47,6 +47,11 @@ PROMPTS = {
         - You make sure you address the user prompt.
         - You add comments sparingly only where they add value.
 """,
+    "code_epilogue": """
+
+    - You must write the modified files completely in the <eigengen_file> blocks.
+    - You must not leave out any unchanged parts.
+""",
     "non_diff": """
     - You write <external_output> segment for output.
     - You continue from previous reasoning and write the output here.

@@ -77,6 +77,9 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
 
     steering_messages = [ {"role": "user", "content": f"Your operating instructions are here:\n {system}"},
                           {"role": "assistant", "content": "Understood. I now have my operating instructions."} ]
+    if mode == "code_review" or mode == "diff":
+        # append epilogue
+        messages[-1]["content"] += "\n\n" + PROMPTS["code_epilogue"]
     combined_messages = steering_messages + messages
 
     final_answer: str = provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature)
