@@ -3,7 +3,9 @@ import shutil
 import hashlib
 import re
 import msgpack
+import gc
 from typing import List, Dict, Set, Optional
+from collections import defaultdict
 
 CACHE_DIR = ".eigengen_cache"
 
@@ -182,8 +184,8 @@ def tokenize_symbol_names(content: str) -> List[str]:
 class EggCacheEntry:
     def __init__(self, real_path: str = '', provides: Dict[str, int] = None, uses: Dict[str, int] = None, total_usecount: int = 0, total_refcount: int = 0):
         self.real_path = real_path
-        self.provides = provides if provides is not None else {}
-        self.uses = uses if uses is not None else {}
+        self.provides = provides if provides is not None else defaultdict(int)
+        self.uses = uses if uses is not None else defaultdict(int)
         self.total_usecount = total_usecount
         self.total_refcount = total_refcount
 
@@ -210,16 +212,16 @@ class EggCache:
     def __init__(self):
         self.entries: Dict[str, EggCacheEntry] = {}
         self.all_symbols_filepath: Dict[str, str] = {}
-        self.all_symbols_refcounts: Dict[str, int] = {}
+        self.all_symbols_refcounts: Dict[str, int] = defaultdict(int)
 
 def read_cache_state() -> EggCache:
     cache = EggCache()
-    for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
+    gc.disable()
+    for _, _, filenames, dir_fd in os.fwalk(CACHE_DIR):
         for filename in filenames:
-            path = os.path.join(dirpath, filename)
-            with open(path, 'rb') as f:
-                content = f.read()
-                obj = msgpack.unpackb(content)
+            fd = os.open(filename, os.O_RDONLY, mode=0o644, dir_fd=dir_fd)
+            with os.fdopen(fd, 'rb') as f:
+                obj = msgpack.unpack(f)
                 entry = EggCacheEntry.from_dict(obj)
                 cache.entries[entry.real_path] = entry
                 for key in entry.provides:
@@ -227,9 +229,8 @@ def read_cache_state() -> EggCache:
                 for key, value in entry.uses.items():
                     if key in cache.all_symbols_refcounts:
                         cache.all_symbols_refcounts[key] += value
-                    else:
-                        cache.all_symbols_refcounts[key] = value
 
+    gc.enable()
     return cache
 
 def write_cache_state(state: EggCache, updated_filepaths: Optional[Set[str]] = None, clear_cache: bool = False) -> None:
@@ -290,8 +291,8 @@ def index_files(filepaths: List[str]) -> None:
             parsed_data = parse_file(filepath)
             entry = EggCacheEntry(
                 real_path=filepath,
-                provides={},
-                uses={},
+                provides=defaultdict(int),
+                uses=defaultdict(int),
                 total_usecount=0,
                 total_refcount=0
             )
@@ -319,8 +320,8 @@ def index_files(filepaths: List[str]) -> None:
                     if token not in new_state.all_symbols_filepath:
                         continue  # Skip symbols not provided by local files
                     entry.total_usecount += 1
-                    entry.uses[token] = entry.uses.get(token, 0) + 1
-                    new_state.all_symbols_refcounts[token] = new_state.all_symbols_refcounts.get(token, 0) + 1
+                    entry.uses[token] += 1
+                    new_state.all_symbols_refcounts[token] += 1
 
         new_state.entries = entries
 
@@ -357,8 +358,8 @@ def index_files(filepaths: List[str]) -> None:
             parsed_data = parse_file(filepath)
             new_entry = EggCacheEntry(
                 real_path=filepath,
-                provides={},
-                uses={},
+                provides=defaultdict(int),
+                uses=defaultdict(int),
                 total_usecount=0,
                 total_refcount=0
             )
@@ -423,7 +424,7 @@ def index_files(filepaths: List[str]) -> None:
                     if token not in old_state.all_symbols_filepath:
                         continue  # Skip symbols not provided by local files
                     entry.total_usecount += 1
-                    entry.uses[token] = entry.uses.get(token, 0) + 1
+                    entry.uses[token] += 1
 
         # Rebuild all_symbols_refcounts from 'uses' of all entries
         old_state.all_symbols_refcounts = {}
