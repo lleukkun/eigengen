@@ -85,7 +85,8 @@ def code_review(model: str, files: Optional[List[str]], user_files: Optional[Lis
                 original_review_content = temp_file.read()
 
             editor = os.environ.get("EDITOR", "nano")
-            subprocess.run([editor, temp_file_path], check=True)
+            command = editor + " " + temp_file_path
+            subprocess.run([command], shell=True, check=True)
 
             with open(temp_file_path, 'r') as temp_file:
                 review_content = temp_file.read()

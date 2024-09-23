@@ -40,6 +40,15 @@ or
 export GROQ_API_KEY=<your-api-key>
 ```
 
+## Tips
+
+  - In addition to `eigengen` executable, we provide `egg` as well. It's shorter.
+  - EigenGen uses `EDITOR` environment variable to pick the text editor.
+  - Combining the two, for Sublime Text you can: `alias egg='EDITOR="subl -w" egg -m gpt4'`
+  - Or if you're into VSCode: `alias egg='EDITOR="code -w" egg -m gpt4'`.
+  - Vim/Neovim/Emacs users can probably figure out their own solutions.
+  - Paths above are for Linux. MacOS and Windows binaries may not be in PATH, so you need to find them first.
+
 ## Development
 
 Please install in edit mode like this:
