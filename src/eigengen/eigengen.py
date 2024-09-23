@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 import argparse
+import cProfile
 import sys
 import os
 import tempfile
@@ -137,9 +138,18 @@ def main() -> None:
                         help="Start the API service (default: localhost:10366)")
     parser.add_argument("--quote", "-q", metavar="FILE", help="Quote the content of the specified file in the prompt")
     parser.add_argument("--index", action="store_true", help="Index the files for future use")
+    parser.add_argument("--test-cache-loading", action="store_true", help="Test cache loading")
+    parser.add_argument("--profile", action="store_true", help="Profile cache loading")
     args = parser.parse_args()
     # Initialize colorama for cross-platform color support
     colorama.init()
+
+    if args.test_cache_loading:
+        if args.profile:
+            cProfile.run("from eigengen import indexing\n_ = indexing.read_cache_state()")
+        else:
+            _ = indexing.read_cache_state()
+        return
 
     if args.list_history is not None:
         log.list_prompt_history(args.list_history)

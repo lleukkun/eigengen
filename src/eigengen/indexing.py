@@ -214,24 +214,21 @@ class EggCache:
 
 def read_cache_state() -> EggCache:
     cache = EggCache()
-    cache_file_list = []
     for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
         for filename in filenames:
-            cache_file_list.append(os.path.join(dirpath, filename))
-
-    for path in cache_file_list:
-        with open(path, 'rb') as f:
-            content = f.read()
-            obj = msgpack.unpackb(content)
-            entry = EggCacheEntry.from_dict(obj)
-            cache.entries[entry.real_path] = entry
-            for key in entry.provides:
-                cache.all_symbols_filepath[key] = entry.real_path
-            for key, value in entry.uses.items():
-                if key in cache.all_symbols_refcounts:
-                    cache.all_symbols_refcounts[key] += value
-                else:
-                    cache.all_symbols_refcounts[key] = value
+            path = os.path.join(dirpath, filename)
+            with open(path, 'rb') as f:
+                content = f.read()
+                obj = msgpack.unpackb(content)
+                entry = EggCacheEntry.from_dict(obj)
+                cache.entries[entry.real_path] = entry
+                for key in entry.provides:
+                    cache.all_symbols_filepath[key] = entry.real_path
+                for key, value in entry.uses.items():
+                    if key in cache.all_symbols_refcounts:
+                        cache.all_symbols_refcounts[key] += value
+                    else:
+                        cache.all_symbols_refcounts[key] = value
 
     return cache
 
