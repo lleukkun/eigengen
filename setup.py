@@ -5,7 +5,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="eigengen",
-    version="0.1.4",
+    version="0.1.5",
     package_dir={"": "src"},  # Tell setuptools packages are under src/
     packages=find_packages(where="src"),  # Look for packages under src/
     entry_points={
