@@ -9,7 +9,7 @@ import subprocess
 import colorama
 
 from eigengen.providers import MODEL_CONFIGS
-from eigengen import operations, log, api, indexing
+from eigengen import operations, log, api, indexing, gitfiles
 
 
 def is_output_to_terminal() -> bool:
@@ -65,13 +65,13 @@ def get_prompt_from_editor_with_quoted_file(file_path: str) -> Optional[str]:
     return get_prompt_from_editor_with_prefill(prefill_content)
 
 
-def code_review(model: str, files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
+def code_review(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
     while True:
         review_messages: List[Dict[str, str]] = []
         is_first_round = True
-
+        current_git_files = git_files
         while True:
-            full_answer, _, diff, _ = operations.do_code_review_round(model, files, user_files, prompt, review_messages, is_first_round)
+            full_answer, _, diff, _ = operations.do_code_review_round(model, current_git_files, user_files, prompt, review_messages, is_first_round)
             print(full_answer)
 
             # Present the diff to the user for review
@@ -99,9 +99,9 @@ def code_review(model: str, files: Optional[List[str]], user_files: Optional[Lis
                 if apply == 'y' or apply == '':
                     operations.apply_patch(diff, auto_apply=True)
                     # Update index after applying changes, but only for git files
-                    if files:
-                        git_files = operations.gitfiles.get_filtered_git_files()
-                        indexing.index_files(git_files)
+                    if git_files:
+                        current_git_files = gitfiles.get_filtered_git_files()
+                        indexing.index_files(current_git_files)
                 break
             else:
                 # Changes made, continue the review process
@@ -155,7 +155,18 @@ def main() -> None:
         return
 
     user_files = args.files
-    files_list = operations.get_file_list(args.git_files, args.files)
+    git_files = None
+    if args.git_files:
+        git_files = gitfiles.get_filtered_git_files()
+        if args.files:
+            user_files = set([gitfiles.make_relative_to_git_root(x) for x in args.files])
+
+    combined_files = set()
+    if user_files:
+        combined_files.update(user_files)
+    if git_files:
+        combined_files.update(git_files)
+
 
     if args.index:
         index_files(args.git_files)
@@ -165,7 +176,7 @@ def main() -> None:
         index_files(args.git_files)
 
     if args.web:
-        start_api_service(args.model, files_list, args.web)
+        start_api_service(args.model, list(combined_files), args.web)
         return
 
     prompt = prepare_prompt(args)
@@ -174,7 +185,7 @@ def main() -> None:
 
     log.log_prompt(prompt)
 
-    execute_mode(args, prompt, files_list, user_files)
+    execute_mode(args, prompt, git_files, user_files)
 
 
 def test_cache_loading(profile: bool) -> None:
@@ -204,14 +215,14 @@ def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
     return get_prompt_from_editor()
 
 
-def execute_mode(args: argparse.Namespace, prompt: str, files_list: List[str], user_files: Optional[List[str]]) -> None:
+def execute_mode(args: argparse.Namespace, prompt: str, git_files: List[str], user_files: Optional[List[str]]) -> None:
     if args.code_review:
-        code_review(args.model, files_list, user_files, prompt)
+        code_review(args.model, git_files, user_files, prompt)
     elif args.diff:
         use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-        operations.diff_mode(args.model, files_list, user_files, prompt, use_color, args.debug)
+        operations.diff_mode(args.model, git_files, user_files, prompt, use_color, args.debug)
     else:
-        operations.default_mode(args.model, files_list, user_files, prompt)
+        operations.default_mode(args.model, git_files, user_files, prompt)
 
 
 if __name__ == "__main__":

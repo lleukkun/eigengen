@@ -6,19 +6,26 @@ import msgpack
 import gc
 from typing import List, Dict, Set, Optional
 from collections import defaultdict
+from eigengen.gitfiles import find_git_root, make_relative_to_git_root
 
-CACHE_DIR = ".eigengen_cache"
+def get_cache_dir() -> str:
+    git_root = find_git_root()
+    if not git_root:
+        raise RuntimeError("Cannot find the root of the git repository.")
+    return os.path.join(git_root, ".eigengen_cache")
 
 def md5sum(filepath: str) -> str:
     return hashlib.md5(filepath.encode()).hexdigest()
 
 def ensure_cache_dir():
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    cache_dir = get_cache_dir()
+    os.makedirs(cache_dir, exist_ok=True)
 
 def get_cache_path(filepath: str) -> str:
+    cache_dir = get_cache_dir()
     md5 = md5sum(filepath)
     dir_part = md5[:2]
-    return os.path.join(CACHE_DIR, dir_part, md5)
+    return os.path.join(cache_dir, dir_part, md5)
 
 def should_index_file(filepath: str) -> bool:
     cache_path = get_cache_path(filepath)
@@ -217,7 +224,7 @@ class EggCache:
 def read_cache_state() -> EggCache:
     cache = EggCache()
     gc.disable()
-    for _, _, filenames, dir_fd in os.fwalk(CACHE_DIR):
+    for _, _, filenames, dir_fd in os.fwalk(get_cache_dir()):
         for filename in filenames:
             fd = os.open(filename, os.O_RDONLY, mode=0o644, dir_fd=dir_fd)
             with os.fdopen(fd, 'rb') as f:
@@ -236,8 +243,9 @@ def read_cache_state() -> EggCache:
 def write_cache_state(state: EggCache, updated_filepaths: Optional[Set[str]] = None, clear_cache: bool = False) -> None:
     if clear_cache:
         # Remove existing cache files
-        if os.path.exists(CACHE_DIR):
-            shutil.rmtree(CACHE_DIR)
+        cache_dir = get_cache_dir()
+        if os.path.exists(cache_dir):
+            shutil.rmtree(cache_dir)
         ensure_cache_dir()
 
     if updated_filepaths is None:
@@ -258,8 +266,11 @@ def write_cache_state(state: EggCache, updated_filepaths: Optional[Set[str]] = N
 def index_files(filepaths: List[str]) -> None:
     ensure_cache_dir()
 
+    # Convert all file paths to be relative to the git root
+    filepaths = [make_relative_to_git_root(path) for path in filepaths]
+
     # Check if cache exists and is not empty
-    cache_exists = os.path.exists(CACHE_DIR) and any(os.scandir(CACHE_DIR))
+    cache_exists = os.path.exists(get_cache_dir()) and any(os.scandir(get_cache_dir()))
 
     # Identify files that need reindexing
     requires_indexing = [
@@ -457,3 +468,4 @@ def get_default_context(filepaths: List[str], top_n: int = 3) -> List[str]:
     sorted_files = sorted(summaries.items(), key=lambda x: x[1].get('total_usecount', 0) * x[1].get('total_refcount', 0), reverse=True)
     output = [filepath for filepath, _ in sorted_files[:top_n]]
     return output
+
