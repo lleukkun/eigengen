@@ -365,7 +365,7 @@ def index_files(filepaths: List[str]) -> None:
             )
 
             # Update provided symbols
-            new_entry.provides = {symbol: 0 for symbols in parsed_data.values() for symbol in symbols}
+            new_entry.provides.update({symbol: 0 for symbols in parsed_data.values() for symbol in symbols})
 
             # Compute deltas for provides
             provides_added = set(new_entry.provides) - set(old_entry.provides)
@@ -412,7 +412,7 @@ def index_files(filepaths: List[str]) -> None:
                 continue
 
             # Reset uses and total_usecount
-            entry.uses = {}
+            entry.uses = defaultdict(int)
             entry.total_usecount = 0
 
             with open(filepath, 'r', errors='ignore') as f:

@@ -214,18 +214,22 @@ def get_context_aware_files(all_files: Optional[List[str]], user_files: Optional
     cache_state = indexing.read_cache_state()
 
     # Find files that use symbols defined in the relevant files
-    files_using_relevant_symbols = set()
+    files_using_relevant_symbols = {}
     for file in relevant_files:
         if file in cache_state.entries:
             entry = cache_state.entries[file]
             for symbol in entry.provides:
                 for using_file, using_entry in cache_state.entries.items():
                     if symbol in using_entry.uses and using_file not in relevant_files:
-                        files_using_relevant_symbols.add(using_file)
+                        files_using_relevant_symbols[using_file] = files_using_relevant_symbols.get(using_file, 0) + 1
 
-    # Add the files using relevant symbols to the relevant_files set
-    relevant_files.update(files_using_relevant_symbols)
+    # Sort files by relevance (number of used symbols) and take the top 5
+    sorted_files = sorted(files_using_relevant_symbols.items(), key=lambda x: x[1], reverse=True)
+    top_5_relevant_files = [file for file, _ in sorted_files[:5]]
+
+    # Add the top 5 most relevant files to the relevant_files set
+    relevant_files.update(top_5_relevant_files)
+
     print(f"relevant files: {relevant_files}")
     return list(relevant_files)
-
 
