@@ -75,7 +75,7 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     elif mode == "get_context":
         system += PROMPTS["get_context"]
 
-    steering_messages = [ {"role": "user", "content": f"Your operating instructions are here:\n {system}"},
+    steering_messages = [ {"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
                           {"role": "assistant", "content": "Understood. I now have my operating instructions."} ]
     if mode == "code_review" or mode == "diff":
         # append epilogue
