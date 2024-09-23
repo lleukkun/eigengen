@@ -59,11 +59,9 @@ PROMPTS = {
 
 """,
     "non_diff": """
-    - You write <external_output> segment for output.
     - You continue from previous reasoning and write the output here.
     - You verify that you address the user prompt.
     - You write the full answer with all important information.
-    - Closing <external_output> segment.
 
 """
 }
