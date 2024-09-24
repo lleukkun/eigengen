@@ -32,7 +32,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
 class Provider(ABC):
     @abstractmethod
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float) -> str:
+                     max_tokens: int, temperature: float, mode: str) -> str:
         pass
 
 class OllamaProvider(Provider):
@@ -40,19 +40,29 @@ class OllamaProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float) -> str:
+                     max_tokens: int, temperature: float, mode: str) -> str:
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "stream": False,
+            "stream": True,
             "options": {
                 "temperature": temperature,
                 "max_tokens": max_tokens
             }
         }
-        response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data))
-        return response.json()["message"]["content"]
+        response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data), stream=True)
+        response.raise_for_status()
+
+        streamed_content = ""
+        for line in response.iter_lines():
+            if line:
+                content = json.loads(line)["message"]["content"]
+                streamed_content += content
+                if mode in ["default", "code_review"]:
+                    print(content, end="")
+
+        return streamed_content
 
 class AnthropicProvider(Provider):
     def __init__(self, client: Anthropic, model: str):
@@ -60,17 +70,22 @@ class AnthropicProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
         for attempt in range(max_retries):
             try:
-                response = self.client.messages.create(
+                with self.client.messages.stream(
                     model=self.model,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    system="",
                     messages=messages
-                )
-                return response.content[0].text
+                ) as stream:
+                    streamed_content = ""
+                    for text in stream.text_stream:
+                        streamed_content += text
+                        if mode in ["default", "code_review_start", "code_review_continue"]:
+                            print(text, end="", flush=True)
+
+                return streamed_content
             except AnthropicRateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -85,16 +100,26 @@ class GroqProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
                     messages=messages,
                     model=self.model,
                     max_tokens=max_tokens,
-                    temperature=temperature
+                    temperature=temperature,
+                    stream=True
                 )
-                return response.choices[0].message.content
+
+                streamed_content = ""
+                for chunk in response:
+                    content = chunk.choices[0].delta.content
+                    if content is not None:
+                        streamed_content += content
+                        if mode in ["default", "code_review_start", "code_review_continue"]:
+                            print(content, end="")
+
+                return streamed_content
             except GroqRateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -109,7 +134,7 @@ class OpenAIProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
         for attempt in range(max_retries):
             try:
                 params = { }
@@ -119,9 +144,19 @@ class OpenAIProvider(Provider):
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
+                    stream=True,
                     **params
                 )
-                return response.choices[0].message.content
+
+                streamed_content = ""
+                for chunk in response:
+                    content = chunk.choices[0].delta.content
+                    if content is not None:
+                        streamed_content += content
+                        if mode in ["default", "code_review_start", "code_review_continue"]:
+                            print(content, end="")
+
+                return streamed_content
             except OpenAIRateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -135,7 +170,7 @@ class GoogleProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
         for attempt in range(max_retries):
             try:
                 model = google_genai.GenerativeModel(self.model)
@@ -144,10 +179,18 @@ class GoogleProvider(Provider):
                     if message["role"] == "user":
                         chat.history.append(message["content"])
                     elif message["role"] == "assistant":
-                        # Simulate assistant messages in the chat history
                         chat.history.append(google_genai.types.ContentType(role="model", parts=[message["content"]]))
-                response = chat.send_message(messages[-1]["content"], max_output_tokens=max_tokens, temperature=temperature)
-                return response.text
+
+                response = chat.send_message(messages[-1]["content"], max_output_tokens=max_tokens, temperature=temperature, stream=True)
+
+                streamed_content = ""
+                for chunk in response:
+                    if chunk.text is not None:
+                        streamed_content += chunk.text
+                        if mode in ["default", "code_review_start", "code_review_continue"]:
+                            print(chunk.text, end="")
+
+                return streamed_content
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -194,3 +237,4 @@ def get_model_config(model_name: str) -> ModelConfig:
     if model_name not in MODEL_CONFIGS:
         raise ValueError(f"Invalid model name: {model_name}")
     return MODEL_CONFIGS[model_name]
+

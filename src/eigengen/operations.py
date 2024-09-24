@@ -77,7 +77,9 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
         system += PROMPTS["non_diff"]
     elif mode == "diff":
         system += PROMPTS["diff"]
-    elif mode == "code_review":
+    elif mode == "code_review_start":
+        system += PROMPTS["diff"]  # reuse diff mode prompt on purpose
+    elif mode == "code_review_continue":
         system += PROMPTS["code_review"]
     elif mode == "indexing":
         system += PROMPTS["indexing"]
@@ -86,13 +88,13 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
 
     steering_messages = [ {"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
                           {"role": "assistant", "content": "Understood. I now have my operating instructions."} ]
-    if mode == "code_review" or mode == "diff":
+    if mode in ["code_review_start", "code_review_continue", "diff"]:
         # append epilogue
         messages[-1]["content"] += "\n\n" + PROMPTS["code_epilogue"]
     combined_messages = steering_messages + messages
 
-    final_answer: str = provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature)
-    new_files: Dict[str, str] = utils.extract_file_content(final_answer) if mode == "diff" or mode == "code_review" else {}
+    final_answer: str = provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature, mode)
+    new_files: Dict[str, str] = utils.extract_file_content(final_answer) if mode in ["diff", "code_review_start", "code_review_continue"] else {}
 
     # Log the request and response
     log.log_request_response(model, messages, mode, final_answer, new_files)
@@ -103,7 +105,7 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
 def do_code_review_round(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str,
                          review_messages: List[Dict[str, str]],
                          is_first_round: bool) -> Tuple[str, Dict[str, str], str, List[Dict[str, str]]]:
-    system_prompt_mode = "diff" if is_first_round else "code_review"
+    system_prompt_mode = "code_review_start" if is_first_round else "code_review_continue"
     messages: List[Dict[str, str]] = []
 
     relevant_files = get_context_aware_files(git_files, user_files)
@@ -182,7 +184,6 @@ def default_mode(model: str, git_files: Optional[List[str]], user_files: Optiona
     messages.append({"role": "user", "content": prompt})
 
     final_answer, _ = process_request(model, messages, "default")
-    print(final_answer)
 
 
 def get_file_list(use_git_files: bool=True, user_files: Optional[List[str]]=None) -> List[str]:

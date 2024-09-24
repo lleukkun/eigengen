@@ -55,6 +55,7 @@ PROMPTS = {
     - You must never add any file start or end markers like ```python or ```
     - You must use <eigengen_file> segments as described in your operating instructions.
     - You must write the modified files completely in the <eigengen_file> blocks.
+    - You must remember to close <eigengen_file> tag with </eigengen_file>.
     - You must not leave out any unchanged parts.
 
 """,

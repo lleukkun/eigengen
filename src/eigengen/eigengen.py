@@ -17,7 +17,6 @@ def is_output_to_terminal() -> bool:
 
 
 def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
-    editor = os.environ.get("EDITOR", "nano")
     prefill_content += "\n"
     prompt_content = ""
     with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
@@ -25,7 +24,9 @@ def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
         temp_file.write(prefill_content)
 
     try:
-        subprocess.run([editor, temp_file_path], check=True)
+        editor = os.environ.get("EDITOR", "nano")
+        command = editor + " " + temp_file_path
+        subprocess.run([command], shell=True, check=True)
 
         with open(temp_file_path, 'r') as file:
             prompt_content = file.read()
@@ -72,7 +73,6 @@ def code_review(model: str, git_files: Optional[List[str]], user_files: Optional
         current_git_files = git_files
         while True:
             full_answer, _, diff, _ = operations.do_code_review_round(model, current_git_files, user_files, prompt, review_messages, is_first_round)
-            print(full_answer)
 
             # Present the diff to the user for review
             with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
@@ -95,7 +95,7 @@ def code_review(model: str, git_files: Optional[List[str]], user_files: Optional
 
             if review_content.strip() == original_review_content.strip():
                 # No changes made, ask if we should apply the diff
-                apply = input("No changes made to the review. Do you want to apply the changes? (Y/n): ").strip().lower()
+                apply = input("\n\nNo changes made to the review. Do you want to apply the changes? (Y/n): ").strip().lower()
                 if apply == 'y' or apply == '':
                     operations.apply_patch(diff, auto_apply=True)
                     # Update index after applying changes, but only for git files
