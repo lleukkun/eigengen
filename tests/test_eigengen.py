@@ -32,6 +32,7 @@ def test_main_prints_help(capsys):
     assert "--web" in captured.out
 
 
+@pytest.mark.slow
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set")
 def test_claude_sonnet_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
@@ -53,6 +54,7 @@ def test_claude_sonnet_hello_world(capsys, monkeypatch):
     # Check if the last non-empty line is exactly 'hello, world.'
     assert output_lines[-1] == 'Hello, world.'
 
+@pytest.mark.slow
 @pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
 def test_gpt4_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
@@ -74,6 +76,7 @@ def test_gpt4_hello_world(capsys, monkeypatch):
     # Check if the last non-empty line is exactly 'hello, world.'
     assert output_lines[-1] == 'Hello, world.'
 
+@pytest.mark.slow
 @pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set")
 def test_groq_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
@@ -137,4 +140,29 @@ This is a new line.
 
     # Check that there are no color codes
     assert re.search(r'\x1b\[\d+m', non_colored_diff) is None
+
+def test_mock_model(capsys, monkeypatch, mock_model_config):
+    from tests.fixtures.mock_provider import MockProvider
+
+    # Patch the create_provider function to return our MockProvider
+    def mock_create_provider(model: str):
+        return MockProvider()
+
+    monkeypatch.setattr('eigengen.providers.create_provider', mock_create_provider)
+
+    # Simulate command-line arguments
+    monkeypatch.setattr(sys, 'argv', [
+        "eigengen",
+        "--model", "mock-model",
+        "--prompt", "Hello, world"
+    ])
+
+    # Call the main function
+    main()
+
+    # Capture the output
+    captured = capsys.readouterr()
+
+    # Check if the output matches the expected response from MockProvider
+    assert "Hello! I'm a mock provider." in captured.out
 
