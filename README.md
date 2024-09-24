@@ -8,6 +8,7 @@ by the tool similar to classic email based patch review.
 EigenGen works with 
   - Anthropic claude-3-5-sonnet
   - OpenAI o1-preview, o1-mini, GPT4o
+  - Google Gemini 1.5 pro 002
   - llama3.1:70b via Groq
 
 ## Features
@@ -38,6 +39,8 @@ or
 export OPENAI_API_KEY=<your-api-key>
 or
 export GROQ_API_KEY=<your-api-key>
+or
+export GOOGLE_API_KEY=<your-api-key>
 ```
 
 ## Tips
@@ -86,7 +89,6 @@ alias eigengen='eigengen -m gpt4'
 ```
 
 ## Work In Progress
-  - Google Gemini integration
   - HTTP API interface
 
 ## TODO:
