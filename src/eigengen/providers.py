@@ -26,7 +26,8 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "groq": ModelConfig("groq", "llama-3.1-70b-versatile", 8000, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", 8000, 0.7),
-    "o1-mini": ModelConfig("openai", "o1-mini", 4000, 0.7)
+    "o1-mini": ModelConfig("openai", "o1-mini", 4000, 0.7),
+    "gemini": ModelConfig("google", "gemini-1.5-pro-002", 32768, 0.7)
 }
 
 class Provider(ABC):
@@ -174,14 +175,23 @@ class GoogleProvider(Provider):
         for attempt in range(max_retries):
             try:
                 model = google_genai.GenerativeModel(self.model)
-                chat = model.start_chat(history=[])
-                for message in messages[:-1]:
-                    if message["role"] == "user":
-                        chat.history.append(message["content"])
-                    elif message["role"] == "assistant":
-                        chat.history.append(google_genai.types.ContentType(role="model", parts=[message["content"]]))
-
-                response = chat.send_message(messages[-1]["content"], max_output_tokens=max_tokens, temperature=temperature, stream=True)
+                chat = model.start_chat(
+                    history=[
+                        {"role": "user", "parts": message["content"]} if message["role"] == "user"
+                        else {"role": "model", "parts": message["content"]}
+                        for message in messages[:-1]
+                    ]
+                )
+                response = chat.send_message(
+                    messages[-1]["content"],
+                    generation_config=google_genai.types.GenerationConfig(
+                        candidate_count=1,
+                        stop_sequences=[],
+                        max_output_tokens=max_tokens,
+                        temperature=temperature
+                    ),
+                    stream=True
+                )
 
                 streamed_content = ""
                 for chunk in response:
