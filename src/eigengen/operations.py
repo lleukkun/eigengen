@@ -73,7 +73,7 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     model_config = providers.get_model_config(model)
 
     system: str = PROMPTS["system"]
-    if mode == "default":
+    if mode == "default" or mode == "chat":
         system += PROMPTS["non_diff"]
     elif mode == "diff":
         system += PROMPTS["diff"]
@@ -86,8 +86,8 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     elif mode == "get_context":
         system += PROMPTS["get_context"]
 
-    steering_messages = [ {"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
-                          {"role": "assistant", "content": "Understood. I now have my operating instructions."} ]
+    steering_messages = [{"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
+                         {"role": "assistant", "content": "Understood. I now have my operating instructions."}]
     if mode in ["code_review_start", "code_review_continue", "diff"]:
         # append epilogue
         messages[-1]["content"] += "\n\n" + PROMPTS["code_epilogue"]
@@ -102,39 +102,33 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     return final_answer, new_files
 
 
-def do_code_review_round(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str,
-                         review_messages: List[Dict[str, str]],
-                         is_first_round: bool) -> Tuple[str, Dict[str, str], str, List[Dict[str, str]]]:
+def do_code_review_round(
+    model: str,
+    use_git_root: bool,
+    messages: List[Dict[str, str]],
+    review_messages: List[Dict[str, str]],
+    is_first_round: bool
+) -> Tuple[str, Dict[str, str], str, List[Dict[str, str]]]:
     system_prompt_mode = "code_review_start" if is_first_round else "code_review_continue"
-    messages: List[Dict[str, str]] = []
 
-    relevant_files = get_context_aware_files(git_files, user_files)
+    all_messages = messages + review_messages
 
-    if relevant_files:
-        project_root = gitfiles.find_git_root() if git_files else os.getcwd()
-        with open_fd(project_root, os.O_RDONLY) as dir_fd:
-            for fname in relevant_files:
-                with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
-                    original_content = f.read()
-                messages += [{"role": "user", "content": prompts.wrap_file(fname, original_content)},
-                             {"role": "assistant", "content": "ok"}]
-
-    messages.append({"role": "user", "content": prompt})
-    messages += review_messages
-
-    full_answer, new_files = process_request(model, messages, system_prompt_mode)
+    full_answer, new_files = process_request(model, all_messages, system_prompt_mode)
 
     diff = ""
     for fname in new_files.keys():
         original_content = ""
-        if relevant_files and fname in relevant_files:
-            project_root = gitfiles.find_git_root() if git_files else os.getcwd()
+        if use_git_root:
+            project_root = gitfiles.find_git_root()
             with open_fd(project_root, os.O_RDONLY) as dir_fd:
                 with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
                     original_content = f.read()
+        elif os.path.exists(fname):
+            with open(fname, 'r') as f:
+                original_content = f.read()
         diff += generate_diff(original_content, new_files[fname], fname, False)
 
-    return full_answer, new_files, diff, messages
+    return full_answer, new_files, diff, all_messages
 
 
 def diff_mode(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str, use_color: bool, debug: bool) -> None:
@@ -186,7 +180,7 @@ def default_mode(model: str, git_files: Optional[List[str]], user_files: Optiona
     final_answer, _ = process_request(model, messages, "default")
 
 
-def get_file_list(use_git_files: bool=True, user_files: Optional[List[str]]=None) -> List[str]:
+def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = None) -> List[str]:
     file_set = set()
 
     if user_files:

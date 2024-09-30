@@ -27,6 +27,8 @@ openai==1.44.1
 packaging==24.1
 pydantic==2.9.1
 pydantic_core==2.23.3
+pyperclip==1.9.0
+prompt_toolkit==3.0.48
 PyYAML==6.0.2
 requests==2.32.3
 setuptools==74.1.2

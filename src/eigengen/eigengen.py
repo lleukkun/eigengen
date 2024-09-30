@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import List, Optional
 import argparse
 import cProfile
 import sys
@@ -9,7 +9,7 @@ import subprocess
 import colorama
 
 from eigengen.providers import MODEL_CONFIGS
-from eigengen import operations, log, api, indexing, gitfiles
+from eigengen import operations, log, api, indexing, gitfiles, chat, code
 
 
 def is_output_to_terminal() -> bool:
@@ -66,62 +66,8 @@ def get_prompt_from_editor_with_quoted_file(file_path: str) -> Optional[str]:
     return get_prompt_from_editor_with_prefill(prefill_content)
 
 
-def code_review(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
-    while True:
-        review_messages: List[Dict[str, str]] = []
-        is_first_round = True
-        current_git_files = git_files
-        while True:
-            full_answer, _, diff, _ = operations.do_code_review_round(model, current_git_files, user_files, prompt, review_messages, is_first_round)
 
-            # Present the diff to the user for review
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-                temp_file.write("Hello, here are my code review comments in-line. Please address them and resubmit, thank you!\n\n")
-                for line in diff.splitlines():
-                    temp_file.write(f"> {line}\n")
-                temp_file_path = temp_file.name
-
-            with open(temp_file_path, 'r') as temp_file:
-                original_review_content = temp_file.read()
-
-            editor = os.environ.get("EDITOR", "nano")
-            command = editor + " " + temp_file_path
-            subprocess.run([command], shell=True, check=True)
-
-            with open(temp_file_path, 'r') as temp_file:
-                review_content = temp_file.read()
-
-            os.remove(temp_file_path)
-
-            if review_content.strip() == original_review_content.strip():
-                # No changes made, ask if we should apply the diff
-                apply = input("\n\nNo changes made to the review. Do you want to apply the changes? (Y/n): ").strip().lower()
-                if apply == 'y' or apply == '':
-                    operations.apply_patch(diff, auto_apply=True)
-                    # Update index after applying changes, but only for git files
-                    if git_files:
-                        current_git_files = gitfiles.get_filtered_git_files()
-                        indexing.index_files(current_git_files)
-                break
-            else:
-                # Changes made, continue the review process
-                review_messages = [{"role": "assistant", "content": diff},
-                                   {"role": "user", "content": review_content}]
-                is_first_round = False
-
-        # After completing a review round, ask if the user wants to continue
-        continue_review = input("\nDo you want to start a new code review cycle? (y/N): ").strip().lower()
-        if continue_review != 'y':
-            break
-
-        # If continuing, re-prompt for a new review cycle
-        print("\nStarting a new code review cycle.")
-        prompt = get_prompt_from_editor_for_review()
-        if not prompt:
-            break
-
-
-def main() -> None:
+def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("--model", "-m", choices=list(MODEL_CONFIGS.keys()),
                         default="claude-sonnet", help="Choose Model")
@@ -141,11 +87,17 @@ def main() -> None:
     parser.add_argument("--index", action="store_true", help="Index the files for future use")
     parser.add_argument("--test-cache-loading", action="store_true", help="Test cache loading")
     parser.add_argument("--profile", action="store_true", help="Profile cache loading")
-    args = parser.parse_args()
+    # Add the --chat (-c) argument
+    parser.add_argument("--chat", "-c", action="store_true", help="Enable chat mode")
+    return parser.parse_args()
 
+
+def initialize_environment() -> None:
     # Initialize colorama for cross-platform color support
     colorama.init()
 
+
+def handle_modes(args: argparse.Namespace) -> None:
     if args.test_cache_loading:
         test_cache_loading(args.profile)
         return
@@ -167,7 +119,6 @@ def main() -> None:
     if git_files:
         combined_files.update(git_files)
 
-
     if args.index:
         index_files(args.git_files)
         return
@@ -179,6 +130,10 @@ def main() -> None:
         start_api_service(args.model, list(combined_files), args.web)
         return
 
+    if args.chat:
+        chat.chat_mode(args.model, git_files, user_files)
+        return
+
     prompt = prepare_prompt(args)
     if not prompt:
         return
@@ -186,6 +141,37 @@ def main() -> None:
     log.log_prompt(prompt)
 
     execute_mode(args, prompt, git_files, user_files)
+
+
+def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
+    if args.prompt:
+        return args.prompt
+
+    if args.quote:
+        return get_prompt_from_editor_with_quoted_file(args.quote)
+
+    return get_prompt_from_editor()
+
+
+def execute_mode(args: argparse.Namespace, prompt: str, git_files: List[str], user_files: Optional[List[str]]) -> None:
+    if args.code_review:
+        messages = [{"role": "user", "content": prompt}]
+        code.code_review(args.model, git_files, user_files, messages)
+    elif args.diff:
+        use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
+        operations.diff_mode(args.model, git_files, user_files, prompt, use_color, args.debug)
+    else:
+        operations.default_mode(args.model, git_files, user_files, prompt)
+
+
+def main() -> None:
+    args = parse_arguments()
+    try:
+        initialize_environment()
+        handle_modes(args)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        sys.exit(1)
 
 
 def test_cache_loading(profile: bool) -> None:
@@ -205,26 +191,5 @@ def start_api_service(model: str, filenames: List[str], web_arg: str) -> None:
     api.start_api(model, filenames, host, int(port))
 
 
-def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
-    if args.prompt:
-        return args.prompt
-
-    if args.quote:
-        return get_prompt_from_editor_with_quoted_file(args.quote)
-
-    return get_prompt_from_editor()
-
-
-def execute_mode(args: argparse.Namespace, prompt: str, git_files: List[str], user_files: Optional[List[str]]) -> None:
-    if args.code_review:
-        code_review(args.model, git_files, user_files, prompt)
-    elif args.diff:
-        use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-        operations.diff_mode(args.model, git_files, user_files, prompt, use_color, args.debug)
-    else:
-        operations.default_mode(args.model, git_files, user_files, prompt)
-
-
 if __name__ == "__main__":
     main()
-
