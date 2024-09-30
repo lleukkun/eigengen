@@ -14,20 +14,21 @@ import google.generativeai as google_genai
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 class ModelConfig:
-    def __init__(self, provider: str, model: str, max_tokens: int, temperature: float):
+    def __init__(self, provider: str, model: str, chat_model: str, max_tokens: int, temperature: float):
         self.provider = provider
         self.model = model
+        self.chat_model = chat_model
         self.max_tokens = max_tokens
         self.temperature = temperature
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
-    "claude-sonnet": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", 8192, 0.7),
-    "gemma2": ModelConfig("ollama", "gemma2:27b", 128000, 0.5),
-    "groq": ModelConfig("groq", "llama-3.1-70b-versatile", 8000, 0.5),
-    "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", 128000, 0.7),
-    "o1-preview": ModelConfig("openai", "o1-preview", 8000, 0.7),
-    "o1-mini": ModelConfig("openai", "o1-mini", 4000, 0.7),
-    "gemini": ModelConfig("google", "gemini-1.5-pro-002", 32768, 0.7)
+    "claude-sonnet": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
+    "gemma2": ModelConfig("ollama", "gemma2:27b", "gemma2:27b", 128000, 0.5),
+    "groq": ModelConfig("groq", "llama-3.1-70b-versatile", "llama-3.1-70b-versatile", 8000, 0.5),
+    "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-2024-08-06", 128000, 0.7),
+    "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-2024-08-06", 8000, 0.7),
+    "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-2024-08-06", 4000, 0.7),
+    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-pro-002", 32768, 0.7)
 }
 
 class Provider(ABC):
@@ -60,7 +61,7 @@ class OllamaProvider(Provider):
             if line:
                 content = json.loads(line)["message"]["content"]
                 streamed_content += content
-                if mode in ["default", "code_review"]:
+                if mode not in ["diff"]:
                     print(content, end="")
 
         return streamed_content
@@ -83,7 +84,7 @@ class AnthropicProvider(Provider):
                     streamed_content = ""
                     for text in stream.text_stream:
                         streamed_content += text
-                        if mode in ["default", "code_review_start", "code_review_continue"]:
+                        if mode not in ["diff"]:
                             print(text, end="", flush=True)
 
                 return streamed_content
@@ -117,7 +118,7 @@ class GroqProvider(Provider):
                     content = chunk.choices[0].delta.content
                     if content is not None:
                         streamed_content += content
-                        if mode in ["default", "code_review_start", "code_review_continue"]:
+                        if mode not in ["diff"]:
                             print(content, end="")
 
                 return streamed_content
@@ -130,9 +131,10 @@ class GroqProvider(Provider):
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
 class OpenAIProvider(Provider):
-    def __init__(self, client: OpenAI, model: str):
+    def __init__(self, client: OpenAI, model: str, chat_model: str):
         self.client: OpenAI = client
         self.model: str = model
+        self.chat_model: str = chat_model
 
     def make_request(self, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
@@ -142,22 +144,29 @@ class OpenAIProvider(Provider):
                 if not self.model.startswith("o1"):
                     params["temperature"] = temperature
 
+                use_stream = True if self.model != "o1-preview" and self.model != "o1-mini" else False
+                use_model = self.model
+                if mode == "chat":
+                    use_model = self.chat_model
+
                 response = self.client.chat.completions.create(
-                    model=self.model,
+                    model=use_model,
                     messages=messages,
-                    stream=True,
+                    stream=use_stream ,
                     **params
                 )
+                content = ""
+                if use_stream:
+                    for chunk in response:
+                        part = chunk.choices[0].delta.content
+                        if part is not None:
+                            content += part
+                            if mode not in ["diff"]:
+                                print(part, end="")
+                else:
+                    content = response.choices[0].message.content
 
-                streamed_content = ""
-                for chunk in response:
-                    content = chunk.choices[0].delta.content
-                    if content is not None:
-                        streamed_content += content
-                        if mode in ["default", "code_review_start", "code_review_continue"]:
-                            print(content, end="")
-
-                return streamed_content
+                return content
             except OpenAIRateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -197,7 +206,7 @@ class GoogleProvider(Provider):
                 for chunk in response:
                     if chunk.text is not None:
                         streamed_content += chunk.text
-                        if mode in ["default", "code_review_start", "code_review_continue"]:
+                        if mode not in ["diff"]:
                             print(chunk.text, end="")
 
                 return streamed_content
@@ -235,7 +244,7 @@ def create_provider(model_name: str) -> Provider:
     elif config.provider == "openai":
         api_key = get_api_key("openai")
         client = OpenAI(api_key=api_key)
-        return OpenAIProvider(client, config.model)
+        return OpenAIProvider(client, config.model, config.chat_model)
     elif config.provider == "google":
         api_key = get_api_key("google")
         google_genai.configure(api_key=api_key)

@@ -21,7 +21,7 @@ PROMPTS = {
 
 """,
     "diff": """
-    - You use <eigengen_file name="filename"> tag to mark the content of the files I write.
+    - You use <eigengen_file name="filename"> tag to mark the content of the files you write.
     - You remember to close <eigengen_file> tags.
     - You must write <eigengen_file> </eigengen_file> segments for each file you modify.
     - You must write each <eigengen_file> </eigengen_file> segment like this:
