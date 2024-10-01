@@ -139,8 +139,8 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
             messages.append({"role": "user", "content": prompt})
 
             answer, _ = operations.process_request(model, messages, "chat")
+            print("")
             messages.append({"role": "assistant", "content": answer})
-            print(f"Assistant: {answer}\n")
 
         except KeyboardInterrupt:
             # Handle Ctrl+C to cancel the current input
