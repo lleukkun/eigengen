@@ -1,7 +1,6 @@
 from typing import Dict
 import re
 
-
 def extract_file_content(output: str) -> Dict[str, str]:
     files: Dict[str, str] = {}
     index = 0
@@ -9,14 +8,13 @@ def extract_file_content(output: str) -> Dict[str, str]:
 
     while index < output_length:
         # Search for the next code block starting from the current index
-        fence_pattern = r'(`{3,})([^\n]*)\n'
-        fence_regex = re.compile(fence_pattern)
+        fence_pattern = r'^```([^\n]*)\n'
+        fence_regex = re.compile(fence_pattern, re.MULTILINE)
         fence_match = fence_regex.search(output, index)
 
         if not fence_match:
             break  # No more code blocks found
 
-        # Update the index to the start of the found code block
         index = fence_match.start()
 
         try:
@@ -34,56 +32,35 @@ def extract_file_content(output: str) -> Dict[str, str]:
 
     return files
 
-
-
 def encode_code_block(code_content, file_path=''):
     """
     Encapsulates the code content in a Markdown code block,
-    using an appropriate number of backticks to avoid conflicts.
-    Optionally includes a file path after the opening backticks.
+    using three backticks and including the file path after the backticks in both fences.
     """
-    # Find the maximum number of consecutive backticks in the code content
-
-    backtick_sequences = re.findall(r'`+', code_content)
-    if backtick_sequences:
-        max_backticks = max(len(seq) for seq in backtick_sequences)
-    else:
-        max_backticks = 0
-
-    # Use one more backtick for fencing
-    fence = '`' * (max_backticks + 1)
-
-    # Prepare the opening line with file path if provided
-    if file_path:
-        opening_line = f"{fence}{file_path}\n"
-    else:
-        opening_line = f"{fence}\n"
-
-    return f"{opening_line}{code_content}\n{fence}"
+    fence = f"```{file_path}"
+    return f"{fence}\n{code_content}\n{fence}"
 
 def decode_code_block(markdown_text, start_index=0):
     """
     Decodes a Markdown code block starting from start_index.
     Returns a tuple of (code_block_content, file_path, index_after_code_block_end).
     """
-
     # Find the opening fence and file path
-    fence_pattern = r'(`{3,})([^\n]*)\n'
-    fence_regex = re.compile(fence_pattern)
+    fence_pattern = r'^```([^\n]*)\n'
+    fence_regex = re.compile(fence_pattern, re.MULTILINE)
     fence_match = fence_regex.match(markdown_text, start_index)
     if not fence_match:
         raise ValueError("No code block found at the specified start_index.")
 
-    opening_fence = fence_match.group(1)
-    fence_length = len(opening_fence)
-    file_path = fence_match.group(2).strip()
+    fence = fence_match.group(0)
+    file_path = fence_match.group(1).strip()
     code_start = fence_match.end()
 
-    # Prepare the closing fence pattern
-    closing_fence_pattern = rf'(^|\n)(`{{{fence_length}}})\s*(\n|$)'
-    closing_fence_regex = re.compile(closing_fence_pattern, re.MULTILINE)
+    # Prepare the closing fence, which must be identical to the opening fence
+    closing_fence = fence.rstrip('\n')  # Remove the newline character
 
     # Search for the closing fence
+    closing_fence_regex = re.compile(re.escape(closing_fence) + r'\s*(\n|$)')
     closing_fence_match = closing_fence_regex.search(markdown_text, code_start)
     if not closing_fence_match:
         raise ValueError("Closing fence not found for the code block.")
