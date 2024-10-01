@@ -2,8 +2,8 @@ def wrap_file(filename: str, content: str) -> str:
     return f"<eigengen_file name=\"{filename}\">\n{content}\n</eigengen_file>"
 
 MAGIC_STRINGS = {
-    "file_start": "<eigengen_file name=",
-    "file_end": "</eigengen_file>"
+    "file_start": "```",
+    "file_end": "```"
 }
 
 PROMPTS = {
@@ -21,13 +21,12 @@ PROMPTS = {
 
 """,
     "diff": """
-    - You use <eigengen_file name="filename"> tag to mark the content of the files you write.
-    - You remember to close <eigengen_file> tags.
-    - You must write <eigengen_file> </eigengen_file> segments for each file you modify.
-    - You must write each <eigengen_file> </eigengen_file> segment like this:
+    - You use Markdown code block ```path/to/filename.ext marker to mark the content of the files you write.
+    - You remember to close the code block with ``` marker.
+    - You must write code block for each file you modify.
+    - You must write each code block like this:
         - You must write the full new version of the file.
         - You must include all of the original file.
-        - You must never add any file start or end markers like ```python or ```
         - You must be careful not to add empty lines at the end of file.
         - You continue from your thoughts and reflections and write the output.
         - You make sure you address the user prompt.
@@ -37,13 +36,12 @@ PROMPTS = {
     - You have been provided the original proposed changes as a diff
     - The user has responded to the diff with their comments in the style of a quoted email
     - You need to carefully find the user's review comments from in between the '> ' quoted diff lines.
-    - You use <eigengen_file name="filename"> tag to mark the content of the files you write.
-    - You remember to close <eigengen_file> tags.
-    - You must write <eigengen_file> </eigengen_file> segments for each file you modify.
-    - You must write each <eigengen_file> </eigengen_file> segment like this:
+    - You use Markdown code block ```path/to/filename.ext marker to mark the content of the files you write.
+    - You remember to close the code block with ``` marker.
+    - You must write code block for each file you modify.
+    - You must write each code block like this:
         - You must write the full new version of the file.
         - You must include all of the original file.
-        - You must never add any file start or end markers like ```python or ```
         - You must be careful not to add empty lines at the end of file.
         - You continue from your thoughts and reflections and write the output.
         - You make sure you address the user prompt.
@@ -52,10 +50,8 @@ PROMPTS = {
     "code_epilogue": """
 
     operating instruction recap:
-    - You must never add any file start or end markers like ```python or ```
-    - You must use <eigengen_file> segments as described in your operating instructions.
-    - You must write the modified files completely in the <eigengen_file> blocks.
-    - You must remember to close <eigengen_file> tag with </eigengen_file>.
+    - You must use Markdown code blocks ```path/to/filename.ext as described in your operating instructions.
+    - You must write the modified files completely in the code blocks.
     - You must not leave out any unchanged parts.
 
 """,

@@ -59,8 +59,7 @@ def apply_patch(diff: str, use_git_root: bool = False, auto_apply: bool = False)
 
     try:
         project_root = gitfiles.find_git_root() if use_git_root else os.getcwd()
-        with open_fd(project_root, os.O_RDONLY) as dir_fd:
-            subprocess.run(['patch', '-p1', '-i', temp_diff_file_path], check=True, cwd=project_root)
+        subprocess.run(['patch', '-p1', '-i', temp_diff_file_path], check=True, cwd=project_root)
         print("Changes applied successfully.")
     except subprocess.CalledProcessError:
         print("Failed to apply changes. Please check the patch file and try again.")
@@ -173,7 +172,7 @@ def default_mode(model: str, git_files: Optional[List[str]], user_files: Optiona
             for fname in relevant_files:
                 with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
                     original_content = f.read()
-                messages += [{"role": "user", "content": prompts.wrap_file(fname, original_content)},
+                messages += [{"role": "user", "content": utils.encode_code_block(original_content, fname)},
                              {"role": "assistant", "content": "ok"}]
     messages.append({"role": "user", "content": prompt})
 
