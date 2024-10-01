@@ -98,7 +98,6 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
         if mode not in ["diff"]:
             print(chunk, end="", flush=True)
 
-    print(final_answer)
     new_files: Dict[str, str] = utils.extract_file_content(final_answer) if mode in ["diff", "code_review_start", "code_review_continue"] else {}
 
     # Log the request and response
