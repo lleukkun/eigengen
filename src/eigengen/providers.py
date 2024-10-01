@@ -4,7 +4,7 @@ import json
 import time
 import random
 import os
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Generator
 
 from anthropic import Anthropic, RateLimitError as AnthropicRateLimitError
 from groq import Groq, RateLimitError as GroqRateLimitError
@@ -34,7 +34,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
 class Provider(ABC):
     @abstractmethod
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str) -> str:
+                     max_tokens: int, temperature: float, mode: str) -> Generator[str, None, None]:
         pass
 
 class OllamaProvider(Provider):
@@ -42,7 +42,7 @@ class OllamaProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str) -> str:
+                     max_tokens: int, temperature: float, mode: str) -> Generator[str, None, None]:
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
             "model": self.model,
@@ -56,15 +56,10 @@ class OllamaProvider(Provider):
         response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data), stream=True)
         response.raise_for_status()
 
-        streamed_content = ""
         for line in response.iter_lines():
             if line:
                 content = json.loads(line)["message"]["content"]
-                streamed_content += content
-                if mode not in ["diff"]:
-                    print(content, end="")
-
-        return streamed_content
+                yield content
 
 class AnthropicProvider(Provider):
     def __init__(self, client: Anthropic, model: str):
@@ -72,7 +67,7 @@ class AnthropicProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 with self.client.messages.stream(
@@ -81,13 +76,9 @@ class AnthropicProvider(Provider):
                     temperature=temperature,
                     messages=messages
                 ) as stream:
-                    streamed_content = ""
                     for text in stream.text_stream:
-                        streamed_content += text
-                        if mode not in ["diff"]:
-                            print(text, end="", flush=True)
-
-                return streamed_content
+                        yield text
+                return
             except AnthropicRateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -102,7 +93,7 @@ class GroqProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
@@ -113,15 +104,11 @@ class GroqProvider(Provider):
                     stream=True
                 )
 
-                streamed_content = ""
                 for chunk in response:
                     content = chunk.choices[0].delta.content
                     if content is not None:
-                        streamed_content += content
-                        if mode not in ["diff"]:
-                            print(content, end="")
-
-                return streamed_content
+                        yield content
+                return
             except GroqRateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -137,7 +124,7 @@ class OpenAIProvider(Provider):
         self.chat_model: str = chat_model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 params = { }
@@ -152,23 +139,18 @@ class OpenAIProvider(Provider):
                 response = self.client.chat.completions.create(
                     model=use_model,
                     messages=messages,
-                    stream=use_stream ,
+                    stream=use_stream,
                     **params
                 )
-                content = ""
                 if use_stream:
                     for chunk in response:
                         part = chunk.choices[0].delta.content
                         if part is not None:
-                            content += part
-                            if mode not in ["diff"]:
-                                print(part, end="")
+                            yield part
                 else:
                     content = response.choices[0].message.content
-                    if mode not in ["diff"]:
-                        print(content)
-
-                return content
+                    yield content
+                return
             except OpenAIRateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -182,7 +164,7 @@ class GoogleProvider(Provider):
         self.model: str = model
 
     def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 model = google_genai.GenerativeModel(self.model)
@@ -204,14 +186,10 @@ class GoogleProvider(Provider):
                     stream=True
                 )
 
-                streamed_content = ""
                 for chunk in response:
                     if chunk.text is not None:
-                        streamed_content += chunk.text
-                        if mode not in ["diff"]:
-                            print(chunk.text, end="")
-
-                return streamed_content
+                        yield chunk.text
+                return
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise e
@@ -258,4 +236,3 @@ def get_model_config(model_name: str) -> ModelConfig:
     if model_name not in MODEL_CONFIGS:
         raise ValueError(f"Invalid model name: {model_name}")
     return MODEL_CONFIGS[model_name]
-

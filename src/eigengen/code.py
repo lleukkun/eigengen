@@ -4,7 +4,7 @@ import subprocess
 
 from typing import List, Dict, Optional
 
-from eigengen import operations, gitfiles, indexing
+from eigengen import operations, gitfiles, indexing, utils
 
 
 def code_review(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], messages: List[Dict[str, str]]) -> None:
@@ -23,7 +23,7 @@ def code_review(model: str, git_files: Optional[List[str]], user_files: Optional
                 with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
                     original_content = f.read()
                 context_messages += [
-                    {"role": "user", "content": operations.prompts.wrap_file(fname, original_content)},
+                    {"role": "user", "content": utils.encode_code_block(original_content, fname)},
                     {"role": "assistant", "content": "ok"}
                 ]
 

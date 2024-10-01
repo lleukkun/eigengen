@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Generator
 import tempfile
 import os
 import subprocess
@@ -92,7 +92,13 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
         messages[-1]["content"] += "\n\n" + PROMPTS["code_epilogue"]
     combined_messages = steering_messages + messages
 
-    final_answer: str = provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature, mode)
+    final_answer: str = ""
+    for chunk in provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature, mode):
+        final_answer += chunk
+        if mode not in ["diff"]:
+            print(chunk, end="", flush=True)
+
+    print(final_answer)
     new_files: Dict[str, str] = utils.extract_file_content(final_answer) if mode in ["diff", "code_review_start", "code_review_continue"] else {}
 
     # Log the request and response
@@ -140,7 +146,7 @@ def diff_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
             for fname in relevant_files:
                 with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
                     original_content = f.read()
-                messages += [{"role": "user", "content": prompts.wrap_file(fname, original_content)},
+                messages += [{"role": "user", "content": utils.encode_code_block(original_content, fname)},
                              {"role": "assistant", "content": "ok"}]
     messages.append({"role": "user", "content": prompt})
 
@@ -176,7 +182,7 @@ def default_mode(model: str, git_files: Optional[List[str]], user_files: Optiona
                              {"role": "assistant", "content": "ok"}]
     messages.append({"role": "user", "content": prompt})
 
-    final_answer, _ = process_request(model, messages, "default")
+    process_request(model, messages, "default")
 
 
 def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = None) -> List[str]:
@@ -235,4 +241,3 @@ def get_context_aware_files(git_files: Optional[List[str]], user_files: Optional
 
     print(f"relevant files: {relevant_files}")
     return list(relevant_files)
-
