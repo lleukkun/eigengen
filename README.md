@@ -9,7 +9,7 @@ EigenGen works with
   - Anthropic claude-3-5-sonnet
   - OpenAI o1-preview, o1-mini, GPT4o
   - Google Gemini 1.5 pro 002
-  - llama3.1:70b via Groq
+  - llama3.2:90b via Groq
 
 ## Features
 
