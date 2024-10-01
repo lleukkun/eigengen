@@ -30,7 +30,7 @@ PROMPTS = {
         - You must be careful not to add empty lines at the end of file.
         - You continue from your thoughts and reflections and write the output.
         - You make sure you address the user prompt.
-        - You add comments sparingly only where they add value.
+        - You add comments where they add value.
 """,
     "code_review": """
     - You have been provided the original proposed changes as a diff
@@ -45,7 +45,7 @@ PROMPTS = {
         - You must be careful not to add empty lines at the end of file.
         - You continue from your thoughts and reflections and write the output.
         - You make sure you address the user prompt.
-        - You add comments sparingly only where they add value.
+        - You add comments where they add value.
 """,
     "code_epilogue": """
 
