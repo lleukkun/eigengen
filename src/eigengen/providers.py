@@ -24,7 +24,7 @@ class ModelConfig:
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "claude-sonnet": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
     "gemma2": ModelConfig("ollama", "gemma2:27b", "gemma2:27b", 128000, 0.5),
-    "groq": ModelConfig("groq", "llama-3.1-70b-versatile", "llama-3.1-70b-versatile", 8000, 0.5),
+    "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.2-90b-text-preview", 8000, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-2024-08-06", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-2024-08-06", 8000, 0.7),
     "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-2024-08-06", 4000, 0.7),
