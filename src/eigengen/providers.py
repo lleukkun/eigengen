@@ -10,6 +10,7 @@ from anthropic import Anthropic, RateLimitError as AnthropicRateLimitError
 from groq import Groq, RateLimitError as GroqRateLimitError
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError
 import google.generativeai as google_genai
+from mistralai import Mistral
 
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
@@ -28,7 +29,9 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-2024-08-06", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-2024-08-06", 8000, 0.7),
     "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-2024-08-06", 4000, 0.7),
-    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-pro-002", 32768, 0.7)
+    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-pro-002", 32768, 0.7),
+    "mistral": ModelConfig("mistral", "mistral-large-2407", "mistral-large-2407", 8192, 0.7)
+
 }
 
 class Provider(ABC):
@@ -198,6 +201,38 @@ class GoogleProvider(Provider):
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
+
+
+class MistralProvider(Provider):
+    def __init__(self, client: Mistral, model: str):
+        self.client: Mistral = client
+        self.model: str = model
+
+    def make_request(self, messages: List[Dict[str, str]],
+                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.stream(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature
+                )
+
+                for event in response:
+                    content = event.data.choices[0].delta.content
+                    if content:
+                        yield content
+                return
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise e
+                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                print(f"Error occurred. Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+        raise IOError(f"Unable to complete API call in {max_retries} retries")
+
+
 def get_api_key(provider: str) -> str:
     env_var_name = f"{provider.upper()}_API_KEY"
     api_key = os.environ.get(env_var_name)
@@ -229,6 +264,10 @@ def create_provider(model_name: str) -> Provider:
         api_key = get_api_key("google")
         google_genai.configure(api_key=api_key)
         return GoogleProvider(config.model)
+    elif config.provider == "mistral":
+        api_key = get_api_key("mistral")
+        client = Mistral(api_key=api_key)
+        return MistralProvider(client, config.model)
     else:
         raise ValueError(f"Invalid provider specified: {config.provider}")
 

@@ -10,6 +10,7 @@ EigenGen works with
   - OpenAI o1-preview, o1-mini, GPT4o
   - Google Gemini 1.5 pro 002
   - llama3.2:90b via Groq
+  - Mistral Large v2
 
 ## Features
 
@@ -41,6 +42,8 @@ or
 export GROQ_API_KEY=<your-api-key>
 or
 export GOOGLE_API_KEY=<your-api-key>
+or
+export MISTRAL_API_KEY=<your-api-key>
 ```
 
 ## Tips
@@ -92,5 +95,4 @@ alias eigengen='eigengen -m gpt4'
   - HTTP API interface
 
 ## TODO:
-  - Figure out why Mistral's models just hate our prompts.
-
+  - ???
