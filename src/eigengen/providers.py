@@ -165,6 +165,8 @@ class OpenAIProvider(Provider):
                                 print(part, end="")
                 else:
                     content = response.choices[0].message.content
+                    if mode not in ["diff"]:
+                        print(content)
 
                 return content
             except OpenAIRateLimitError as e:
