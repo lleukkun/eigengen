@@ -9,10 +9,18 @@ from collections import defaultdict
 from eigengen.gitfiles import find_git_root, make_relative_to_git_root
 
 def get_cache_dir() -> str:
+    # Get the user's home directory
+    home_dir = os.path.expanduser("~")
+    # Base cache directory at ~/.eigengen/cache
+    base_cache_dir = os.path.join(home_dir, ".eigengen", "cache")
+    # Find the git root directory
     git_root = find_git_root()
     if not git_root:
         raise RuntimeError("Cannot find the root of the git repository.")
-    return os.path.join(git_root, ".eigengen_cache")
+    # Compute the MD5 hash of the git root path
+    git_root_md5 = hashlib.md5(git_root.encode()).hexdigest()
+    # Return the full cache directory path including the git root MD5 hash
+    return os.path.join(base_cache_dir, git_root_md5)
 
 def md5sum(filepath: str) -> str:
     return hashlib.md5(filepath.encode()).hexdigest()
@@ -23,9 +31,10 @@ def ensure_cache_dir():
 
 def get_cache_path(filepath: str) -> str:
     cache_dir = get_cache_dir()
-    md5 = md5sum(filepath)
-    dir_part = md5[:2]
-    return os.path.join(cache_dir, dir_part, md5)
+    md5_file_path = md5sum(filepath)
+    md5_file_prefix = md5_file_path[:2]
+    # Return the full cache file path including the two-letter prefix
+    return os.path.join(cache_dir, md5_file_prefix, md5_file_path)
 
 def should_index_file(filepath: str) -> bool:
     cache_path = get_cache_path(filepath)
@@ -38,10 +47,8 @@ def is_regular_known_file(filepath: str) -> bool:
         return False
     if not os.path.exists(filepath):
         return False
-
     if not os.path.isfile(filepath):
         return False
-
     return True
 
 def get_file_language(filepath: str) -> str:
@@ -236,7 +243,6 @@ def read_cache_state() -> EggCache:
                 for key, value in entry.uses.items():
                     if key in cache.all_symbols_refcounts:
                         cache.all_symbols_refcounts[key] += value
-
     gc.enable()
     return cache
 
@@ -468,4 +474,3 @@ def get_default_context(filepaths: List[str], top_n: int = 3) -> List[str]:
     sorted_files = sorted(summaries.items(), key=lambda x: x[1].get('total_usecount', 0) * x[1].get('total_refcount', 0), reverse=True)
     output = [filepath for filepath, _ in sorted_files[:top_n]]
     return output
-
