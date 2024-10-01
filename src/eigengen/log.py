@@ -2,6 +2,7 @@ from typing import List, Dict
 from datetime import datetime
 import os
 import json
+import sys
 
 
 def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, final_answer: str, new_files: Dict[str, str]) -> None:
