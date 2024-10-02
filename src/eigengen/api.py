@@ -17,10 +17,10 @@ class DiffRequest(BaseModel):
     files: List[str]
 
 class ReviewRequest(BaseModel):
-    prompt: str
-    files: List[str]
-    is_first_round: bool
+    use_git_root: bool
     review_messages: Optional[List[Dict[str, str]]] = None
+    messages: Optional[List[Dict[str, str]]] = None
+    is_first_round: bool
 
 class FileNamesResponse(BaseModel):
     filenames: List[str]
@@ -83,7 +83,8 @@ async def diff_endpoint(request: DiffRequest, background_tasks: BackgroundTasks)
         ])
     messages.append({"role": "user", "content": request.prompt})
 
-    final_answer, new_files = operations.process_request(model, messages, "diff")
+    output = "".join(operations.process_request(model, messages, "diff"))
+    new_files = utils.extract_file_content(output)
 
     diff = ""
     for fname, new_content in new_files.items():
@@ -103,10 +104,9 @@ async def diff_endpoint(request: DiffRequest, background_tasks: BackgroundTasks)
 async def code_review_endpoint(request: ReviewRequest):
     final_answer, new_files, diff, _ = operations.do_code_review_round(
         model,
-        app.state.filenames,
-        request.files,
-        request.prompt,
-        request.review_messages,
+        request.use_git_root,
+        request.messages or list({}),
+        request.review_messages or list({}),
         request.is_first_round
     )
 
