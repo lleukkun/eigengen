@@ -5,7 +5,7 @@ import json
 import sys
 
 
-def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, final_answer: str, new_files: Dict[str, str]) -> None:
+def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, final_answer: str) -> None:
     log_dir = os.path.expanduser("~/.eigengen")
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, "log.jsonl")
@@ -19,8 +19,7 @@ def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, 
             "mode": mode
         },
         "response": {
-            "final_answer": final_answer,
-            "new_files": new_files
+            "final_answer": final_answer
         }
     }
 

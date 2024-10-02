@@ -64,8 +64,8 @@ async def prompt_endpoint(request: PromptRequest):
         ])
     messages.append({"role": "user", "content": request.prompt})
 
-    final_answer, _ = operations.process_request(model, messages, "default")
-    return PromptResponse(response=final_answer)
+    output = "".join(operations.process_request(model, messages, "default"))
+    return PromptResponse(response=output)
 
 @app.post("/api/v1/diff", response_model=DiffResponse)
 async def diff_endpoint(request: DiffRequest, background_tasks: BackgroundTasks):

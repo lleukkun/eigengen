@@ -67,7 +67,7 @@ def apply_patch(diff: str, use_git_root: bool = False, auto_apply: bool = False)
     os.remove(temp_diff_file_path)
 
 
-def process_request(model: str, messages: List[Dict[str, str]], mode: str = "default") -> Tuple[str, Dict[str, str]]:
+def process_request(model: str, messages: List[Dict[str, str]], mode: str = "default") -> Generator[str, None, None]:
     provider_instance: providers.Provider = providers.create_provider(model)
     model_config = providers.get_model_config(model)
 
@@ -95,15 +95,10 @@ def process_request(model: str, messages: List[Dict[str, str]], mode: str = "def
     final_answer: str = ""
     for chunk in provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature, mode):
         final_answer += chunk
-        if mode not in ["diff"]:
-            print(chunk, end="", flush=True)
-
-    new_files: Dict[str, str] = utils.extract_file_content(final_answer) if mode in ["diff", "code_review_start", "code_review_continue"] else {}
+        yield chunk
 
     # Log the request and response
-    log.log_request_response(model, messages, mode, final_answer, new_files)
-
-    return final_answer, new_files
+    log.log_request_response(model, messages, mode, final_answer)
 
 
 def do_code_review_round(
@@ -117,7 +112,12 @@ def do_code_review_round(
 
     all_messages = messages + review_messages
 
-    full_answer, new_files = process_request(model, all_messages, system_prompt_mode)
+    output = ""
+    for chunk in process_request(model, all_messages, system_prompt_mode):
+        print(chunk, end="")  # we want to show the progress to user
+        output += chunk
+
+    new_files: Dict[str, str] = utils.extract_file_content(output)
 
     diff = ""
     for fname in new_files.keys():
@@ -132,7 +132,7 @@ def do_code_review_round(
                 original_content = f.read()
         diff += generate_diff(original_content, new_files[fname], fname, False)
 
-    return full_answer, new_files, diff, all_messages
+    return output, new_files, diff, all_messages
 
 
 def diff_mode(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str, use_color: bool, debug: bool) -> None:
@@ -149,7 +149,9 @@ def diff_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
                              {"role": "assistant", "content": "ok"}]
     messages.append({"role": "user", "content": prompt})
 
-    _, new_files = process_request(model, messages, "diff")
+    output = "".join(process_request(model, messages, "diff"))
+    # diff mode must not write anything other than the actual diff to stdout
+    new_files: Dict[str, str] = utils.extract_file_content(output)
 
     diff: str = ""
     if new_files:
@@ -181,7 +183,8 @@ def default_mode(model: str, git_files: Optional[List[str]], user_files: Optiona
                              {"role": "assistant", "content": "ok"}]
     messages.append({"role": "user", "content": prompt})
 
-    process_request(model, messages, "default")
+    for chunk in process_request(model, messages, "default"):
+        print(chunk, end="")
 
 
 def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = None) -> List[str]:

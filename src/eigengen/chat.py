@@ -138,7 +138,11 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
 
             messages.append({"role": "user", "content": prompt})
 
-            answer, _ = operations.process_request(model, messages, "chat")
+            answer = ""
+            for chunk in operations.process_request(model, messages, "chat"):
+                print(chunk, end="")
+                answer += chunk
+
             print("")
             messages.append({"role": "assistant", "content": answer})
 

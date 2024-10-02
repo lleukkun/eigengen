@@ -21,7 +21,7 @@ def test_mock_provider_default_mode(monkeypatch):
     prompt = "Hello, world"
     messages = [{"role": "user", "content": prompt}]
 
-    final_answer, _ = operations.process_request(model, messages, "default")
+    final_answer = "".join(operations.process_request(model, messages, "default"))
 
     assert final_answer == "Hello! I'm a custom mock provider."
 
@@ -43,7 +43,7 @@ def test_mock_provider_unknown_prompt(monkeypatch):
     prompt = "What's the meaning of life?"
     messages = [{"role": "user", "content": prompt}]
 
-    final_answer, _ = operations.process_request(model, messages, "default")
+    final_answer = "".join(operations.process_request(model, messages, "default"))
 
     assert final_answer == "I don't have a canned response for that prompt."
 
