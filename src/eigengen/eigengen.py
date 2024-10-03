@@ -168,7 +168,7 @@ def test_cache_loading(profile: bool) -> None:
 
 def index_files(use_git_files: bool) -> None:
     git_files = operations.gitfiles.get_filtered_git_files() if use_git_files else []
-    indexing.index_files(git_files)
+    indexing.index_files(git_files, force_reindex=True)
 
 
 if __name__ == "__main__":

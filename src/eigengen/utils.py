@@ -44,8 +44,23 @@ def encode_code_block(code_content, file_path=''):
     Encapsulates the code content in a Markdown code block,
     using three backticks and including the file path after the backticks in both fences.
     """
-    fence = f"```{file_path}"
-    return f"{fence}\n{code_content}\n{fence}"
+    # Find all sequences of backticks in the code content
+    backtick_sequences = re.findall(r'`+', code_content)
+    if backtick_sequences:
+        # Determine the maximum length of backtick sequences
+        max_backticks = max(len(seq) for seq in backtick_sequences)
+        # Fence length is one more than the maximum found, minimum of 3
+        fence_length = max(max_backticks + 1, 3)
+    else:
+        # Default fence length
+        fence_length = 3
+
+    # Create the fence using the calculated fence length
+    fence = '`' * fence_length
+    opening_fence = f"{fence}{file_path}"
+    closing_fence = fence
+
+    return f"{opening_fence}\n{code_content}\n{closing_fence}"
 
 
 def decode_code_block(markdown_text: str, start_index: int = 0) -> Tuple[str, str, int]:

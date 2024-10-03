@@ -196,7 +196,7 @@ def tokenize_symbol_names(content: str) -> List[str]:
     return matches
 
 class EggCacheEntry:
-    def __init__(self, real_path: str = '', provides: Dict[str, int] = None, uses: Dict[str, int] = None, total_usecount: int = 0, total_refcount: int = 0):
+    def __init__(self, real_path: str = '', provides: Dict[str, int] = {}, uses: Dict[str, int] = {}, total_usecount: int = 0, total_refcount: int = 0):
         self.real_path = real_path
         self.provides = provides if provides is not None else defaultdict(int)
         self.uses = uses if uses is not None else defaultdict(int)
@@ -236,6 +236,8 @@ def read_cache_state() -> EggCache:
             fd = os.open(filename, os.O_RDONLY, mode=0o644, dir_fd=dir_fd)
             with os.fdopen(fd, 'rb') as f:
                 obj = msgpack.unpack(f)
+                if not isinstance(obj, dict):
+                    continue
                 entry = EggCacheEntry.from_dict(obj)
                 cache.entries[entry.real_path] = entry
                 for key in entry.provides:
@@ -263,13 +265,15 @@ def write_cache_state(state: EggCache, updated_filepaths: Optional[Set[str]] = N
 
     for entry in entries_to_write:
         buf = msgpack.packb(entry.to_dict())
+        if not isinstance(buf, bytes):
+            continue
         cache_path = get_cache_path(entry.real_path)
         dir_path = os.path.dirname(cache_path)
         os.makedirs(dir_path, exist_ok=True)
         with open(cache_path, "wb") as f:
             f.write(buf)
 
-def index_files(filepaths: List[str]) -> None:
+def index_files(filepaths: List[str], force_reindex: bool = False) -> None:
     ensure_cache_dir()
 
     # Convert all file paths to be relative to the git root
@@ -285,11 +289,12 @@ def index_files(filepaths: List[str]) -> None:
     ]
 
     # Decide whether to perform a full reindex
-    full_reindex = False
-    if not cache_exists:
-        full_reindex = True
-    elif len(requires_indexing) > 100:
-        full_reindex = True
+    full_reindex = force_reindex
+    if not full_reindex:
+        if not cache_exists:
+            full_reindex = True
+        elif len(requires_indexing) > 100:
+            full_reindex = True
 
     if full_reindex:
         print("Performing full reindex...")
@@ -463,7 +468,11 @@ def get_file_summary(filepath: str) -> Dict:
     cache_path = get_cache_path(filepath)
     if os.path.exists(cache_path):
         with open(cache_path, 'rb') as f:
-            return msgpack.unpack(f)
+            r = msgpack.unpack(f)
+            if isinstance(r, dict):
+                return r
+            else:
+                return {}
     return {}
 
 def get_summaries(filepaths: List[str]) -> Dict[str, Dict]:

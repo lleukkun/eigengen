@@ -27,8 +27,8 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "gemma2": ModelConfig("ollama", "gemma2:27b", "gemma2:27b", 128000, 0.5),
     "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.2-90b-text-preview", 8000, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-2024-08-06", 128000, 0.7),
-    "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-2024-08-06", 8000, 0.7),
-    "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-2024-08-06", 4000, 0.7),
+    "o1-preview": ModelConfig("openai", "o1-preview", "o1-preview", 8000, 0.7),
+    "o1-mini": ModelConfig("openai", "o1-mini", "o1-mini", 4000, 0.7),
     "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-pro-002", 32768, 0.7),
     "mistral": ModelConfig("mistral", "mistral-large-2407", "mistral-large-2407", 8192, 0.7)
 
@@ -131,13 +131,14 @@ class OpenAIProvider(Provider):
         for attempt in range(max_retries):
             try:
                 params = { }
-                if not self.model.startswith("o1"):
-                    params["temperature"] = temperature
 
                 use_stream = True if self.model != "o1-preview" and self.model != "o1-mini" else False
                 use_model = self.model
                 if mode == "chat":
                     use_model = self.chat_model
+
+                if not use_model.startswith("o1"):
+                    params["temperature"] = temperature
 
                 response = self.client.chat.completions.create(
                     model=use_model,

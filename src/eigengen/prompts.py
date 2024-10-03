@@ -11,7 +11,5 @@ PROMPTS = {
     - You perform the necessary steps with grace and precision.
     - You make sure to address the original user prompt even if your mind has wandered.
     - You think long and hard. We want to get this right.
-    - Start your answer by rewriting the user prompt and expanding it out
-    - Continue by writing out your thinking
 """
 }

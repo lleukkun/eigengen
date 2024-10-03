@@ -1,5 +1,6 @@
 import os
 import tempfile
+import re
 import subprocess
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -9,9 +10,28 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
+
+from prompt_toolkit.formatted_text import PygmentsTokens
+from prompt_toolkit.shortcuts import print_formatted_text
+from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.token import Token
+
+import pygments.style
+
 from colorama import Fore, Style as ColoramaStyle
 
 from eigengen import operations, utils
+
+
+class CustomStyle(pygments.style.Style):
+    default_style = ""
+    styles = {
+        Token.Keyword: 'ansigreen',
+        Token.String: 'ansiyellow',
+        Token.Comment: 'ansiblue',
+        Token.Name: '',
+        # Add more token styles as desired
+    }
 
 
 def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
@@ -31,6 +51,71 @@ def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
         return prompt_content
     finally:
         os.remove(temp_file_path)
+
+
+def display_response_with_syntax_highlighting(response: str) -> None:
+    """
+    Displays the response with syntax-highlighted code blocks.
+    Adjusted to handle variable-length backtick fences and leading whitespace.
+    """
+    # Regular expression pattern to match code blocks with variable-length fences and indentation
+    code_block_pattern = re.compile(
+        r'^(?P<indent>[ \t]*)'          # Capture leading indentation
+        r'(?P<fence>`{3,})'             # Code fence (at least 3 backticks)
+        r'[ \t]*(?P<lang>\w+)?'         # Optional language identifier
+        r'[ \t]*\n'                     # Trailing spaces and newline
+        r'(?P<code>.*?)'                # Code content (non-greedy)
+        r'\n'                           # Newline before the closing fence
+        r'(?P=indent)'                  # Match the same indentation
+        r'(?P=fence)'                   # Closing fence matching the opening fence
+        r'[ \t]*\n?',                   # Trailing spaces and optional newline
+        re.DOTALL | re.MULTILINE
+    )
+
+    last_end = 0
+
+    for match in code_block_pattern.finditer(response):
+        start = match.start()
+        end = match.end()
+
+        # Print text before the code block
+        print(response[last_end:start], end='')
+
+        indent = match.group('indent')
+        fence = match.group('fence')
+        lang = match.group('lang')
+        code = match.group('code')
+
+        # Print the opening fence with indentation and optional language
+        print(f"{indent}{fence}{lang or ''}")
+
+        # Determine the lexer to use
+        if lang:
+            try:
+                lexer = get_lexer_by_name(lang.lower())
+            except Exception:
+                lexer = guess_lexer(code)
+        else:
+            try:
+                lexer = guess_lexer(code)
+            except Exception:
+                # Fallback lexer if guessing fails
+                from pygments.lexers.special import TextLexer
+                lexer = TextLexer()
+
+        # Syntax-highlight the code content with correct indentation
+        tokens = list(pygments.lex(code, lexer=lexer))
+        formatted_code = PygmentsTokens(tokens)
+        print_formatted_text(formatted_code, end='')
+
+        # Print the closing fence with indentation
+        print(f"\n{indent}{fence}")
+
+        last_end = end
+
+    # Print any remaining text after the last code block
+    print(response[last_end:], end='')
+
 
 
 def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]]) -> None:
@@ -144,7 +229,7 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
                 "system": "blue"
             })
             def custom_prompt():
-                return [("class:user", f"\n[User][{datetime.now().strftime('%I:%M:%S %p')}]\n")]
+                return [("class:user", f"\n[User][{datetime.now().strftime('%I:%M:%S %p')}] >\n")]
 
             prompt_input = session.prompt(custom_prompt, style=style, multiline=True, enable_history_search=True, refresh_interval=5)
 
@@ -199,9 +284,8 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
                 # Capture the timestamp after receiving the first chunk
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
                 # Print the timestamp before the first chunk
-                print(Fore.GREEN + f"\n[System] [{timestamp}]" + ColoramaStyle.RESET_ALL)
-                # Print the first chunk
-                print(first_chunk, end="", flush=True)
+                print(Fore.GREEN + f"\n[System][{timestamp}] >" + ColoramaStyle.RESET_ALL)
+
                 answer += first_chunk
             except StopIteration:
                 # No content generated
@@ -209,10 +293,10 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
 
             # Continue with the remaining chunks
             for chunk in chunk_iterator:
-                print(chunk, end="", flush=True)
+                # print(chunk, end="", flush=True)
                 answer += chunk
 
-            print("")
+            display_response_with_syntax_highlighting(answer)
             messages.append({"role": "assistant", "content": answer})
 
         except KeyboardInterrupt:
