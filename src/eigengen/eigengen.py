@@ -9,7 +9,7 @@ import subprocess
 import colorama
 
 from eigengen.providers import MODEL_CONFIGS
-from eigengen import operations, log, api, indexing, gitfiles, chat, code
+from eigengen import operations, log, indexing, gitfiles, chat
 
 
 def is_output_to_terminal() -> bool:
@@ -74,15 +74,11 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--files", "-f", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
     parser.add_argument("--git-files", "-g", action="store_true", help="Include files from git ls-files, filtered by .eigengen_ignore")
     parser.add_argument("--prompt", "-p", help="Prompt string to use (if not provided, opens editor)")
-    parser.add_argument("--diff", "-d", action="store_true", help="Enable diff output mode")
-    parser.add_argument("--code-review", "-r", action="store_true", help="Enable code review mode")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
     parser.add_argument("--debug", action="store_true", help="enable debug output")
     parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
                         help="List the last N prompts (default 5)")
-    parser.add_argument("--web", "-w", nargs="?", const="localhost:10366", metavar="HOST:PORT",
-                        help="Start the API service (default: localhost:10366)")
     parser.add_argument("--quote", "-q", metavar="FILE", help="Quote the content of the specified file in the prompt")
     parser.add_argument("--index", action="store_true", help="Index the files for future use")
     parser.add_argument("--test-cache-loading", action="store_true", help="Test cache loading")
@@ -126,10 +122,6 @@ def handle_modes(args: argparse.Namespace) -> None:
     if args.git_files:
         index_files(args.git_files)
 
-    if args.web:
-        start_api_service(args.model, list(combined_files), args.web)
-        return
-
     if args.chat:
         chat.chat_mode(args.model, git_files, user_files)
         return
@@ -154,14 +146,7 @@ def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
 
 
 def execute_mode(args: argparse.Namespace, prompt: str, git_files: List[str], user_files: Optional[List[str]]) -> None:
-    if args.code_review:
-        messages = [{"role": "user", "content": prompt}]
-        code.code_review(args.model, git_files, user_files, messages)
-    elif args.diff:
-        use_color = (args.color == "always") or (args.color == "auto" and is_output_to_terminal())
-        operations.diff_mode(args.model, git_files, user_files, prompt, use_color, args.debug)
-    else:
-        operations.default_mode(args.model, git_files, user_files, prompt)
+    operations.default_mode(args.model, git_files, user_files, prompt)
 
 
 def main() -> None:
@@ -184,11 +169,6 @@ def test_cache_loading(profile: bool) -> None:
 def index_files(use_git_files: bool) -> None:
     git_files = operations.gitfiles.get_filtered_git_files() if use_git_files else []
     indexing.index_files(git_files)
-
-
-def start_api_service(model: str, filenames: List[str], web_arg: str) -> None:
-    host, port = web_arg.split(':') if ':' in web_arg else ("localhost", "10366")
-    api.start_api(model, filenames, host, int(port))
 
 
 if __name__ == "__main__":

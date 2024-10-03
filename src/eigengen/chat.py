@@ -2,12 +2,16 @@ import os
 import tempfile
 import subprocess
 from typing import Dict, List, Optional
+from datetime import datetime
+from itertools import cycle
 
 from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
+from colorama import Fore, Style as ColoramaStyle
 
-from eigengen import operations, code
+from eigengen import operations, utils
 
 
 def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
@@ -36,8 +40,59 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
     # Implement the chat interface using prompt_toolkit
     kb = KeyBindings()
 
+    # Maintain current quoting state
+    quoting_state = {
+        "current_index": -1,
+        "code_blocks": None,
+        "cycle_iterator": None
+    }
+
+    # Function to extract code blocks from a response
+    def extract_code_blocks(response: str) -> List[str]:
+        code_blocks = []
+        lines = response.splitlines()
+        in_block = False
+        block_content = []
+        for line in lines:
+            if line.strip().startswith("```"):
+                if not in_block:
+                    in_block = True
+                else:
+                    # Closing block, add to list and reset
+                    in_block = False
+                    code_blocks.append("\n".join(block_content))
+                    block_content = []
+            elif in_block:
+                block_content.append(line)
+        return code_blocks
+
+    @kb.add("c-q")
+    def _(event):
+        nonlocal quoting_state
+        # Get the last system message to process
+        last_system_message = next((msg["content"] for msg in reversed(messages) if msg["role"] == "assistant"), "")
+
+        if quoting_state["code_blocks"] is None:
+            # Extract code blocks for the first time
+            quoting_state["code_blocks"] = extract_code_blocks(last_system_message)
+            quoting_state["cycle_iterator"] = cycle(quoting_state["code_blocks"]) if quoting_state["code_blocks"] else None
+
+        if quoting_state["cycle_iterator"]:
+            # There are code blocks, cycle through them
+            block_to_quote = next(quoting_state["cycle_iterator"])
+        else:
+            # No code blocks, quote entire message
+            block_to_quote = last_system_message
+
+        # Prepend '> ' to each line in the block
+        quoted_block = "\n".join(f"> {line}" for line in block_to_quote.splitlines())
+        event.app.current_buffer.text = quoted_block
+
     @kb.add("c-j")
     def _(event):
+        quoting_state["code_blocks"] = None
+        quoting_state["cycle_iterator"] = None
+        quoting_state["current_index"] = -1
         event.app.exit(result=event.app.current_buffer.text)
 
     @kb.add("enter")
@@ -60,7 +115,7 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
         nonlocal messages
         # Copy the conversation to the system clipboard
         copy_messages = [msg for msg in messages if not (msg["role"] == "user" and msg["content"].startswith("<eigengen_file"))]
-        conversation = "\n".join([f"{msg['role'].title()}: {msg['content']}" for msg in copy_messages])
+        conversation = "\n\n".join([f"[{'User' if msg['role'] == 'user' else 'System'}] [{datetime.now().strftime('%I:%M:%S %p')}]\n{msg['content']}" for msg in copy_messages])
         event.app.clipboard.set_text(conversation)
         print("Conversation copied to clipboard.\n")
 
@@ -84,14 +139,20 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
 
     while True:
         try:
-            prompt_input = session.prompt('You: ', multiline=True, enable_history_search=True)
+            style = Style.from_dict({
+                "user": "ansicyan",
+                "system": "blue"
+            })
+            def custom_prompt():
+                return [("class:user", f"\n[User][{datetime.now().strftime('%I:%M:%S %p')}]\n")]
+
+            prompt_input = session.prompt(custom_prompt, style=style, multiline=True, enable_history_search=True, refresh_interval=5)
 
             if prompt_input.startswith("/"):
                 # input is supposed to be a command
                 if prompt_input.strip() == '/help':
                     print("Available commands:\n"
                           "/attach <filename> - Load a file into context\n"
-                          "/code [message]- Start code review flow with current conversation\n"
                           "/reset - Clear chat messages but keep file context\n"
                           "/help - Show this help message\n\n"
                           "Ctrl-j submits your message.\n"
@@ -106,7 +167,7 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
                         with open(file_to_load, 'r') as f:
                             content = f.read()
                         messages.extend([
-                            {"role": "user", "content": f"<eigengen_file name=\"{file_to_load}\">\n{content}\n</eigengen_file>"},
+                            {"role": "user", "content": utils.encode_code_block(content, file_to_load)},
                             {"role": "assistant", "content": "ok"}
                         ])
                         print(f"File '{file_to_load}' loaded into context.\n")
@@ -114,18 +175,9 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
                         print(f"File '{file_to_load}' not found.\n")
                     continue
 
-                if prompt_input.startswith("/code "):
-                    supplementary = prompt_input[6:].strip()
-                    if supplementary == "":
-                        supplementary = "Please write the code that implements the discussed changes, thank you!"
-                    messages += [{"role": "user", "content": supplementary}]
-                    # Initiate code_review flow with current messages
-                    code.code_review(model, [], None, messages)
-                    continue
-
                 if prompt_input.strip() == '/reset':
                     # Reset the session messages, maintaining file contexts
-                    messages = [msg for msg in messages if msg["role"] == "user" and msg["content"].startswith("<eigengen_file")]
+                    messages = [msg for msg in messages if msg["role"] == "user" and msg["content"].startswith("```")]
                     print("Chat messages cleared, existing file context retained.\n")
                     continue
             if prompt_input.strip().lower() == 'exit':
@@ -139,8 +191,25 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
             messages.append({"role": "user", "content": prompt})
 
             answer = ""
-            for chunk in operations.process_request(model, messages, "chat"):
-                print(chunk, end="")
+
+            chunk_iterator = operations.process_request(model, messages, "chat")
+            try:
+                # Get the first chunk
+                first_chunk = next(chunk_iterator)
+                # Capture the timestamp after receiving the first chunk
+                timestamp = datetime.now().strftime('%I:%M:%S %p')
+                # Print the timestamp before the first chunk
+                print(Fore.GREEN + f"\n[System] [{timestamp}]" + ColoramaStyle.RESET_ALL)
+                # Print the first chunk
+                print(first_chunk, end="", flush=True)
+                answer += first_chunk
+            except StopIteration:
+                # No content generated
+                continue
+
+            # Continue with the remaining chunks
+            for chunk in chunk_iterator:
+                print(chunk, end="", flush=True)
                 answer += chunk
 
             print("")
@@ -152,4 +221,3 @@ def chat_mode(model: str, git_files: Optional[List[str]], user_files: Optional[L
         except EOFError:
             # Handle Ctrl+D to exit
             break
-
