@@ -273,6 +273,178 @@ def write_cache_state(state: EggCache, updated_filepaths: Optional[Set[str]] = N
         with open(cache_path, "wb") as f:
             f.write(buf)
 
+
+def index_files_full(filepaths: List[str]) -> None:
+    print("Performing full reindex...")
+    # Start with an empty cache
+    new_state = EggCache()
+    entries = {}
+
+    # First pass: Collect all provided symbols
+    files_to_index = [
+        path for path in filepaths
+        if is_regular_known_file(path)
+    ]
+
+    for filepath in files_to_index:
+        # Parse the file
+        parsed_data = parse_file(filepath)
+        entry = EggCacheEntry(
+            real_path=filepath,
+            provides=defaultdict(int),
+            uses=defaultdict(int),
+            total_usecount=0,
+            total_refcount=0
+        )
+
+        # Update provided symbols
+        for category, items in parsed_data.items():
+            for item in items:
+                entry.provides[item] = 0
+
+        entries[filepath] = entry
+
+    # Build all_symbols_filepath from all entries
+    for filepath, entry in entries.items():
+        for symbol in entry.provides:
+            new_state.all_symbols_filepath[symbol] = filepath
+
+    # Second pass: Update uses based on provided symbols
+    for filepath, entry in entries.items():
+        with open(filepath, 'r', errors='ignore') as f:
+            content = f.read()
+            tokens = tokenize_symbol_names(content)
+            for token in tokens:
+                if token in entry.provides:
+                    continue  # Skip own provided symbols
+                if token not in new_state.all_symbols_filepath:
+                    continue  # Skip symbols not provided by local files
+                entry.total_usecount += 1
+                entry.uses[token] += 1
+                new_state.all_symbols_refcounts[token] += 1
+
+    new_state.entries = entries
+
+    # Compute total_refcount for providers
+    for entry in new_state.entries.values():
+        entry.total_refcount = sum(
+            new_state.all_symbols_refcounts.get(sym, 0)
+            for sym in entry.provides
+        )
+
+    # Write the new cache state and clear existing cache files
+    write_cache_state(new_state, clear_cache=True)
+
+
+def index_files_incremental(requires_indexing: List[str]) -> None:
+    if not requires_indexing:
+        print("No files require reindexing.")
+        return
+
+    print("Performing incremental update...")
+    # Incremental update mode
+    old_state = read_cache_state()
+
+    changed_files = set(requires_indexing)
+    provides_changed = set()
+
+    # First, process 'provides' for files in 'requires_indexing'
+    for filepath in requires_indexing:
+        if not is_regular_known_file(filepath):
+            continue
+
+        # Load old entry if it exists
+        old_entry = old_state.entries.get(filepath, EggCacheEntry(real_path=filepath))
+
+        # Parse the new file content
+        parsed_data = parse_file(filepath)
+        new_entry = EggCacheEntry(
+            real_path=filepath,
+            provides=defaultdict(int),
+            uses=defaultdict(int),
+            total_usecount=0,
+            total_refcount=0
+        )
+
+        # Update provided symbols
+        new_entry.provides.update({symbol: 0 for symbols in parsed_data.values() for symbol in symbols})
+
+        # Compute deltas for provides
+        provides_added = set(new_entry.provides) - set(old_entry.provides)
+        provides_removed = set(old_entry.provides) - set(new_entry.provides)
+        provides_changed.update(provides_added)
+        provides_changed.update(provides_removed)
+
+        # Update all_symbols_filepath (providers)
+        for symbol in provides_added:
+            old_state.all_symbols_filepath[symbol] = filepath
+        for symbol in provides_removed:
+            if old_state.all_symbols_filepath.get(symbol) == filepath:
+                del old_state.all_symbols_filepath[symbol]
+
+        # Temporarily store the new_entry
+        old_state.entries[filepath] = new_entry
+
+    # Now, find files that 'use' symbols whose 'provides' status changed
+    for filepath, entry in old_state.entries.items():
+        if filepath in changed_files:
+            continue
+        if any(symbol in provides_changed for symbol in entry.uses):
+            changed_files.add(filepath)
+
+    # Reindex 'provides' and 'uses' for 'changed_files'
+    for filepath in changed_files:
+        if not is_regular_known_file(filepath):
+            continue
+
+        # Parse the file
+        parsed_data = parse_file(filepath)
+        entry = old_state.entries.get(filepath, EggCacheEntry(real_path=filepath))
+        entry.provides = {symbol: 0 for symbols in parsed_data.values() for symbol in symbols}
+
+        # Update all_symbols_filepath
+        for symbol in entry.provides:
+            old_state.all_symbols_filepath[symbol] = filepath
+
+    # Rebuild all_symbols_refcounts and update uses
+    old_state.all_symbols_refcounts = {}
+    for filepath, entry in old_state.entries.items():
+        # Reparse uses only if file is in 'changed_files'
+        if filepath not in changed_files:
+            continue
+
+        # Reset uses and total_usecount
+        entry.uses = defaultdict(int)
+        entry.total_usecount = 0
+
+        with open(filepath, 'r', errors='ignore') as f:
+            content = f.read()
+            tokens = tokenize_symbol_names(content)
+            for token in tokens:
+                if token in entry.provides:
+                    continue  # Skip own provided symbols
+                if token not in old_state.all_symbols_filepath:
+                    continue  # Skip symbols not provided by local files
+                entry.total_usecount += 1
+                entry.uses[token] += 1
+
+    # Rebuild all_symbols_refcounts from 'uses' of all entries
+    old_state.all_symbols_refcounts = {}
+    for entry in old_state.entries.values():
+        for symbol, count in entry.uses.items():
+            old_state.all_symbols_refcounts[symbol] = old_state.all_symbols_refcounts.get(symbol, 0) + count
+
+    # Compute total_refcount for providers
+    for entry in old_state.entries.values():
+        entry.total_refcount = sum(
+            old_state.all_symbols_refcounts.get(sym, 0)
+            for sym in entry.provides
+        )
+
+    # Write only the updated entries to the cache
+    write_cache_state(old_state, updated_filepaths=changed_files)
+
+
 def index_files(filepaths: List[str], force_reindex: bool = False) -> None:
     ensure_cache_dir()
 
@@ -297,172 +469,10 @@ def index_files(filepaths: List[str], force_reindex: bool = False) -> None:
             full_reindex = True
 
     if full_reindex:
-        print("Performing full reindex...")
-        # Start with an empty cache
-        new_state = EggCache()
-        entries = {}
-
-        # First pass: Collect all provided symbols
-        files_to_index = [
-            path for path in filepaths
-            if is_regular_known_file(path)
-        ]
-
-        for filepath in files_to_index:
-            # Parse the file
-            parsed_data = parse_file(filepath)
-            entry = EggCacheEntry(
-                real_path=filepath,
-                provides=defaultdict(int),
-                uses=defaultdict(int),
-                total_usecount=0,
-                total_refcount=0
-            )
-
-            # Update provided symbols
-            for category, items in parsed_data.items():
-                for item in items:
-                    entry.provides[item] = 0
-
-            entries[filepath] = entry
-
-        # Build all_symbols_filepath from all entries
-        for filepath, entry in entries.items():
-            for symbol in entry.provides:
-                new_state.all_symbols_filepath[symbol] = filepath
-
-        # Second pass: Update uses based on provided symbols
-        for filepath, entry in entries.items():
-            with open(filepath, 'r', errors='ignore') as f:
-                content = f.read()
-                tokens = tokenize_symbol_names(content)
-                for token in tokens:
-                    if token in entry.provides:
-                        continue  # Skip own provided symbols
-                    if token not in new_state.all_symbols_filepath:
-                        continue  # Skip symbols not provided by local files
-                    entry.total_usecount += 1
-                    entry.uses[token] += 1
-                    new_state.all_symbols_refcounts[token] += 1
-
-        new_state.entries = entries
-
-        # Compute total_refcount for providers
-        for entry in new_state.entries.values():
-            entry.total_refcount = sum(
-                new_state.all_symbols_refcounts.get(sym, 0)
-                for sym in entry.provides
-            )
-
-        # Write the new cache state and clear existing cache files
-        write_cache_state(new_state, clear_cache=True)
+        index_files_full(filepaths)
     else:
-        if not requires_indexing:
-            print("No files require reindexing.")
-            return
+        index_files_incremental(requires_indexing)
 
-        print("Performing incremental update...")
-        # Incremental update mode
-        old_state = read_cache_state()
-
-        changed_files = set(requires_indexing)
-        provides_changed = set()
-
-        # First, process 'provides' for files in 'requires_indexing'
-        for filepath in requires_indexing:
-            if not is_regular_known_file(filepath):
-                continue
-
-            # Load old entry if it exists
-            old_entry = old_state.entries.get(filepath, EggCacheEntry(real_path=filepath))
-
-            # Parse the new file content
-            parsed_data = parse_file(filepath)
-            new_entry = EggCacheEntry(
-                real_path=filepath,
-                provides=defaultdict(int),
-                uses=defaultdict(int),
-                total_usecount=0,
-                total_refcount=0
-            )
-
-            # Update provided symbols
-            new_entry.provides.update({symbol: 0 for symbols in parsed_data.values() for symbol in symbols})
-
-            # Compute deltas for provides
-            provides_added = set(new_entry.provides) - set(old_entry.provides)
-            provides_removed = set(old_entry.provides) - set(new_entry.provides)
-            provides_changed.update(provides_added)
-            provides_changed.update(provides_removed)
-
-            # Update all_symbols_filepath (providers)
-            for symbol in provides_added:
-                old_state.all_symbols_filepath[symbol] = filepath
-            for symbol in provides_removed:
-                if old_state.all_symbols_filepath.get(symbol) == filepath:
-                    del old_state.all_symbols_filepath[symbol]
-
-            # Temporarily store the new_entry
-            old_state.entries[filepath] = new_entry
-
-        # Now, find files that 'use' symbols whose 'provides' status changed
-        for filepath, entry in old_state.entries.items():
-            if filepath in changed_files:
-                continue
-            if any(symbol in provides_changed for symbol in entry.uses):
-                changed_files.add(filepath)
-
-        # Reindex 'provides' and 'uses' for 'changed_files'
-        for filepath in changed_files:
-            if not is_regular_known_file(filepath):
-                continue
-
-            # Parse the file
-            parsed_data = parse_file(filepath)
-            entry = old_state.entries.get(filepath, EggCacheEntry(real_path=filepath))
-            entry.provides = {symbol: 0 for symbols in parsed_data.values() for symbol in symbols}
-
-            # Update all_symbols_filepath
-            for symbol in entry.provides:
-                old_state.all_symbols_filepath[symbol] = filepath
-
-        # Rebuild all_symbols_refcounts and update uses
-        old_state.all_symbols_refcounts = {}
-        for filepath, entry in old_state.entries.items():
-            # Reparse uses only if file is in 'changed_files'
-            if filepath not in changed_files:
-                continue
-
-            # Reset uses and total_usecount
-            entry.uses = defaultdict(int)
-            entry.total_usecount = 0
-
-            with open(filepath, 'r', errors='ignore') as f:
-                content = f.read()
-                tokens = tokenize_symbol_names(content)
-                for token in tokens:
-                    if token in entry.provides:
-                        continue  # Skip own provided symbols
-                    if token not in old_state.all_symbols_filepath:
-                        continue  # Skip symbols not provided by local files
-                    entry.total_usecount += 1
-                    entry.uses[token] += 1
-
-        # Rebuild all_symbols_refcounts from 'uses' of all entries
-        old_state.all_symbols_refcounts = {}
-        for entry in old_state.entries.values():
-            for symbol, count in entry.uses.items():
-                old_state.all_symbols_refcounts[symbol] = old_state.all_symbols_refcounts.get(symbol, 0) + count
-
-        # Compute total_refcount for providers
-        for entry in old_state.entries.values():
-            entry.total_refcount = sum(
-                old_state.all_symbols_refcounts.get(sym, 0)
-                for sym in entry.provides
-            )
-
-        # Write only the updated entries to the cache
-        write_cache_state(old_state, updated_filepaths=changed_files)
 
 def get_file_summary(filepath: str) -> Dict:
     cache_path = get_cache_path(filepath)

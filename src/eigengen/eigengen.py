@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 import argparse
 import cProfile
 import sys
@@ -116,14 +116,14 @@ def handle_modes(args: argparse.Namespace) -> None:
         combined_files.update(git_files)
 
     if args.index:
-        index_files(args.git_files)
+        index_files(args.git_files, force_reindex=True)
         return
 
     if args.git_files:
         index_files(args.git_files)
 
     if args.chat:
-        chat.chat_mode(args.model, git_files, user_files)
+        chat.chat_mode(args.model, git_files, list(user_files))
         return
 
     prompt = prepare_prompt(args)
@@ -132,7 +132,7 @@ def handle_modes(args: argparse.Namespace) -> None:
 
     log.log_prompt(prompt)
 
-    execute_mode(args, prompt, git_files, user_files)
+    operations.default_mode(args.model, git_files, list(user_files), prompt)
 
 
 def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
@@ -143,10 +143,6 @@ def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
         return get_prompt_from_editor_with_quoted_file(args.quote)
 
     return get_prompt_from_editor()
-
-
-def execute_mode(args: argparse.Namespace, prompt: str, git_files: List[str], user_files: Optional[List[str]]) -> None:
-    operations.default_mode(args.model, git_files, user_files, prompt)
 
 
 def main() -> None:
@@ -166,9 +162,9 @@ def test_cache_loading(profile: bool) -> None:
         _ = indexing.read_cache_state()
 
 
-def index_files(use_git_files: bool) -> None:
+def index_files(use_git_files: bool, force_reindex:bool = False) -> None:
     git_files = operations.gitfiles.get_filtered_git_files() if use_git_files else []
-    indexing.index_files(git_files, force_reindex=True)
+    indexing.index_files(git_files, force_reindex=force_reindex)
 
 
 if __name__ == "__main__":
