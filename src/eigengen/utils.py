@@ -1,5 +1,9 @@
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple, Optional
 import re
+import tempfile
+import subprocess
+import os
+
 
 def extract_file_content(output: str) -> Dict[str, str]:
     files: Dict[str, str] = {}
@@ -99,3 +103,42 @@ def decode_code_block(markdown_text: str, start_index: int = 0) -> Tuple[str, st
     file_path = fence_content.strip()
 
     return code_block_content, file_path, index_after_code_block_end
+
+
+# Function to extract code blocks from a response
+def extract_code_blocks(response: str) -> List[str]:
+    code_blocks = []
+    lines = response.splitlines()
+    in_block = False
+    block_content = []
+    for line in lines:
+        if line.strip().startswith("```"):
+            if not in_block:
+                in_block = True
+            else:
+                # Closing block, add to list and reset
+                in_block = False
+                code_blocks.append("\n".join(block_content))
+                block_content = []
+        elif in_block:
+            block_content.append(line)
+    return code_blocks
+
+
+def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
+    prompt_content = ""
+    with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
+        temp_file_path = temp_file.name
+        temp_file.write(prefill_content)
+
+    try:
+        editor = os.environ.get("EDITOR", "nano")
+        command = editor + " " + temp_file_path
+        subprocess.run(command, shell=True, check=True)
+
+        with open(temp_file_path, 'r') as file:
+            prompt_content = file.read()
+
+        return prompt_content
+    finally:
+        os.remove(temp_file_path)
