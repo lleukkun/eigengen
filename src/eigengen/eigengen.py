@@ -1,16 +1,11 @@
 from typing import Optional
 import argparse
 import cProfile
-import sys
 
 import colorama
 
 from eigengen.providers import MODEL_CONFIGS
 from eigengen import operations, log, indexing, gitfiles, chat, utils
-
-
-def is_output_to_terminal() -> bool:
-    return sys.stdout.isatty()
 
 
 def parse_arguments() -> argparse.Namespace:
