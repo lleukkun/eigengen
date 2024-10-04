@@ -5,44 +5,6 @@ import subprocess
 import os
 
 
-def extract_file_content(output: str) -> Dict[str, str]:
-    files: Dict[str, str] = {}
-    index = 0
-    output_length = len(output)
-
-    while index < output_length:
-        # Search for the next code block starting from the current index
-        fence_pattern = r'^([ \t]*)###([^\n]*)\n'
-        fence_regex = re.compile(fence_pattern, re.MULTILINE)
-        fence_match = fence_regex.search(output, index)
-
-        if not fence_match:
-            break  # No more code blocks found
-
-        index = fence_match.start()
-
-        try:
-            code_block_content, file_path, next_index = decode_code_block(output, index)
-            index = next_index  # Move index to the end of the current code block
-
-            if file_path:
-                # Strip trailing whitespace from each line
-                code_content_lines = [line.rstrip() for line in code_block_content.splitlines()]
-                # Remove trailing empty lines and ensure the file ends with a newline character
-                while code_content_lines and code_content_lines[-1] == '':
-                    code_content_lines.pop()
-                code_content = "\n".join(code_content_lines).rstrip() + "\n"
-                files[file_path] = code_content
-            else:
-                # If filename is empty, skip this code block
-                index = next_index
-        except ValueError:
-            # If decoding fails, skip past the current fence to avoid an infinite loop
-            index = fence_match.end()
-
-    return files
-
-
 def encode_code_block(code_content, file_path=''):
     """
     Encapsulates the code content in a Markdown code block,
