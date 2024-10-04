@@ -1,13 +1,8 @@
-from typing import Dict, List, Optional, Tuple, Generator
-import tempfile
+from typing import Dict, List, Optional, Generator
 import os
-import subprocess
-import json
-import difflib
-import colorama
 import contextlib
 
-from eigengen import log, providers, utils, prompts, gitfiles, indexing
+from eigengen import log, providers, utils, gitfiles, indexing
 from eigengen.prompts import PROMPTS as PROMPTS
 
 @contextlib.contextmanager
@@ -19,24 +14,24 @@ def open_fd(path, flags):
         os.close(fd)  # Ensure fd is closed after the block
 
 
-def process_request(model: str, messages: List[Dict[str, str]], mode: str = "default") -> Generator[str, None, None]:
-    provider_instance: providers.Provider = providers.create_provider(model)
-    model_config = providers.get_model_config(model)
+def process_request(model_nickname: str, messages: List[Dict[str, str]], mode: str = "default") -> Generator[str, None, None]:
+    provider_instance: providers.Provider = providers.create_provider(model_nickname)
+    model_config = providers.get_model_config(model_nickname)
 
-    system: str = PROMPTS["system"]
+    system: str = PROMPTS["system"] if mode != "meld" else PROMPTS["meld"]
 
     steering_messages = [{"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
                          {"role": "assistant", "content": "Understood. I now have my operating instructions."}]
 
     combined_messages = steering_messages + messages
-
+    use_model = model_config.model if mode != "meld" else model_config.mini_model
     final_answer: str = ""
-    for chunk in provider_instance.make_request(combined_messages, model_config.max_tokens, model_config.temperature, mode):
+    for chunk in provider_instance.make_request(use_model, combined_messages, model_config.max_tokens, model_config.temperature):
         final_answer += chunk
         yield chunk
 
     # Log the request and response
-    log.log_request_response(model, messages, mode, final_answer)
+    log.log_request_response(use_model, messages, mode, final_answer)
 
 
 def default_mode(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:

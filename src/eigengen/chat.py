@@ -9,8 +9,10 @@ from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 
 from prompt_toolkit.formatted_text import PygmentsTokens
 from prompt_toolkit.shortcuts import print_formatted_text
+from prompt_toolkit.styles.pygments import style_from_pygments_cls
 from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.token import Token
+from pygments.styles import get_style_by_name
 
 import pygments.style
 
@@ -39,7 +41,7 @@ def display_response_with_syntax_highlighting(response: str) -> None:
     code_block_pattern = re.compile(
         r'^(?P<indent>[ \t]*)'          # Capture leading indentation
         r'(?P<fence>`{3,})'             # Code fence (at least 3 backticks)
-        r'[ \t]*(?P<lang>\w+)?'         # Optional language identifier
+        r'[ \t]*(?P<lang_path>\S+)?'    # Optional language identifier and/or file path
         r'[ \t]*\n'                     # Trailing spaces and newline
         r'(?P<code>.*?)'                # Code content (non-greedy)
         r'\n'                           # Newline before the closing fence
@@ -60,16 +62,23 @@ def display_response_with_syntax_highlighting(response: str) -> None:
 
         indent = match.group('indent')
         fence = match.group('fence')
-        lang = match.group('lang')
+        lang_path = match.group('lang_path')
         code = match.group('code')
 
         # Print the opening fence with indentation and optional language
-        print(f"{indent}{fence}{lang or ''}")
+        print(f"{indent}{fence}{lang_path or ''}")
+        actual_lang = ""
+        actual_path = ""
+        if lang_path:
+            lang_parts = lang_path.split(";")
+            actual_lang = lang_parts[0]
+            if len(lang_parts) > 1:
+                actual_path = lang_parts[1]
 
         # Determine the lexer to use
-        if lang:
+        if actual_lang:
             try:
-                lexer = get_lexer_by_name(lang.lower())
+                lexer = get_lexer_by_name(actual_lang.lower())
             except Exception:
                 lexer = guess_lexer(code)
         else:
@@ -83,7 +92,8 @@ def display_response_with_syntax_highlighting(response: str) -> None:
         # Syntax-highlight the code content with correct indentation
         tokens = list(pygments.lex(code, lexer=lexer))
         formatted_code = PygmentsTokens(tokens)
-        print_formatted_text(formatted_code, end='')
+        print_formatted_text(formatted_code, end='',
+                             style=style_from_pygments_cls(get_style_by_name("solarized-dark")))
 
         # Print the closing fence with indentation
         print(f"\n{indent}{fence}")

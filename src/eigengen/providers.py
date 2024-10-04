@@ -15,40 +15,43 @@ from mistralai import Mistral
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 class ModelConfig:
-    def __init__(self, provider: str, model: str, chat_model: str, max_tokens: int, temperature: float):
+    def __init__(self, provider: str, model: str, mini_model: str, max_tokens: int, temperature: float):
         self.provider = provider
         self.model = model
-        self.chat_model = chat_model
+        self.mini_model = mini_model
         self.max_tokens = max_tokens
         self.temperature = temperature
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
-    "claude-sonnet": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
+    "claude-sonnet": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-haiku-20240307", 8192, 0.7),
     "gemma2": ModelConfig("ollama", "gemma2:27b", "gemma2:27b", 128000, 0.5),
     "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.2-90b-text-preview", 8000, 0.5),
-    "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-2024-08-06", 128000, 0.7),
-    "o1-preview": ModelConfig("openai", "o1-preview", "o1-preview", 8000, 0.7),
-    "o1-mini": ModelConfig("openai", "o1-mini", "o1-mini", 4000, 0.7),
-    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-pro-002", 32768, 0.7),
+    "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
+    "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 8000, 0.7),
+    "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 4000, 0.7),
+    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-flash", 32768, 0.7),
     "mistral": ModelConfig("mistral", "mistral-large-2407", "mistral-large-2407", 8192, 0.7)
 
 }
 
 class Provider(ABC):
     @abstractmethod
-    def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str) -> Generator[str, None, None]:
+    def make_request(self,
+                     model: str,
+                     messages: List[Dict[str, str]],
+                     max_tokens: int,
+                     temperature: float) -> Generator[str, None, None]:
         pass
 
 class OllamaProvider(Provider):
-    def __init__(self, model: str):
-        self.model: str = model
+    def __init__(self):
+        super().__init__()
 
-    def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str) -> Generator[str, None, None]:
+    def make_request(self, model, messages: List[Dict[str, str]],
+                     max_tokens: int, temperature: float) -> Generator[str, None, None]:
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
-            "model": self.model,
+            "model": model,
             "messages": messages,
             "stream": True,
             "options": {
@@ -65,16 +68,16 @@ class OllamaProvider(Provider):
                 yield content
 
 class AnthropicProvider(Provider):
-    def __init__(self, client: Anthropic, model: str):
+    def __init__(self, client: Anthropic):
+        super().__init__()
         self.client: Anthropic = client
-        self.model: str = model
 
-    def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+    def make_request(self, model: str, messages: List[Dict[str, str]],
+                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 with self.client.messages.stream(
-                    model=self.model,
+                    model=model,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     messages=messages
@@ -91,17 +94,17 @@ class AnthropicProvider(Provider):
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
 class GroqProvider(Provider):
-    def __init__(self, client: Groq, model: str):
+    def __init__(self, client: Groq):
+        super().__init__()
         self.client: Groq = client
-        self.model: str = model
 
-    def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+    def make_request(self, model: str, messages: List[Dict[str, str]],
+                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
                     messages=messages,
-                    model=self.model,
+                    model=model,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     stream=True
@@ -120,28 +123,25 @@ class GroqProvider(Provider):
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
-class OpenAIProvider(Provider):
-    def __init__(self, client: OpenAI, model: str, chat_model: str):
-        self.client: OpenAI = client
-        self.model: str = model
-        self.chat_model: str = chat_model
 
-    def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+class OpenAIProvider(Provider):
+    def __init__(self, client: OpenAI):
+        super().__init__()
+        self.client: OpenAI = client
+
+    def make_request(self, model: str, messages: List[Dict[str, str]],
+                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 params = { }
 
-                use_stream = True if self.model != "o1-preview" and self.model != "o1-mini" else False
-                use_model = self.model
-                if mode == "chat":
-                    use_model = self.chat_model
+                use_stream = True if model not in ["o1-preview", "o1-mini"] else False
 
-                if not use_model.startswith("o1"):
+                if not model.startswith("o1"):
                     params["temperature"] = temperature
 
                 response = self.client.chat.completions.create(
-                    model=use_model,
+                    model=model,
                     messages=messages,
                     stream=use_stream,
                     **params
@@ -163,16 +163,17 @@ class OpenAIProvider(Provider):
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
-class GoogleProvider(Provider):
-    def __init__(self, model: str):
-        self.model: str = model
 
-    def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+class GoogleProvider(Provider):
+    def __init__(self):
+        super().__init__()
+
+    def make_request(self, model: str, messages: List[Dict[str, str]],
+                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
-                model = google_genai.GenerativeModel(self.model)
-                chat = model.start_chat(
+                google_model = google_genai.GenerativeModel(model)
+                chat = google_model.start_chat(
                     history=[
                         {"role": "user", "parts": message["content"]} if message["role"] == "user"
                         else {"role": "model", "parts": message["content"]}
@@ -205,20 +206,22 @@ class GoogleProvider(Provider):
 
 
 class MistralProvider(Provider):
-    def __init__(self, client: Mistral, model: str):
+    def __init__(self, client: Mistral):
+        super().__init__()
         self.client: Mistral = client
-        self.model: str = model
 
-    def make_request(self, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+    def make_request(self, model: str, messages: List[Dict[str, str]],
+                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.stream(
-                    model=self.model,
+                    model=model,
                     messages=messages,
                     max_tokens=max_tokens,
                     temperature=temperature
                 )
+                if response is None:
+                    return
 
                 for event in response:
                     content = event.data.choices[0].delta.content
@@ -241,38 +244,39 @@ def get_api_key(provider: str) -> str:
         raise ValueError(f"{env_var_name} environment variable is not set")
     return api_key
 
-def create_provider(model_name: str) -> Provider:
-    if model_name not in MODEL_CONFIGS:
-        raise ValueError(f"Invalid model name: {model_name}")
 
-    config = MODEL_CONFIGS[model_name]
+def create_provider(nickname: str) -> Provider:
+    if nickname not in MODEL_CONFIGS:
+        raise ValueError(f"Invalid model nickname: {nickname}")
+
+    config = MODEL_CONFIGS[nickname]
 
     if config.provider == "ollama":
-        return OllamaProvider(config.model)
+        return OllamaProvider()
     elif config.provider == "anthropic":
         api_key = get_api_key("anthropic")
         client = Anthropic(api_key=api_key)
-        return AnthropicProvider(client, config.model)
+        return AnthropicProvider(client)
     elif config.provider == "groq":
         api_key = get_api_key("groq")
         client = Groq(api_key=api_key)
-        return GroqProvider(client, config.model)
+        return GroqProvider(client)
     elif config.provider == "openai":
         api_key = get_api_key("openai")
         client = OpenAI(api_key=api_key)
-        return OpenAIProvider(client, config.model, config.chat_model)
+        return OpenAIProvider(client)
     elif config.provider == "google":
         api_key = get_api_key("google")
         google_genai.configure(api_key=api_key)
-        return GoogleProvider(config.model)
+        return GoogleProvider()
     elif config.provider == "mistral":
         api_key = get_api_key("mistral")
         client = Mistral(api_key=api_key)
-        return MistralProvider(client, config.model)
+        return MistralProvider(client)
     else:
         raise ValueError(f"Invalid provider specified: {config.provider}")
 
-def get_model_config(model_name: str) -> ModelConfig:
-    if model_name not in MODEL_CONFIGS:
-        raise ValueError(f"Invalid model name: {model_name}")
-    return MODEL_CONFIGS[model_name]
+def get_model_config(nickname: str) -> ModelConfig:
+    if nickname not in MODEL_CONFIGS:
+        raise ValueError(f"Invalid model nickname: {nickname}")
+    return MODEL_CONFIGS[nickname]

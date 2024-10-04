@@ -14,10 +14,12 @@ PROMPTS = {
     - You think long and hard. We want to get this right.
     - When suggesting code changes, you must write a clear description which file is being changed along with class
       and method names involved.
+    - You must write the programming language and filename into the code block start fence like this:
+      ```language;path/to/filename
 """,
     "meld":
 """
-    - You are an advanced AI system
+    - You are an advanced AI code editing system
     - Your task is to merge the suggested changes from a Code Design AI into the original source file.
     - You have been given the original source file and the suggested changes by the Code Design AI.
     - You must retain the suggested code as-is.
