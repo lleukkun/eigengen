@@ -2,69 +2,15 @@ from typing import Optional
 import argparse
 import cProfile
 import sys
-import os
-import tempfile
-import subprocess
 
 import colorama
 
 from eigengen.providers import MODEL_CONFIGS
-from eigengen import operations, log, indexing, gitfiles, chat
+from eigengen import operations, log, indexing, gitfiles, chat, utils
 
 
 def is_output_to_terminal() -> bool:
     return sys.stdout.isatty()
-
-
-def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
-    prefill_content += "\n"
-    prompt_content = ""
-    with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
-        temp_file_path = temp_file.name
-        temp_file.write(prefill_content)
-
-    try:
-        editor = os.environ.get("EDITOR", "nano")
-        command = editor + " " + temp_file_path
-        subprocess.run([command], shell=True, check=True)
-
-        with open(temp_file_path, 'r') as file:
-            prompt_content = file.read()
-
-        if prefill_content == prompt_content:
-            print("No prompt entered. Exiting.")
-            return None
-
-        return prompt_content
-    finally:
-        os.remove(temp_file_path)
-
-
-def get_prompt_from_editor() -> Optional[str]:
-    prefill_content = "# Enter your prompt here. These first two lines will be ignored.\n# Save and close the editor when you're done.\n"
-    return get_prompt_from_editor_with_prefill(prefill_content)
-
-
-def get_prompt_from_editor_for_review() -> Optional[str]:
-    prefill_content = "# Code Review Workflow: Enter your prompt here. Lines starting with # will be ignored.\n# Save and close the editor when you're done.\n"
-    return get_prompt_from_editor_with_prefill(prefill_content)
-
-
-def get_prompt_from_editor_with_quoted_file(file_path: str) -> Optional[str]:
-    try:
-        with open(file_path, 'r') as file:
-            file_content = file.read()
-    except FileNotFoundError:
-        print(f"Error: File '{file_path}' not found.")
-        return None
-    except IOError:
-        print(f"Error: Unable to read file '{file_path}'.")
-        return None
-
-    quoted_content = f"quoted file: {file_path}\n> " + '\n> '.join(file_content.splitlines())
-    prefill_content = f"Hello,\nPlease see inline comments for details on what must be changed.\nBe sure to change all other files that may be affected.\n\n{quoted_content}"
-    return get_prompt_from_editor_with_prefill(prefill_content)
-
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -76,10 +22,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
-    parser.add_argument("--debug", action="store_true", help="enable debug output")
     parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
                         help="List the last N prompts (default 5)")
-    parser.add_argument("--quote", "-q", metavar="FILE", help="Quote the content of the specified file in the prompt")
     parser.add_argument("--index", action="store_true", help="Index the files for future use")
     parser.add_argument("--test-cache-loading", action="store_true", help="Test cache loading")
     parser.add_argument("--profile", action="store_true", help="Profile cache loading")
@@ -140,10 +84,7 @@ def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
     if args.prompt:
         return args.prompt
 
-    if args.quote:
-        return get_prompt_from_editor_with_quoted_file(args.quote)
-
-    return get_prompt_from_editor()
+    return utils.get_prompt_from_editor_with_prefill("")
 
 
 def main() -> None:
