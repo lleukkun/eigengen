@@ -106,22 +106,41 @@ def decode_code_block(markdown_text: str, start_index: int = 0) -> Tuple[str, st
 
 
 # Function to extract code blocks from a response
-def extract_code_blocks(response: str) -> List[str]:
+def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, int]]:
     code_blocks = []
-    lines = response.splitlines()
-    in_block = False
-    block_content = []
-    for line in lines:
-        if line.strip().startswith("```"):
-            if not in_block:
-                in_block = True
-            else:
-                # Closing block, add to list and reset
-                in_block = False
-                code_blocks.append("\n".join(block_content))
-                block_content = []
-        elif in_block:
-            block_content.append(line)
+
+    # Regular expression pattern to match code blocks with variable-length fences and indentation
+    code_block_pattern = re.compile(
+        r'^(?P<indent>[ \t]*)'          # Leading indentation
+        r'(?P<fence>`{3,}|~{3,})'       # Code fence (at least 3 backticks or tildes)
+        r'[ \t]*(?P<lang_path>\S+)?'    # Optional language identifier and/or file path
+        r'[ \t]*\n'                     # Trailing spaces and newline
+        r'(?P<code>.*?)'                # Code content
+        r'\n'                           # Newline before the closing fence
+        r'(?P=indent)'                  # Matching indentation
+        r'(?P=fence)'                   # Closing fence matching the opening
+        r'[ \t]*\n?',                   # Trailing spaces and optional newline
+        re.DOTALL | re.MULTILINE
+    )
+
+    for match in code_block_pattern.finditer(response):
+        fence = match.group('fence')
+        lang_path = match.group('lang_path') or ""
+        code = match.group('code')
+        start_index = match.start()
+        end_index = match.end()
+
+        # Split the language and path if both are provided
+        actual_lang = ""
+        actual_path = ""
+        if lang_path:
+            lang_parts = lang_path.split(";")
+            actual_lang = lang_parts[0]
+            if len(lang_parts) > 1:
+                actual_path = lang_parts[1]
+
+        code_blocks.append((fence, actual_lang, actual_path, code, start_index, end_index))
+
     return code_blocks
 
 

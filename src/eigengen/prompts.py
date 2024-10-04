@@ -25,7 +25,6 @@ PROMPTS = {
     - You must retain the suggested code as-is.
     - You must find where the Code Design AI intends to place the code.
     - You must produce output that is complete and consistent.
-    - You must make best effort to implement the changes the design AI provided.
     - You must produce as output only the plain file content
     - You must not use any delimiters or markup
     - You must not write any other output except the plain file content

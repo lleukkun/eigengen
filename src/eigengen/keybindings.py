@@ -26,7 +26,9 @@ class ChatKeyBindingsManager:
 
             if self.quoting_state["code_blocks"] is None:
                 # Extract code blocks for the first time
-                self.quoting_state["code_blocks"] = utils.extract_code_blocks(last_system_message)
+                code_blocks = utils.extract_code_blocks(last_system_message)
+                # Since extract_code_blocks now returns tuples, extract the code content from each tuple
+                self.quoting_state["code_blocks"] = [code for _, _, _, code, _, _ in code_blocks]
                 self.quoting_state["cycle_iterator"] = cycle(self.quoting_state["code_blocks"]) if self.quoting_state["code_blocks"] else None
 
             if self.quoting_state["cycle_iterator"]:

@@ -1,5 +1,4 @@
 import os
-import re
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -11,6 +10,7 @@ from prompt_toolkit.formatted_text import PygmentsTokens
 from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.styles.pygments import style_from_pygments_cls
 from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.lexers.special import TextLexer
 from pygments.token import Token
 from pygments.styles import get_style_by_name
 
@@ -18,7 +18,7 @@ import pygments.style
 
 from colorama import Fore, Style as ColoramaStyle
 
-from eigengen import operations, utils, keybindings
+from eigengen import operations, utils, keybindings, meld
 
 
 class CustomStyle(pygments.style.Style):
@@ -34,48 +34,23 @@ class CustomStyle(pygments.style.Style):
 
 def display_response_with_syntax_highlighting(response: str) -> None:
     """
-    Displays the response with syntax-highlighted code blocks.
-    Adjusted to handle variable-length backtick fences and leading whitespace.
+    Displays the response with syntax-highlighted code blocks,
+    utilizing the extract_code_blocks function from utils.py to parse code blocks.
     """
-    # Regular expression pattern to match code blocks with variable-length fences and indentation
-    code_block_pattern = re.compile(
-        r'^(?P<indent>[ \t]*)'          # Capture leading indentation
-        r'(?P<fence>`{3,})'             # Code fence (at least 3 backticks)
-        r'[ \t]*(?P<lang_path>\S+)?'    # Optional language identifier and/or file path
-        r'[ \t]*\n'                     # Trailing spaces and newline
-        r'(?P<code>.*?)'                # Code content (non-greedy)
-        r'\n'                           # Newline before the closing fence
-        r'(?P=indent)'                  # Match the same indentation
-        r'(?P=fence)'                   # Closing fence matching the opening fence
-        r'[ \t]*\n?',                   # Trailing spaces and optional newline
-        re.DOTALL | re.MULTILINE
-    )
-
     last_end = 0
 
-    for match in code_block_pattern.finditer(response):
-        start = match.start()
-        end = match.end()
+    # Extract code blocks along with their positions and fences
+    code_blocks = utils.extract_code_blocks(response)
 
+    for fence, actual_lang, actual_path, code, start, end in code_blocks:
         # Print text before the code block
         print(response[last_end:start], end='')
 
-        indent = match.group('indent')
-        fence = match.group('fence')
-        lang_path = match.group('lang_path')
-        code = match.group('code')
+        # Reconstruct the opening fence with optional language and path
+        lang_path = ';'.join(filter(None, [actual_lang, actual_path]))
+        print(f"{fence}{lang_path}")
 
-        # Print the opening fence with indentation and optional language
-        print(f"{indent}{fence}{lang_path or ''}")
-        actual_lang = ""
-        actual_path = ""
-        if lang_path:
-            lang_parts = lang_path.split(";")
-            actual_lang = lang_parts[0]
-            if len(lang_parts) > 1:
-                actual_path = lang_parts[1]
-
-        # Determine the lexer to use
+        # Determine the lexer to use for syntax highlighting
         if actual_lang:
             try:
                 lexer = get_lexer_by_name(actual_lang.lower())
@@ -85,18 +60,16 @@ def display_response_with_syntax_highlighting(response: str) -> None:
             try:
                 lexer = guess_lexer(code)
             except Exception:
-                # Fallback lexer if guessing fails
-                from pygments.lexers.special import TextLexer
                 lexer = TextLexer()
 
-        # Syntax-highlight the code content with correct indentation
+        # Syntax-highlight the code content
         tokens = list(pygments.lex(code, lexer=lexer))
         formatted_code = PygmentsTokens(tokens)
         print_formatted_text(formatted_code, end='',
                              style=style_from_pygments_cls(get_style_by_name("solarized-dark")))
 
-        # Print the closing fence with indentation
-        print(f"\n{indent}{fence}")
+        # Print the closing fence
+        print(f"\n{fence}")
 
         last_end = end
 
@@ -109,6 +82,7 @@ CHAT_HELP = ("Available commands:\n\n"
              "/help  Print this help text\n"
              "/quote <path>  Read and quote a file into the buffer.\n"
              "/clear  Clears messages from context. Leaves files intact.\n"
+             "/meld <path/to/file>  Merge changes from code block identified by the path.\n"
              "/reset  Clears messages and files from context.\n"
              "/exit  Exits chat.\n"
              "Ctrl-j  submits your message.\n"
@@ -197,8 +171,17 @@ class EggChat:
                         self.messages = [msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")]
                         print("Chat messages cleared, existing file context retained.\n")
                         continue
-                if prompt_input.strip().lower() == 'exit':
-                    break
+
+                    if prompt_input.startswith("/meld "):
+                        # handle the /meld command
+                        filepath = prompt_input[len("/meld "):].strip()
+                        last_system_message = next((msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), "")
+                        meld.meld_changes(model, filepath, last_system_message)
+                        continue
+
+                    if prompt_input.strip().lower() == '/exit':
+                        break
+
                 if prompt_input.strip() == '':
                     continue
 
