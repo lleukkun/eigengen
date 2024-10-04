@@ -25,12 +25,12 @@ class ModelConfig:
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "claude-sonnet": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
     "gemma2": ModelConfig("ollama", "gemma2:27b", "gemma2:27b", 128000, 0.5),
-    "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.2-90b-text-preview", 8000, 0.5),
+    "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.1-70b-versatile", 7000, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 8000, 0.7),
     "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 4000, 0.7),
-    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-flash", 32768, 0.7),
-    "mistral": ModelConfig("mistral", "mistral-large-2407", "mistral-large-2407", 8192, 0.7)
+    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-flash-002", 8192, 0.7),
+    "mistral": ModelConfig("mistral", "mistral-large-latest", "mistral-large-latest", 32768, 0.7)
 
 }
 
@@ -74,13 +74,21 @@ class AnthropicProvider(Provider):
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+
+        if len(messages) < 1:
+            return
+
+        system_message = messages[0]["content"]
+        messages = messages[1:]
+
         for attempt in range(max_retries):
             try:
                 with self.client.messages.stream(
                     model=model,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    messages=messages
+                    messages=messages,
+                    system=system_message
                 ) as stream:
                     for text in stream.text_stream:
                         yield text
@@ -170,14 +178,19 @@ class GoogleProvider(Provider):
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+        if len(messages) < 1:
+            return
+
+        system_message = messages[0]["content"]
+
         for attempt in range(max_retries):
             try:
-                google_model = google_genai.GenerativeModel(model)
+                google_model = google_genai.GenerativeModel(model, system_instruction=system_message)
                 chat = google_model.start_chat(
                     history=[
                         {"role": "user", "parts": message["content"]} if message["role"] == "user"
                         else {"role": "model", "parts": message["content"]}
-                        for message in messages[:-1]
+                        for message in messages[1:-1]
                     ]
                 )
                 response = chat.send_message(
