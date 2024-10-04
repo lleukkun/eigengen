@@ -188,12 +188,18 @@ class EggChat:
                             print(f"File '{file_to_quote}' not found.\n")
                             continue
 
-                    elif prompt_input.strip() == '/reset':
-                        # Reset the session messages, maintaining file contexts
+                    elif prompt_input.strip() == '/clear':
+                        # Clears messages from context, leaves files intact
                         self.messages = [
                             msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")
                         ]
                         print("Chat messages cleared, existing file context retained.\n")
+                        continue
+
+                    elif prompt_input.strip() == '/reset':
+                        # Clears messages and files from context
+                        self.messages = []
+                        print("Chat messages and file context cleared.\n")
                         continue
 
                     elif prompt_input.startswith("/meld"):
@@ -266,4 +272,3 @@ class EggChat:
             except EOFError:
                 # Handle Ctrl+D to exit
                 break
-
