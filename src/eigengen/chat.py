@@ -77,19 +77,21 @@ def display_response_with_syntax_highlighting(response: str) -> None:
     print(response[last_end:], end='')
 
 
-CHAT_HELP = ("Available commands:\n\n"
-             "/attach <path>  Attach file to context.\n"
-             "/help  Print this help text\n"
-             "/quote <path>  Read and quote a file into the buffer.\n"
-             "/clear  Clears messages from context. Leaves files intact.\n"
-             "/meld <path1> <path2> <...>  Merge changes from latest assistant response to all given paths.\n"
-             "/reset  Clears messages and files from context.\n"
-             "/exit  Exits chat.\n"
-             "Ctrl-j  submits your message.\n"
-             "Ctrl-x e  opens prompt in $EDITOR.\n"
-             "Ctrl-x y  copies conversation to clipboard.\n"
-             "Ctrl-x Up  cycles through response code blocks and quotes them in the buffer.\n"
-            )
+CHAT_HELP = (
+    "Available commands:\n\n"
+    "/attach <path>  Attach file to context.\n"
+    "/help  Print this help text\n"
+    "/quote <path>  Read and quote a file into the buffer.\n"
+    "/clear  Clears messages from context. Leaves files intact.\n"
+    "/meld <path1> <path2> <...>  Merge changes from the latest assistant response to the given paths. "
+    "If no paths are provided, applies changes to all files with code blocks in the latest assistant message.\n"
+    "/reset  Clears messages and files from context.\n"
+    "/exit  Exits chat.\n"
+    "Ctrl-j  submits your message.\n"
+    "Ctrl-x e  opens prompt in $EDITOR.\n"
+    "Ctrl-x y  copies conversation to clipboard.\n"
+    "Ctrl-x Up  cycles through response code blocks and quotes them in the buffer.\n"
+)
 
 
 class EggChat:
@@ -97,7 +99,7 @@ class EggChat:
         super().__init__()
 
         self.quoting_state = {
-           "current_index": -1,
+            "current_index": -1,
             "code_blocks": None,
             "cycle_iterator": None
         }
@@ -106,16 +108,19 @@ class EggChat:
 
         self.kbm = keybindings.ChatKeyBindingsManager(self.quoting_state, self.messages)
 
-    def chat_mode(self,
-                  model: str,
-                  git_files: Optional[List[str]],
-                  user_files: Optional[List[str]],
-                  initial_prompt: Optional[str] = None) -> None:
-
+    def chat_mode(
+        self,
+        model: str,
+        git_files: Optional[List[str]],
+        user_files: Optional[List[str]],
+        initial_prompt: Optional[str] = None
+    ) -> None:
 
         session = PromptSession(key_bindings=self.kbm.get_kb(), clipboard=PyperclipClipboard())
-        print("Entering Chat Mode. Type '/help' for available commands.\n"
-              "Type your messages below.\n(Type '/exit' to quit.)")
+        print(
+            "Entering Chat Mode. Type '/help' for available commands.\n"
+            "Type your messages below.\n(Type '/exit' to quit.)"
+        )
         relevant_files = operations.get_context_aware_files(git_files, user_files)
 
         if relevant_files:
@@ -134,15 +139,18 @@ class EggChat:
                     "user": "ansicyan",
                     "assistant": "blue"
                 })
+
                 def custom_prompt():
                     return [("class:user", f"\n[User][{datetime.now().strftime('%I:%M:%S %p')}] >\n")]
 
-                prompt_input = session.prompt(custom_prompt,
-                                              style=style,
-                                              multiline=True,
-                                              enable_history_search=True,
-                                              refresh_interval=5,
-                                              default=pre_fill or "")
+                prompt_input = session.prompt(
+                    custom_prompt,
+                    style=style,
+                    multiline=True,
+                    enable_history_search=True,
+                    refresh_interval=5,
+                    default=pre_fill or ""
+                )
                 pre_fill = ""  # we only want to pre-fill once
 
                 if prompt_input.startswith("/"):
@@ -152,7 +160,7 @@ class EggChat:
                         continue
 
                     if prompt_input.startswith('/attach '):
-                        # Handle the /load command
+                        # Handle the /attach command
                         file_to_load = prompt_input[len('/attach '):].strip()
                         if os.path.exists(file_to_load):
                             with open(file_to_load, 'r') as f:
@@ -168,20 +176,32 @@ class EggChat:
 
                     if prompt_input.strip() == '/reset':
                         # Reset the session messages, maintaining file contexts
-                        self.messages = [msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")]
+                        self.messages = [
+                            msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")
+                        ]
                         print("Chat messages cleared, existing file context retained.\n")
                         continue
 
-                    if prompt_input.startswith("/meld "):
+                    if prompt_input.startswith("/meld"):
                         # Handle the /meld command
-                        paths_input = prompt_input[len("/meld "):].strip()
-                        if not paths_input:
-                            print("No file paths provided for /meld command.\n")
-                            continue
-                        paths = paths_input.split()
+                        paths_input = prompt_input[len("/meld"):].strip()
                         last_assistant_message = next(
                             (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
                         )
+
+                        if not paths_input:
+                            # No paths provided, extract file paths from the last assistant message's code blocks
+                            code_blocks = utils.extract_code_blocks(last_assistant_message)
+                            paths = []
+                            for fence, lang, path, code, start, end in code_blocks:
+                                if path:
+                                    paths.append(path)
+                            if not paths:
+                                print("No file paths found in the latest assistant message.\n")
+                                continue
+                        else:
+                            paths = paths_input.split()
+
                         for filepath in paths:
                             meld.meld_changes(model, filepath, last_assistant_message)
                         continue
