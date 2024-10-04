@@ -1,14 +1,10 @@
 import os
-import tempfile
 import re
-import subprocess
 from typing import Dict, List, Optional
 from datetime import datetime
-from itertools import cycle
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
-from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 
 from prompt_toolkit.formatted_text import PygmentsTokens
@@ -32,25 +28,6 @@ class CustomStyle(pygments.style.Style):
         Token.Name: '',
         # Add more token styles as desired
     }
-
-
-def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
-    prompt_content = ""
-    with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
-        temp_file_path = temp_file.name
-        temp_file.write(prefill_content)
-
-    try:
-        editor = os.environ.get("EDITOR", "nano")
-        command = editor + " " + temp_file_path
-        subprocess.run(command, shell=True, check=True)
-
-        with open(temp_file_path, 'r') as file:
-            prompt_content = file.read()
-
-        return prompt_content
-    finally:
-        os.remove(temp_file_path)
 
 
 def display_response_with_syntax_highlighting(response: str) -> None:
@@ -152,27 +129,6 @@ class EggChat:
                   initial_prompt: Optional[str] = None) -> None:
 
 
-        # Function to extract code blocks from a response
-        def extract_code_blocks(response: str) -> List[str]:
-            code_blocks = []
-            lines = response.splitlines()
-            in_block = False
-            block_content = []
-            for line in lines:
-                if line.strip().startswith("```"):
-                    if not in_block:
-                        in_block = True
-                    else:
-                        # Closing block, add to list and reset
-                        in_block = False
-                        code_blocks.append("\n".join(block_content))
-                        block_content = []
-                elif in_block:
-                    block_content.append(line)
-            return code_blocks
-
-
-
         session = PromptSession(key_bindings=self.kbm.get_kb(), clipboard=PyperclipClipboard())
         print("Entering Chat Mode. Type '/help' for available commands.\n"
               "Type your messages below.\n(Type '/exit' to quit.)")
@@ -228,7 +184,7 @@ class EggChat:
 
                     if prompt_input.strip() == '/reset':
                         # Reset the session messages, maintaining file contexts
-                        messages = [msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")]
+                        self.messages = [msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")]
                         print("Chat messages cleared, existing file context retained.\n")
                         continue
                 if prompt_input.strip().lower() == 'exit':

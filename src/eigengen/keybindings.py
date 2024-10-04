@@ -1,6 +1,10 @@
 from typing import Dict, List
+from itertools import cycle
+from datetime import datetime
+
 from prompt_toolkit.key_binding import KeyBindings
 
+from eigengen import utils
 
 class ChatKeyBindingsManager:
     def __init__(self, quoting_state: Dict, messages: List):
@@ -15,15 +19,15 @@ class ChatKeyBindingsManager:
         return self.kb
 
     def _register_bindings(self):
-        @self.kb.add("c-down")
+        @self.kb.add("c-x", "up")
         def _(event):
             # Get the last system response to process
             last_system_message = next((msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), "")
 
             if self.quoting_state["code_blocks"] is None:
                 # Extract code blocks for the first time
-                self.quoting_state["code_blocks"] = extract_code_blocks(last_system_message)
-                self.quoting_state["cycle_iterator"] = cycle(quoting_state["code_blocks"]) if quoting_state["code_blocks"] else None
+                self.quoting_state["code_blocks"] = utils.extract_code_blocks(last_system_message)
+                self.quoting_state["cycle_iterator"] = cycle(self.quoting_state["code_blocks"]) if self.quoting_state["code_blocks"] else None
 
             if self.quoting_state["cycle_iterator"]:
                 # There are code blocks, cycle through them
@@ -54,7 +58,7 @@ class ChatKeyBindingsManager:
         def _(event):
             # Open current buffer content in external editor
             current_text = event.app.current_buffer.text
-            new_text = get_prompt_from_editor_with_prefill(current_text)
+            new_text = utils.get_prompt_from_editor_with_prefill(current_text)
             if new_text is not None:
                 event.app.current_buffer.text = new_text
 
