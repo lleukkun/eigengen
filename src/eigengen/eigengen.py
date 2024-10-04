@@ -73,7 +73,7 @@ def parse_arguments() -> argparse.Namespace:
                         default="claude-sonnet", help="Choose Model")
     parser.add_argument("--files", "-f", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
     parser.add_argument("--git-files", "-g", action="store_true", help="Include files from git ls-files, filtered by .eigengen_ignore")
-    parser.add_argument("--prompt", "-p", help="Prompt string to use (if not provided, opens editor)")
+    parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
                         help="Control color output: 'auto' (default), 'always', or 'never'")
     parser.add_argument("--debug", action="store_true", help="enable debug output")
@@ -84,7 +84,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--test-cache-loading", action="store_true", help="Test cache loading")
     parser.add_argument("--profile", action="store_true", help="Profile cache loading")
     # Add the --chat (-c) argument
-    parser.add_argument("--chat", "-c", action="store_true", help="Enable chat mode")
+    parser.add_argument("--chat", "-c", action="store_true", help="Enter chat mode")
     return parser.parse_args()
 
 
@@ -122,8 +122,9 @@ def handle_modes(args: argparse.Namespace) -> None:
     if args.git_files:
         index_files(args.git_files)
 
-    if args.chat:
-        chat.chat_mode(args.model, git_files, list(user_files))
+    if args.chat or args.prompt is None:
+        egg_chat = chat.EggChat()
+        egg_chat.chat_mode(args.model, git_files, list(user_files or []), initial_prompt=args.prompt)
         return
 
     prompt = prepare_prompt(args)
@@ -147,12 +148,8 @@ def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
 
 def main() -> None:
     args = parse_arguments()
-    try:
-        initialize_environment()
-        handle_modes(args)
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        sys.exit(1)
+    initialize_environment()
+    handle_modes(args)
 
 
 def test_cache_loading(profile: bool) -> None:
