@@ -79,11 +79,11 @@ def display_response_with_syntax_highlighting(response: str) -> None:
 
 CHAT_HELP = (
     "Available commands:\n\n"
-    "/attach <path>  Attach file to context.\n"
     "/help  Print this help text\n"
+    "/attach <path>  Attach file to context.\n"
     "/quote <path>  Read and quote a file into the buffer.\n"
     "/clear  Clears messages from context. Leaves files intact.\n"
-    "/meld <path1> <path2> <...>  Merge changes from the latest assistant response to the given paths. "
+    "/meld [<path1>, ...]  Merge changes from the latest assistant message to the given paths. "
     "If no paths are provided, applies changes to all files with code blocks in the latest assistant message.\n"
     "/reset  Clears messages and files from context.\n"
     "/exit  Exits chat.\n"
@@ -151,15 +151,15 @@ class EggChat:
                     refresh_interval=5,
                     default=pre_fill or ""
                 )
-                pre_fill = ""  # we only want to pre-fill once
+                pre_fill = ""  # Reset pre_fill after use
 
                 if prompt_input.startswith("/"):
-                    # input is supposed to be a command
+                    # Input is a command
                     if prompt_input.strip() == '/help':
                         print(CHAT_HELP)
                         continue
 
-                    if prompt_input.startswith('/attach '):
+                    elif prompt_input.startswith('/attach '):
                         # Handle the /attach command
                         file_to_load = prompt_input[len('/attach '):].strip()
                         if os.path.exists(file_to_load):
@@ -174,7 +174,21 @@ class EggChat:
                             print(f"File '{file_to_load}' not found.\n")
                         continue
 
-                    if prompt_input.strip() == '/reset':
+                    elif prompt_input.startswith('/quote '):
+                        # Handle the '/quote' command
+                        file_to_quote = prompt_input[len('/quote '):].strip()
+                        if os.path.exists(file_to_quote):
+                            with open(file_to_quote, 'r') as f:
+                                content = f.read()
+                            # Prefix each line with '> '
+                            quoted_content = '\n'.join(f'> {line}' for line in content.splitlines())
+                            pre_fill = quoted_content  # Pre-fill the next prompt with quoted content
+                            continue
+                        else:
+                            print(f"File '{file_to_quote}' not found.\n")
+                            continue
+
+                    elif prompt_input.strip() == '/reset':
                         # Reset the session messages, maintaining file contexts
                         self.messages = [
                             msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")
@@ -182,7 +196,7 @@ class EggChat:
                         print("Chat messages cleared, existing file context retained.\n")
                         continue
 
-                    if prompt_input.startswith("/meld"):
+                    elif prompt_input.startswith("/meld"):
                         # Handle the /meld command
                         paths_input = prompt_input[len("/meld"):].strip()
                         last_assistant_message = next(
@@ -206,8 +220,12 @@ class EggChat:
                             meld.meld_changes(model, filepath, last_assistant_message)
                         continue
 
-                    if prompt_input.strip().lower() == '/exit':
+                    elif prompt_input.strip().lower() == '/exit':
                         break
+
+                    else:
+                        print(f"Unknown command: {prompt_input}\n")
+                        continue
 
                 if prompt_input.strip() == '':
                     continue
@@ -243,7 +261,9 @@ class EggChat:
 
             except KeyboardInterrupt:
                 # Handle Ctrl+C to cancel the current input
+                pre_fill = ""  # Reset pre_fill after Ctrl-C
                 continue
             except EOFError:
                 # Handle Ctrl+D to exit
                 break
+
