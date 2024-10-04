@@ -28,6 +28,7 @@ openai==1.51.0
 packaging==24.1
 pydantic==2.9.2
 pydantic_core==2.23.4
+Pygments==2.18.0
 pyperclip==1.9.0
 prompt_toolkit==3.0.48
 PyYAML==6.0.2
