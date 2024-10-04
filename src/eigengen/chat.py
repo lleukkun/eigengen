@@ -82,7 +82,7 @@ CHAT_HELP = ("Available commands:\n\n"
              "/help  Print this help text\n"
              "/quote <path>  Read and quote a file into the buffer.\n"
              "/clear  Clears messages from context. Leaves files intact.\n"
-             "/meld <path/to/file>  Merge changes from code block identified by the path.\n"
+             "/meld <path1> <path2> <...>  Merge changes from latest assistant response to all given paths.\n"
              "/reset  Clears messages and files from context.\n"
              "/exit  Exits chat.\n"
              "Ctrl-j  submits your message.\n"
@@ -132,7 +132,7 @@ class EggChat:
             try:
                 style = Style.from_dict({
                     "user": "ansicyan",
-                    "system": "blue"
+                    "assistant": "blue"
                 })
                 def custom_prompt():
                     return [("class:user", f"\n[User][{datetime.now().strftime('%I:%M:%S %p')}] >\n")]
@@ -173,10 +173,17 @@ class EggChat:
                         continue
 
                     if prompt_input.startswith("/meld "):
-                        # handle the /meld command
-                        filepath = prompt_input[len("/meld "):].strip()
-                        last_system_message = next((msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), "")
-                        meld.meld_changes(model, filepath, last_system_message)
+                        # Handle the /meld command
+                        paths_input = prompt_input[len("/meld "):].strip()
+                        if not paths_input:
+                            print("No file paths provided for /meld command.\n")
+                            continue
+                        paths = paths_input.split()
+                        last_assistant_message = next(
+                            (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
+                        )
+                        for filepath in paths:
+                            meld.meld_changes(model, filepath, last_assistant_message)
                         continue
 
                     if prompt_input.strip().lower() == '/exit':
@@ -199,7 +206,7 @@ class EggChat:
                     # Capture the timestamp after receiving the first chunk
                     timestamp = datetime.now().strftime('%I:%M:%S %p')
                     # Print the timestamp before the first chunk
-                    print(Fore.GREEN + f"\n[System][{timestamp}] >" + ColoramaStyle.RESET_ALL)
+                    print(Fore.GREEN + f"\n[Assistant][{timestamp}] >" + ColoramaStyle.RESET_ALL)
 
                     answer += first_chunk
                 except StopIteration:

@@ -21,12 +21,12 @@ class ChatKeyBindingsManager:
     def _register_bindings(self):
         @self.kb.add("c-x", "up")
         def _(event):
-            # Get the last system response to process
-            last_system_message = next((msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), "")
+            # Get the last assistant response to process
+            last_assistant_message = next((msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), "")
 
             if self.quoting_state["code_blocks"] is None:
                 # Extract code blocks for the first time
-                code_blocks = utils.extract_code_blocks(last_system_message)
+                code_blocks = utils.extract_code_blocks(last_assistant_message)
                 # Since extract_code_blocks now returns tuples, extract the code content from each tuple
                 self.quoting_state["code_blocks"] = [code for _, _, _, code, _, _ in code_blocks]
                 self.quoting_state["cycle_iterator"] = cycle(self.quoting_state["code_blocks"]) if self.quoting_state["code_blocks"] else None
@@ -36,7 +36,7 @@ class ChatKeyBindingsManager:
                 block_to_quote = next(self.quoting_state["cycle_iterator"])
             else:
                 # No code blocks, quote entire message
-                block_to_quote = last_system_message
+                block_to_quote = last_assistant_message
 
             # Prepend '> ' to each line in the block
             quoted_block = "\n".join(f"> {line}" for line in block_to_quote.splitlines())
@@ -68,5 +68,5 @@ class ChatKeyBindingsManager:
         def _(event):
             # Copy the conversation to the system clipboard
             copy_messages = [msg for msg in self.messages if not (msg["role"] == "user" and msg["content"].startswith("<eigengen_file"))]
-            conversation = "\n\n".join([f"[{'User' if msg['role'] == 'user' else 'System'}] [{datetime.now().strftime('%I:%M:%S %p')}]\n{msg['content']}" for msg in copy_messages])
+            conversation = "\n\n".join([f"[{'User' if msg['role'] == 'user' else 'Assistant'}] [{datetime.now().strftime('%I:%M:%S %p')}]\n{msg['content']}" for msg in copy_messages])
             event.app.clipboard.set_text(conversation)
