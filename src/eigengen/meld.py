@@ -15,6 +15,7 @@ def meld_changes(model_nickname: str, filepath: str, response: str) -> None:
 
     code_blocks = utils.extract_code_blocks(response)
     target_block = None
+    original_content = ""
 
     for _, block_lang, block_path, block_content, _, _ in code_blocks:
         if not block_path:
@@ -32,8 +33,8 @@ def meld_changes(model_nickname: str, filepath: str, response: str) -> None:
         with open(filepath, "r") as f:
             original_content = f.read()
     except FileNotFoundError:
-        print(f"Error: File not found: {filepath}")
-        return
+        # this is perfectly ok, we're expected to create the file
+        pass
 
     apply_meld(model_nickname, filepath, original_content, response)
 
