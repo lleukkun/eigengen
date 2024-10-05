@@ -112,7 +112,7 @@ def handle_modes(args: argparse.Namespace) -> None:
     log.log_prompt(prompt)
 
     # Execute the default mode operation
-    operations.default_mode(args.model, git_files, list(user_files), prompt)
+    operations.default_mode(args.model, git_files, list(user_files or []), prompt)
 
 def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
     """

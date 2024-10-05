@@ -7,6 +7,14 @@ from eigengen.prompts import PROMPTS as PROMPTS
 
 @contextlib.contextmanager
 def open_fd(path, flags):
+    """
+    Context manager to open a file descriptor and ensure it is closed after use.
+    Args:
+        path (str): The file path to open.
+        flags (int): Flags to determine the mode in which the file is opened.
+    Yields:
+        int: The file descriptor.
+    """
     fd = os.open(path, flags)
     try:
         yield fd  # Yield control back to the context block
@@ -15,18 +23,32 @@ def open_fd(path, flags):
 
 
 def process_request(model_nickname: str, messages: List[Dict[str, str]], mode: str = "default") -> Generator[str, None, None]:
+    """
+    Processes a request by interfacing with the specified model and handling the conversation flow.
+    Args:
+        model_nickname (str): The nickname of the model to use.
+        messages (List[Dict[str, str]]): The list of messages in the conversation.
+        mode (str, optional): The mode of operation. Defaults to "default".
+    Yields:
+        str: Chunks of the final answer as they are generated.
+    """
     provider_instance: providers.Provider = providers.create_provider(model_nickname)
     model_config = providers.get_model_config(model_nickname)
 
     use_model = model_config.model if mode != "meld" else model_config.mini_model
 
+    # Select the appropriate system prompt based on the mode
     system: str = PROMPTS["system"] if mode != "meld" else PROMPTS["meld"]
     steering_messages = []
     if use_model not in ("o1-preview", "o1-mini"):
+        # For models other than 'o1-preview' and 'o1-mini', use a system role message
         steering_messages = [{"role": "system", "content": system}]
     else:
-        steering_messages = [{"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
-                             {"role": "assistant", "content": "Understood. I now have my operating instructions."}]
+        # For 'o1-preview' and 'o1-mini', embed the operating instructions in a user-assistant exchange
+        steering_messages = [
+            {"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
+            {"role": "assistant", "content": "Understood. I now have my operating instructions."}
+        ]
 
     combined_messages = steering_messages + messages
 
@@ -40,8 +62,17 @@ def process_request(model_nickname: str, messages: List[Dict[str, str]], mode: s
 
 
 def default_mode(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
+    """
+    Handles the default mode of operation, preparing messages and processing the request.
+    Args:
+        model (str): The model nickname to use.
+        git_files (Optional[List[str]]): List of git files for context.
+        user_files (Optional[List[str]]): List of user-specified files for context.
+        prompt (str): The user's prompt.
+    """
     messages: List[Dict[str, str]] = []
 
+    # Get the relevant files based on context
     relevant_files = get_context_aware_files(git_files, user_files)
 
     if relevant_files:
@@ -50,24 +81,39 @@ def default_mode(model: str, git_files: Optional[List[str]], user_files: Optiona
             for fname in relevant_files:
                 with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
                     original_content = f.read()
-                messages += [{"role": "user", "content": utils.encode_code_block(original_content, fname)},
-                             {"role": "assistant", "content": "ok"}]
+                # Add the content of the file to the messages
+                messages += [
+                    {"role": "user", "content": utils.encode_code_block(original_content, fname)},
+                    {"role": "assistant", "content": "ok"}
+                ]
+    # Add the user's prompt to the messages
     messages.append({"role": "user", "content": prompt})
 
+    # Process the request and print the response
     for chunk in process_request(model, messages, "default"):
         print(chunk, end="", flush=True)
     print("")
 
 
 def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = None) -> List[str]:
+    """
+    Compiles a list of files to be used based on git files and user-specified files.
+    Args:
+        use_git_files (bool, optional): Whether to include git files. Defaults to True.
+        user_files (Optional[List[str]], optional): User-specified files. Defaults to None.
+    Returns:
+        List[str]: Combined list of relevant files.
+    """
     file_set = set()
 
     if user_files:
         if use_git_files:
+            # Make user files relative to the git root
             user_files = [gitfiles.make_relative_to_git_root(f) for f in user_files]
         file_set.update(user_files)
 
     if use_git_files:
+        # Get the filtered list of git files
         git_files = set(gitfiles.get_filtered_git_files())
         file_set.update(git_files)
 
@@ -76,6 +122,14 @@ def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = 
 
 
 def get_context_aware_files(git_files: Optional[List[str]], user_files: Optional[List[str]]) -> List[str]:
+    """
+    Determines the list of files that are relevant based on the current context.
+    Args:
+        git_files (Optional[List[str]]): List of git files.
+        user_files (Optional[List[str]]): List of user-specified files.
+    Returns:
+        List[str]: List of relevant files.
+    """
     if not git_files:
         return user_files or []
 

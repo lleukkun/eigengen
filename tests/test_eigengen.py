@@ -22,7 +22,7 @@ def test_main_prints_help(capsys):
     assert "--files" in captured.out
     assert "--prompt" in captured.out
     assert "--color" in captured.out
-    assert "--debug" in captured.out
+    assert "--chat" in captured.out
     assert "--git-files" in captured.out
     assert "--list-history" in captured.out
 

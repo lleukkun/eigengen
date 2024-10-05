@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Generator
 from eigengen.providers import Provider
 
 class MockProvider(Provider):
@@ -9,9 +9,7 @@ class MockProvider(Provider):
             "Tell me a joke": "Why don't scientists trust atoms? Because they make up everything!",
         }
 
-    def make_request(self, messages: List[Dict[str, str]], max_tokens: int, temperature: float, mode: str, max_retries: int = 5, base_delay: int = 1) -> str:
+    def make_request(self, model: str, messages: List[Dict[str, str]], max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         last_user_message = next((msg['content'] for msg in reversed(messages) if msg['role'] == 'user'), '')
         response = self.canned_responses.get(last_user_message, "I don't have a canned response for that prompt.")
-        if mode in ["default", "code_review_start", "code_review_continue"]:
-            print(response)
-        return response
+        yield response
