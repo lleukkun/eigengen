@@ -1,31 +1,38 @@
 EigenGen
 ========
 
-EigenGen is a CLI Large Language Model frontend. It is geared towards working with code,
-and supports a code review flow where you request changes and review patches suggested
-by the tool similar to classic email based patch review.
+EigenGen is a CLI Large Language Model frontend. It is geared towards working with code.
+EigenGen uses a two-stage process where the output of the larger main LLM is fed to a smaller
+LLM which applies the changes and produces the complete file output. This is then used to
+produce diffs which the user can choose to apply.
 
-EigenGen works with 
-  - Anthropic claude-3-5-sonnet
-  - OpenAI o1-preview, o1-mini, GPT4o
-  - Google Gemini 1.5 pro 002
-  - llama3.2:90b via Groq
+EigenGen currently works correctly with:
+  - OpenAI o1-preview, o1-mini, GPT4o (gpt-4o-mini used for /meld)
+  - Anthropic claude-3-5-sonnet (uses same model for /meld operation, haiku has too low output token limit)
+  - llama3.2:90b via Groq (llama3.1-70b-versatile used for /meld)
+
+Currently these models wrap second stage output into a Markdown fenced code block:
+  - Google Gemini 1.5 pro 002 (problem is with gemini-1.5-flash-002)
   - Mistral Large v2
+We have a mitigation for this in place but we should really try to fix the prompting with these.
+
+Of all the models o1-preview is currently superior for actual development. The others
+work more like advanced templating engines that can flesh out a project initially, but then struggle
+when asked to implement a specific feature/change to a more complex existing code.
+
+Google Gemini API seems unreliable at the moment and in general these services are incredibly flaky
+considering that the companies that provide them are supposed to be the finest on the planet.
 
 ## Features
 
-  - Basic prompt/answer flow with -p "Type your prompt here"
-  - Diff output mode with -d that prints out the changes to files as a diff
-  - Code Review flow with -r that gives you the option to continue discussing the changes with the LLM
-    by typing your comments in-line with '> ' quoted diff. This is a bit like software development used to be before Pull Requests.
+  - Basic prompt/answer flow with -p "Type your prompt here".
+  - --chat mode allows discussing the changes and when the assistant answers with code blocks of changes,
+    they can be applied with '/meld' command.
   - Add 'git ls-files' files to context automatically with -g, filtered by .eigengen_ignore.
   - eigengen -g --index creates an index cache in .eigengen_cache for semi-automatic context detection. When
     using -g switch after creating the index, eigengen includes any locally modified files as determined by git
     plus any files listed with -f argument, and then further adds those files that reference symbols defined in
-    this list of files. Performance is good enough to work with pytorch repo, but linux kernel is still a bit too much,
-    having a 12 second index cache load time. This would indicate that thousands of files are ok, but tens of thousands
-    require patience. Rewriting the cache logic in C/C++/Rust/Zig would probably help but design must be validated
-    more first.
+    this list of files.
 
 
 ## Installation
@@ -70,14 +77,8 @@ For testing install pytest.
 ## Example Usage
 
 ```
-# start a new code review flow to develop a TODO-list web app
-eigengen -r -g -p "Please implement a TODO-list web app using react + javascript, thank you. Provide the full project directory structure, please. It should allow adding, editing and deleting entries."
-
-# pipe file content in through stdin
-cat setup.py | eigengen -f - -p "Please review the given source file, thank you!"
-
-# pipe a git diff output and write a review for it
-git diff origin/main^^..HEAD | eigengen -f - -p "Please write a code review for the given diff, thank you!
+# start a new chat pre-filling initial message from the command line
+eigengen -g --chat -p "Please implement a TODO-list web app using react + javascript, thank you. Provide the full project directory structure, please. It should allow adding, editing and deleting entries."
 ```
 
 By default eigengen uses claude-3-5-sonnet. In order to use OpenAI GPT4o model, please give --model, -m argument
@@ -92,7 +93,7 @@ alias eigengen='eigengen -m gpt4'
 ```
 
 ## Work In Progress
-  - HTTP API interface
+  - Exploring user interaction concepts
 
 ## TODO:
-  - ???
+  - Add progress indicator as the LLM calls can take a very long time
