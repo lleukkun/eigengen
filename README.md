@@ -8,14 +8,11 @@ produce diffs which the user can choose to apply.
 
 ### Correctness
 EigenGen currently works correctly with:
-  - OpenAI o1-preview, o1-mini, GPT4o (gpt-4o-mini used for /meld)
+  - OpenAI o1-preview, o1-mini, GPT4o (/meld by gpt-4o-mini)
   - Anthropic claude-3-5-sonnet (uses same model for /meld operation, haiku has too low output token limit)
-  - llama3.2:90b via Groq (llama3.1-70b-versatile used for /meld)
-
-### Misbehaviour
-Currently these models wrap second stage output into a Markdown fenced code block:
-  - Google Gemini 1.5 pro 002 (problem is with gemini-1.5-flash-002)
-  - Mistral Large v2
+  - llama3.2:90b via Groq (/meld by llama3.1-70b-versatile)
+  - Google Gemini 1.5 pro 002 (/meld by gemini-1.5-flash-002 )
+  - Mistral Large v2 (/meld uses the same)
 
 We have a mitigation for this in place but we should really try to fix the prompting with these.
 

@@ -61,10 +61,9 @@ def apply_meld(model_nickname: str, filepath: str, original_content: str, change
     # Process the request using the LLM and get the updated file content
     result = operations.process_request(model_nickname, messages, mode="meld")
     processed_file_lines = "".join(result).splitlines()
-    if model_nickname in ("mistral", "gemini") and len(processed_file_lines[0]) > 1:
-        if processed_file_lines[0].startswith("```"):
-            # The meld model seems to be buggy and has wrapped the content in a Markdown codeblock
-            processed_file_lines = processed_file_lines[1:-1]
+    if processed_file_lines[0].startswith("```"):
+        # we expect this, but some models may fail to wrap the output with fences
+        processed_file_lines = processed_file_lines[1:-1]
 
     # Generate a unified diff between the original content and the updated content
     diff_output = "\n".join(
