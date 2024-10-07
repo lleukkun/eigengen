@@ -23,14 +23,12 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("--model", "-m", choices=list(MODEL_CONFIGS.keys()),
-                        default="claude-sonnet", help="Choose Model")
+                        default="claude", help="Choose Model")
     parser.add_argument("--files", "-f", nargs="+",
                         help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
     parser.add_argument("--git-files", "-g", action="store_true",
                         help="Include files from git ls-files, filtered by .eigengen_ignore")
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
-    parser.add_argument("--color", choices=["auto", "always", "never"], default="auto",
-                        help="Control color output: 'auto' (default), 'always', or 'never'")
     parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
                         help="List the last N prompts (default 5)")
     parser.add_argument("--index", action="store_true",

@@ -4,11 +4,11 @@ import json
 import time
 import random
 import os
-from typing import List, Dict, Any, Generator
+from typing import Any, Dict, Iterable, List, Generator, cast
 
-from anthropic import Anthropic, RateLimitError as AnthropicRateLimitError
-from groq import Groq, RateLimitError as GroqRateLimitError
-from openai import OpenAI, RateLimitError as OpenAIRateLimitError
+import anthropic
+import groq
+import openai
 import google.generativeai as google_genai
 from mistralai import Mistral
 
@@ -23,8 +23,7 @@ class ModelConfig:
         self.temperature = temperature
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
-    "claude-sonnet": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
-    "gemma2": ModelConfig("ollama", "gemma2:27b", "gemma2:27b", 128000, 0.5),
+    "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
     "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.1-70b-versatile", 7000, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 8000, 0.7),
@@ -68,9 +67,9 @@ class OllamaProvider(Provider):
                 yield content
 
 class AnthropicProvider(Provider):
-    def __init__(self, client: Anthropic):
+    def __init__(self, client: anthropic.Anthropic):
         super().__init__()
-        self.client: Anthropic = client
+        self.client: anthropic.Anthropic = client
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
@@ -87,13 +86,13 @@ class AnthropicProvider(Provider):
                     model=model,
                     max_tokens=max_tokens,
                     temperature=temperature,
-                    messages=messages,
+                    messages=cast(Iterable[anthropic.types.MessageParam], messages),
                     system=system_message
                 ) as stream:
                     for text in stream.text_stream:
                         yield text
                 return
-            except AnthropicRateLimitError as e:
+            except anthropic.RateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
                 delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
@@ -102,16 +101,16 @@ class AnthropicProvider(Provider):
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
 class GroqProvider(Provider):
-    def __init__(self, client: Groq):
+    def __init__(self, client: groq.Groq):
         super().__init__()
-        self.client: Groq = client
+        self.client: groq.Groq = client
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(
-                    messages=messages,
+                    messages=cast(List, messages),
                     model=model,
                     max_tokens=max_tokens,
                     temperature=temperature,
@@ -123,7 +122,7 @@ class GroqProvider(Provider):
                     if content is not None:
                         yield content
                 return
-            except GroqRateLimitError as e:
+            except groq.RateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
                 delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
@@ -133,9 +132,9 @@ class GroqProvider(Provider):
 
 
 class OpenAIProvider(Provider):
-    def __init__(self, client: OpenAI):
+    def __init__(self, client: openai.OpenAI):
         super().__init__()
-        self.client: OpenAI = client
+        self.client: openai.OpenAI = client
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
@@ -150,20 +149,20 @@ class OpenAIProvider(Provider):
 
                 response = self.client.chat.completions.create(
                     model=model,
-                    messages=messages,
+                    messages=cast(List, messages),
                     stream=use_stream,
                     **params
                 )
-                if use_stream:
+                if isinstance(response, openai.Stream):
                     for chunk in response:
                         part = chunk.choices[0].delta.content
                         if part is not None:
                             yield part
                 else:
                     content = response.choices[0].message.content
-                    yield content
+                    yield content or ""
                 return
-            except OpenAIRateLimitError as e:
+            except openai.RateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
                 delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
@@ -187,11 +186,11 @@ class GoogleProvider(Provider):
             try:
                 google_model = google_genai.GenerativeModel(model, system_instruction=system_message)
                 chat = google_model.start_chat(
-                    history=[
+                    history=cast(List, [
                         {"role": "user", "parts": message["content"]} if message["role"] == "user"
                         else {"role": "model", "parts": message["content"]}
                         for message in messages[1:-1]
-                    ]
+                    ])
                 )
                 response = chat.send_message(
                     messages[-1]["content"],
@@ -229,7 +228,7 @@ class MistralProvider(Provider):
             try:
                 response = self.client.chat.stream(
                     model=model,
-                    messages=messages,
+                    messages=cast(List, messages),
                     max_tokens=max_tokens,
                     temperature=temperature
                 )
@@ -268,15 +267,15 @@ def create_provider(nickname: str) -> Provider:
         return OllamaProvider()
     elif config.provider == "anthropic":
         api_key = get_api_key("anthropic")
-        client = Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key)
         return AnthropicProvider(client)
     elif config.provider == "groq":
         api_key = get_api_key("groq")
-        client = Groq(api_key=api_key)
+        client = groq.Groq(api_key=api_key)
         return GroqProvider(client)
     elif config.provider == "openai":
         api_key = get_api_key("openai")
-        client = OpenAI(api_key=api_key)
+        client = openai.OpenAI(api_key=api_key)
         return OpenAIProvider(client)
     elif config.provider == "google":
         api_key = get_api_key("google")

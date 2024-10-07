@@ -21,7 +21,6 @@ def test_main_prints_help(capsys):
     assert "-m" in captured.out
     assert "--files" in captured.out
     assert "--prompt" in captured.out
-    assert "--color" in captured.out
     assert "--chat" in captured.out
     assert "--git-files" in captured.out
     assert "--list-history" in captured.out
@@ -33,7 +32,7 @@ def test_claude_sonnet_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
     monkeypatch.setattr(sys, 'argv', [
         "eigengen",
-        "--model", "claude-sonnet",
+        "--model", "claude",
         "--prompt", "This is part of a system test. You must write on a separate line as the only content: Hello, world.\nYou must not write anything after that."
     ])
 
