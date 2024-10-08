@@ -1,12 +1,12 @@
 EigenGen
 ========
 
-EigenGen is a CLI Large Language Model frontend. It is geared towards working with code.
-EigenGen uses a two-stage process where the output of the larger main LLM is fed to a smaller
-LLM which applies the changes and produces the complete file output. This is then used to
-produce diffs which the user can choose to apply.
+EigenGen is a CLI Large Language Model frontend. It is designed for working with code.
+EigenGen uses a two-stage process where larger LLM is used to solve the task and produce
+dense output, which is then given to a smaller LLM which applies the changes and produces
+the complete file output. Finally this is then used to produce diffs which the user can choose to apply.
 
-### Correctness
+### Supported Models
 EigenGen currently works correctly with:
   - OpenAI o1-preview, o1-mini, GPT4o (/meld by gpt-4o-mini)
   - Anthropic claude-3-5-sonnet (uses same model for /meld operation, haiku has too low output token limit)
@@ -14,16 +14,8 @@ EigenGen currently works correctly with:
   - Google Gemini 1.5 pro 002 (/meld by gemini-1.5-flash-002 )
   - Mistral Large v2 (/meld uses the same)
 
-We have a mitigation for this in place but we should really try to fix the prompting with these.
-
-
-### Recommendation
-Of all the models o1-preview is currently superior for actual development. The others
-work more like advanced templating engines that can flesh out a project initially, but then struggle
-when asked to implement a specific feature/change to a more complex existing code.
-
-Google Gemini API seems unreliable at the moment and in general these services are incredibly flaky
-considering that the companies that provide them are supposed to be the finest on the planet.
+Note: Mistral Large seems to have some trouble working with the EigenGen prompting. Similar issues happen
+with all Mistral models regardless of size. Perhaps they require some distinctly different approach.
 
 ## Features
 
@@ -31,7 +23,7 @@ considering that the companies that provide them are supposed to be the finest o
   - --chat mode allows discussing the changes and when the assistant answers with code blocks of changes,
     they can be applied with '/meld' command.
   - Add 'git ls-files' files to context automatically with -g, filtered by .eigengen_ignore.
-  - eigengen -g --index creates an index cache in .eigengen_cache for semi-automatic context detection. When
+  - eigengen -g --index creates an index cache in ~/.eigengen/cache for semi-automatic context detection. When
     using -g switch after creating the index, eigengen includes any locally modified files as determined by git
     plus any files listed with -f argument, and then further adds those files that reference symbols defined in
     this list of files.
@@ -87,11 +79,6 @@ By default eigengen uses claude-3-5-sonnet. In order to use OpenAI GPT4o model, 
 like this:
 ```
 eigengen -m gpt4 -p "your prompt content"
-```
-
-You may wish to create a shell alias to avoid having to type it in all the time:
-```
-alias eigengen='eigengen -m gpt4'
 ```
 
 ## Work In Progress
