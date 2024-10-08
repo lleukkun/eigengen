@@ -249,29 +249,19 @@ class EggChat:
                 indicator.start()
 
                 chunk_iterator = operations.process_request(model, self.messages, "chat")
-                try:
-                    # Get the first chunk
-                    first_chunk = next(chunk_iterator)
-                    # Capture the timestamp after receiving the first chunk
-                    timestamp = datetime.now().strftime('%I:%M:%S %p')
-                    # Print the timestamp before the first chunk
-                    print(Fore.GREEN + f"\n[Assistant][{timestamp}] >" + ColoramaStyle.RESET_ALL)
-
-                    answer += first_chunk
-                except StopIteration:
-                    # No content generated
-                    # Stop the indicator as there's no response
-                    indicator.stop()
-                    continue
-
-                # Continue with the remaining chunks
                 for chunk in chunk_iterator:
                     answer += chunk
 
                 # Stop the progress indicator after response is complete
                 indicator.stop()
 
+                # print assistant response heading + timestamp
+                timestamp = datetime.now().strftime('%I:%M:%S %p')
+                print(Fore.GREEN + f"\n[Assistant][{timestamp}] >" + ColoramaStyle.RESET_ALL)
+
                 display_response_with_syntax_highlighting(answer)
+                print("")  # empty line to create a bit of separation
+                
                 self.messages.append({"role": "assistant", "content": answer})
 
             except KeyboardInterrupt:
