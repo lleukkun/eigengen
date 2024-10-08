@@ -19,6 +19,7 @@ import pygments.style
 from colorama import Fore, Style as ColoramaStyle
 
 from eigengen import operations, utils, keybindings, meld
+from eigengen.progress import ProgressIndicator  # Added import
 
 
 class CustomStyle(pygments.style.Style):
@@ -243,6 +244,10 @@ class EggChat:
 
                 answer = ""
 
+                # Initialize and start the progress indicator
+                indicator = ProgressIndicator()
+                indicator.start()
+
                 chunk_iterator = operations.process_request(model, self.messages, "chat")
                 try:
                     # Get the first chunk
@@ -255,12 +260,16 @@ class EggChat:
                     answer += first_chunk
                 except StopIteration:
                     # No content generated
+                    # Stop the indicator as there's no response
+                    indicator.stop()
                     continue
 
                 # Continue with the remaining chunks
                 for chunk in chunk_iterator:
-                    # print(chunk, end="", flush=True)
                     answer += chunk
+
+                # Stop the progress indicator after response is complete
+                indicator.stop()
 
                 display_response_with_syntax_highlighting(answer)
                 self.messages.append({"role": "assistant", "content": answer})

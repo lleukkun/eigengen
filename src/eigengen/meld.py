@@ -2,6 +2,7 @@ import difflib
 import subprocess
 
 from eigengen import utils, operations
+from eigengen.progress import ProgressIndicator  # Added import
 
 
 def meld_changes(model_nickname: str, filepath: str, response: str) -> None:
@@ -43,23 +44,41 @@ def apply_meld(model_nickname: str, filepath: str, original_content: str, change
     # Prepare the conversation messages to send to the LLM
     messages = [
         # Send the original file content to the LLM
-        { "role": "user", "content": utils.encode_code_block(original_content, filepath)},
+        {"role": "user", "content": utils.encode_code_block(original_content, filepath)},
         # Assistant acknowledges receipt
-        { "role": "assistant", "content": "ok"},
+        {"role": "assistant", "content": "ok"},
         # Send the change content to the LLM
-        { "role": "user", "content": utils.encode_code_block(change_content, "changes")},
+        {"role": "user", "content": utils.encode_code_block(change_content, "changes")},
         # Assistant acknowledges receipt
-        { "role": "assistant", "content": "ok"},
+        {"role": "assistant", "content": "ok"},
         # Instruct the LLM to integrate changes into the original file
-        { "role": "user", "content":
+        {"role": "user", "content":
             f"You must integrate the relevant changes present in the changes file into the original {filepath}.\n"
             "You must respond with only the full file contents.\n"
             "You must not write anything else."
         }
     ]
 
+    # Initialize and start the progress indicator
+    indicator = ProgressIndicator()
+    indicator.start()
+
     # Process the request using the LLM and get the updated file content
-    result = operations.process_request(model_nickname, messages, mode="meld")
+    result = ""
+    try:
+        chunk_iterator = operations.process_request(model_nickname, messages, mode="meld")
+        for chunk in chunk_iterator:
+            result += chunk
+    except Exception as e:
+        print(f"An error occurred during LLM processing: {e}")
+    finally:
+        # Stop the progress indicator after response is complete or an error occurs
+        indicator.stop()
+
+    if not result:
+        print("No response received from the LLM.")
+        return
+
     processed_file_lines = "".join(result).splitlines()
     if processed_file_lines[0].startswith("```"):
         # we expect this, but some models may fail to wrap the output with fences
@@ -84,8 +103,8 @@ def apply_meld(model_nickname: str, filepath: str, original_content: str, change
         # Apply the diff using the patch command
         try:
             # Run the patch command with the diff output
-            patch_process = subprocess.Popen(["patch", "-u", "-p1", filepath], stdin=subprocess.PIPE)
-            _, patch_stderr = patch_process.communicate(input=diff_output.encode())
+            patch_process = subprocess.Popen(["patch", "-u", "-p1", filepath], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            patch_stdout, patch_stderr = patch_process.communicate(input=diff_output.encode())
             if patch_process.returncode == 0:
                 print("Changes applied successfully.")
             else:
