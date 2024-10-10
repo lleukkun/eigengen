@@ -106,6 +106,8 @@ class EggChat:
         }
 
         self.messages: List[Dict[str, str]] = []
+        self.file_context_indices: List[int] = []  # New attribute to track file context message indices
+        self.attached_files: List[str] = []  # List to track attached files
 
         self.kbm = keybindings.ChatKeyBindingsManager(self.quoting_state, self.messages)
 
@@ -129,13 +131,23 @@ class EggChat:
                 if os.path.exists(fname):
                     with open(fname, 'r') as f:
                         content = f.read()
+                    # Record the starting index
+                    start_index = len(self.messages)
                     self.messages.extend([
-                        {"role": "user", "content": f"<eigengen_file name=\"{fname}\">\n{content}\n</eigengen_file>"},
+                        {"role": "user", "content": utils.encode_code_block(content, fname)},
                         {"role": "assistant", "content": "ok"}
                     ])
+                    # Record the indices of the file context messages
+                    self.file_context_indices.extend([start_index, start_index + 1])
+                    # Add the file to the list of attached files
+                    self.attached_files.append(fname)
+
         pre_fill = initial_prompt
         while True:
             try:
+                # Refresh the file context messages before processing user input
+                self.refresh_file_context_messages()
+
                 style = Style.from_dict({
                     "user": "ansicyan",
                     "assistant": "blue"
@@ -166,10 +178,16 @@ class EggChat:
                         if os.path.exists(file_to_load):
                             with open(file_to_load, 'r') as f:
                                 content = f.read()
+                            # Record the starting index
+                            start_index = len(self.messages)
                             self.messages.extend([
                                 {"role": "user", "content": utils.encode_code_block(content, file_to_load)},
                                 {"role": "assistant", "content": "ok"}
                             ])
+                            # Record the indices of the file context messages
+                            self.file_context_indices.extend([start_index, start_index + 1])
+                            # Add the file to the list of attached files
+                            self.attached_files.append(file_to_load)
                             print(f"File '{file_to_load}' loaded into context.\n")
                         else:
                             print(f"File '{file_to_load}' not found.\n")
@@ -191,8 +209,10 @@ class EggChat:
 
                     elif prompt_input.strip() == '/clear':
                         # Clears messages from context, leaves files intact
+                        # Retain messages whose indices are in self.file_context_indices
                         self.messages = [
-                            msg for msg in self.messages if msg["role"] == "user" and msg["content"].startswith("```")
+                            msg for idx, msg in enumerate(self.messages)
+                            if idx in self.file_context_indices
                         ]
                         print("Chat messages cleared, existing file context retained.\n")
                         continue
@@ -200,6 +220,8 @@ class EggChat:
                     elif prompt_input.strip() == '/reset':
                         # Clears messages and files from context
                         self.messages = []
+                        self.file_context_indices = []  # Clear the file context indices
+                        self.attached_files = []        # Clear the list of attached files
                         print("Chat messages and file context cleared.\n")
                         continue
 
@@ -213,18 +235,21 @@ class EggChat:
                         if not paths_input:
                             # No paths provided, extract file paths from the last assistant message's code blocks
                             code_blocks = utils.extract_code_blocks(last_assistant_message)
-                            paths = []
+                            paths = set()
                             for fence, lang, path, code, start, end in code_blocks:
                                 if path:
-                                    paths.append(path)
+                                    paths.add(path)
                             if not paths:
                                 print("No file paths found in the latest assistant message.\n")
                                 continue
                         else:
-                            paths = paths_input.split()
+                            paths = set(paths_input.split())
 
                         for filepath in paths:
                             meld.meld_changes(model, filepath, last_assistant_message)
+
+                        # Refresh file contents in the chat context
+                        self.refresh_file_context_messages()
                         continue
 
                     elif prompt_input.strip().lower() == '/exit':
@@ -271,3 +296,29 @@ class EggChat:
             except EOFError:
                 # Handle Ctrl+D to exit
                 break
+
+    def refresh_file_context_messages(self) -> None:
+        """
+        Refreshes all file content messages in the chat context.
+        """
+        # Create a mapping from file path to content
+        file_contents = {}
+        for filepath in self.attached_files:
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    content = f.read()
+                file_contents[filepath] = utils.encode_code_block(content, filepath)
+            else:
+                print(f"File '{filepath}' not found. Skipping refresh for this file.\n")
+
+        # Update the messages in self.messages at the recorded indices
+        for index in range(0, len(self.file_context_indices), 2):
+            user_msg_index = self.file_context_indices[index]
+            user_msg = self.messages[user_msg_index]
+            # Extract the file path from the message content
+            parsed_code_blocks = utils.extract_code_blocks(user_msg["content"])
+            if parsed_code_blocks:
+                _, _, path, _, _, _ = parsed_code_blocks[0]
+                if path in file_contents:
+                    # Update the user message with the new file content
+                    self.messages[user_msg_index]["content"] = file_contents[path]
