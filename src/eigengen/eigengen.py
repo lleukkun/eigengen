@@ -13,17 +13,23 @@ import colorama
 
 from eigengen.providers import MODEL_CONFIGS
 from eigengen import operations, log, indexing, gitfiles, chat, utils
+from eigengen.config import EggConfig  # Add this import
 
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command-line arguments provided to the script.
 
     Returns:
-        argparse.Namespace: An object containing the parsed arguments.
+        argparse.Namespace: The parsed command-line arguments.
     """
     parser = argparse.ArgumentParser("eigengen")
+    parser.add_argument("--config", "-C", default=None,
+                        help="Path to the configuration file (default: ~/.eigengen/config.json)")
     parser.add_argument("--model", "-m", choices=list(MODEL_CONFIGS.keys()),
-                        default="claude", help="Choose Model")
+                        help="Choose Model")
+    parser.add_argument("--editor", "-e", help="Choose editor (e.g., nano, vim)")
+    parser.add_argument("--color-scheme", choices=['github-dark', 'monokai', 'solarized'],
+                        help="Choose color scheme")
     parser.add_argument("--files", "-f", nargs="+",
                         help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
     parser.add_argument("--git-files", "-g", action="store_true",
@@ -31,16 +37,18 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
                         help="List the last N prompts (default 5)")
-    parser.add_argument("--index", action="store_true",
+    parser.add_argument("--index", "-i", action="store_true",
                         help="Index the files for future use")
     parser.add_argument("--test-cache-loading", action="store_true",
                         help="Test cache loading")
-    parser.add_argument("--profile", action="store_true",
+    parser.add_argument("--profile", "-P", action="store_true",
                         help="Profile cache loading")
     # Add the --chat (-c) argument to enter chat mode
     parser.add_argument("--chat", "-c", action="store_true",
                         help="Enter chat mode")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    return args
 
 def initialize_environment() -> None:
     """
@@ -51,33 +59,33 @@ def initialize_environment() -> None:
     # Initialize colorama for cross-platform color support
     colorama.init()
 
-def handle_modes(args: argparse.Namespace) -> None:
+def handle_modes(config: EggConfig) -> None:
     """
-    Handle different operational modes based on the parsed arguments.
+    Handle different operational modes based on the configuration.
 
     Args:
-        args (argparse.Namespace): Parsed command-line arguments.
+        config (EggConfig): Loaded configuration object with applied command-line arguments.
     """
-    if args.test_cache_loading:
+    if config.args.test_cache_loading:
         # Test cache loading, optionally with profiling
-        test_cache_loading(args.profile)
+        test_cache_loading(config.profile)
         return
 
-    if args.list_history is not None:
+    if config.args.list_history is not None:
         # List the last N prompts from the history
-        log.list_prompt_history(args.list_history)
+        log.list_prompt_history(config.args.list_history)
         return
 
     # Initialize file lists
-    user_files = args.files
+    user_files = config.args.files
     git_files = None
 
-    if args.git_files:
+    if config.args.git_files:
         # Get filtered git-tracked files
         git_files = gitfiles.get_filtered_git_files()
-        if args.files:
+        if config.args.files:
             # Make user-specified files relative to the git root
-            user_files = set([gitfiles.make_relative_to_git_root(x) for x in args.files])
+            user_files = set([gitfiles.make_relative_to_git_root(x) for x in config.args.files])
 
     # Combine user files and git files
     combined_files = set()
@@ -86,23 +94,23 @@ def handle_modes(args: argparse.Namespace) -> None:
     if git_files:
         combined_files.update(git_files)
 
-    if args.index:
+    if config.args.index:
         # Index files, forcing reindexing if specified
-        index_files(args.git_files, force_reindex=True)
+        index_files(config.args.git_files, force_reindex=True)
         return
 
-    if args.git_files:
+    if config.args.git_files:
         # Index git files without forcing reindex
-        index_files(args.git_files)
+        index_files(config.args.git_files)
 
-    if args.chat or args.prompt is None:
+    if config.args.chat or config.args.prompt is None:
         # Enter chat mode if --chat is specified or no prompt is provided
-        egg_chat = chat.EggChat()
-        egg_chat.chat_mode(args.model, git_files, list(user_files or []), initial_prompt=args.prompt)
+        egg_chat = chat.EggChat(config)  # Pass config to EggChat
+        egg_chat.chat_mode(git_files, list(user_files or []), initial_prompt=config.args.prompt)
         return
 
     # Prepare the prompt
-    prompt = prepare_prompt(args)
+    prompt = prepare_prompt(config)
     if not prompt:
         return
 
@@ -110,21 +118,21 @@ def handle_modes(args: argparse.Namespace) -> None:
     log.log_prompt(prompt)
 
     # Execute the default mode operation
-    operations.default_mode(args.model, git_files, list(user_files or []), prompt)
+    operations.default_mode(config.model, git_files, list(user_files or []), prompt)
 
-def prepare_prompt(args: argparse.Namespace) -> Optional[str]:
+def prepare_prompt(config: EggConfig) -> Optional[str]:
     """
-    Prepare the prompt string for processing.
+    Prepare the prompt string for processing, based on the configuration.
 
     Args:
-        args (argparse.Namespace): Parsed command-line arguments.
+        config (EggConfig): Loaded configuration object.
 
     Returns:
         Optional[str]: The prompt string, or None if no prompt was provided.
     """
-    if args.prompt:
-        # Use the prompt provided via command-line argument
-        return args.prompt
+    if config.args.prompt:
+        # Use the prompt provided via command-line argument or config
+        return config.args.prompt
 
     # Open an editor for the user to input the prompt
     return utils.get_prompt_from_editor_with_prefill("")
@@ -133,12 +141,28 @@ def main() -> None:
     """
     Main function to execute when the script is run directly.
     """
-    # Parse command-line arguments
+    # First, parse command-line arguments to get the --config option
     args = parse_arguments()
+
+    # Load configuration from the specified config file or default
+    config = EggConfig.load_config(config_path=args.config)
+
+    # Apply command-line arguments to config
+    if args.model:
+        config.model = args.model
+    if args.editor:
+        config.editor = args.editor
+    if args.color_scheme:
+        config.color_scheme = args.color_scheme
+
+    # Store the remaining arguments
+    config.args = args
+
     # Initialize environment (e.g., color support)
     initialize_environment()
-    # Handle the operational mode based on arguments
-    handle_modes(args)
+
+    # Handle the operational mode based on updated config
+    handle_modes(config)
 
 def test_cache_loading(profile: bool) -> None:
     """

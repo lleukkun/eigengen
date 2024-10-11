@@ -3,6 +3,7 @@ import re
 import tempfile
 import subprocess
 import os
+from eigengen.config import EggConfig  # Add this import
 
 def encode_code_block(code_content, file_path=''):
     """
@@ -108,8 +109,8 @@ def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
         temp_file.write(prefill_content)
 
     try:
-        # Get the user's preferred editor from the environment variables, defaulting to 'nano' if not set
-        editor = os.environ.get("EDITOR", "nano")
+        # Get the user's preferred editor from the configuration, prioritizing config over environment variables
+        editor = get_editor_command()
         command = editor + " " + temp_file_path
         # Open the editor with the temporary file
         subprocess.run(command, shell=True, check=True)
@@ -122,3 +123,19 @@ def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
     finally:
         # Remove the temporary file to clean up
         os.remove(temp_file_path)
+
+def get_editor_command() -> str:
+    """
+    Determine the text editor command to use.
+    Priority:
+    1. Config file
+    2. EDITOR environment variable
+    3. Defaults to 'nano'
+    """
+    config = EggConfig.load_config()
+    if config.editor:
+        return config.editor
+    elif os.getenv("EDITOR"):
+        return os.getenv("EDITOR")
+    else:
+        return "nano"

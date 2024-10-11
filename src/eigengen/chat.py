@@ -6,7 +6,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 
-from prompt_toolkit.formatted_text import PygmentsTokens
+from prompt_toolkit.formatted_text import PygmentsTokens, FormattedText
 from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.styles.pygments import style_from_pygments_cls
 from pygments.lexers import get_lexer_by_name, guess_lexer
@@ -20,7 +20,8 @@ from colorama import Fore, Style as ColoramaStyle
 
 from eigengen import operations, utils, keybindings, meld
 from eigengen.progress import ProgressIndicator  # Added import
-
+from eigengen.config import EggConfig  # Add this import
+from eigengen.providers import MODEL_CONFIGS  # Ensure MODEL_CONFIGS is imported
 
 class CustomStyle(pygments.style.Style):
     default_style = ""
@@ -31,7 +32,6 @@ class CustomStyle(pygments.style.Style):
         Token.Name: '',
         # Add more token styles as desired
     }
-
 
 def display_response_with_syntax_highlighting(response: str) -> None:
     """
@@ -66,8 +66,15 @@ def display_response_with_syntax_highlighting(response: str) -> None:
         # Syntax-highlight the code content
         tokens = list(pygments.lex(code, lexer=lexer))
         formatted_code = PygmentsTokens(tokens)
+        # Use the configured color scheme
+        color_scheme = EggConfig.load_config().color_scheme
+        try:
+            style = style_from_pygments_cls(get_style_by_name(color_scheme))
+        except Exception:
+            print(f"Unknown color scheme '{color_scheme}'. Falling back to 'github-dark'.")
+            style = style_from_pygments_cls(get_style_by_name("github-dark"))
         print_formatted_text(formatted_code, end='',
-                             style=style_from_pygments_cls(get_style_by_name("solarized-dark")))
+                             style=style)
 
         # Print the closing fence
         print(f"\n{fence}")
@@ -76,7 +83,6 @@ def display_response_with_syntax_highlighting(response: str) -> None:
 
     # Print any remaining text after the last code block
     print(response[last_end:], end='')
-
 
 CHAT_HELP = (
     "Available commands:\n\n"
@@ -94,10 +100,11 @@ CHAT_HELP = (
     "Ctrl-x Up  cycles through response code blocks and quotes them in the buffer.\n"
 )
 
-
 class EggChat:
-    def __init__(self):
+    def __init__(self, config: EggConfig):
         super().__init__()
+
+        self.config = config  # Store the passed config
 
         self.quoting_state = {
             "current_index": -1,
@@ -113,12 +120,18 @@ class EggChat:
 
     def chat_mode(
         self,
-        model: str,
         git_files: Optional[List[str]],
         user_files: Optional[List[str]],
         initial_prompt: Optional[str] = None
     ) -> None:
+        """
+        Initiates the chat mode, handling user inputs and interactions with the LLM.
 
+        Args:
+            git_files (Optional[List[str]]): List of git-tracked files for context.
+            user_files (Optional[List[str]]): List of user-specified files for context.
+            initial_prompt (Optional[str], optional): Pre-filled prompt content. Defaults to None.
+        """
         session = PromptSession(key_bindings=self.kbm.get_kb(), clipboard=PyperclipClipboard())
         print(
             "Entering Chat Mode. Type '/help' for available commands.\n"
@@ -147,11 +160,11 @@ class EggChat:
             try:
                 style = Style.from_dict({
                     "user": "ansicyan",
-                    "assistant": "blue"
+                    "assistant": "ansigreen"
                 })
 
                 def custom_prompt():
-                    return [("class:user", f"\n[User][{datetime.now().strftime('%I:%M:%S %p')}] >\n")]
+                    return [("class:user", f"\n[{datetime.now().strftime('%I:%M:%S %p')}][User] >\n")]
 
                 prompt_input = session.prompt(
                     custom_prompt,
@@ -246,11 +259,37 @@ class EggChat:
                             paths = set(paths_input.split())
 
                         for filepath in paths:
-                            meld.meld_changes(model, filepath, last_assistant_message)
+                            meld.meld_changes(self.config.model, filepath, last_assistant_message)
 
                         # Refresh file contents in the chat context
                         self.refresh_file_context_messages()
                         continue
+
+                    elif prompt_input.startswith("/model"):
+                        # Handle the /model command
+                        parts = prompt_input.strip().split(maxsplit=1)
+                        if len(parts) == 1:
+                            # No argument provided; display current model and supported models
+                            supported_models = list(MODEL_CONFIGS.keys())
+                            print(f"Current model: {self.config.model}")
+                            print("Supported models:")
+                            for m in supported_models:
+                                print(f" - {m}")
+                            continue
+                        else:
+                            # Argument provided; attempt to switch model
+                            new_model = parts[1].strip()
+                            if new_model in MODEL_CONFIGS:
+                                self.config.model = new_model
+                                # Removed: self.config.save_config()
+                                print(f"Model switched to: {new_model}\n")
+                                continue
+                            else:
+                                print(f"Unsupported model: {new_model}\n")
+                                print("Supported models are:")
+                                for m in MODEL_CONFIGS:
+                                    print(f" - {m}")
+                                continue
 
                     elif prompt_input.strip().lower() == '/exit':
                         break
@@ -273,7 +312,7 @@ class EggChat:
                 indicator = ProgressIndicator()
                 indicator.start()
 
-                chunk_iterator = operations.process_request(model, self.messages, "chat")
+                chunk_iterator = operations.process_request(self.config.model, self.messages, "chat")
                 for chunk in chunk_iterator:
                     answer += chunk
 
@@ -282,7 +321,7 @@ class EggChat:
 
                 # print assistant response heading + timestamp
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
-                print(Fore.GREEN + f"\n[Assistant][{timestamp}] >" + ColoramaStyle.RESET_ALL)
+                print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
 
                 display_response_with_syntax_highlighting(answer)
                 print("")  # empty line to create a bit of separation
