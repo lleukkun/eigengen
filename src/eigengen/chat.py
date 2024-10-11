@@ -145,9 +145,6 @@ class EggChat:
         pre_fill = initial_prompt
         while True:
             try:
-                # Refresh the file context messages before processing user input
-                self.refresh_file_context_messages()
-
                 style = Style.from_dict({
                     "user": "ansicyan",
                     "assistant": "blue"
@@ -165,6 +162,9 @@ class EggChat:
                     default=pre_fill or ""
                 )
                 pre_fill = ""  # Reset pre_fill after use
+
+                # Refresh the file context messages before processing user input
+                self.refresh_file_context_messages()
 
                 if prompt_input.startswith("/"):
                     # Input is a command
