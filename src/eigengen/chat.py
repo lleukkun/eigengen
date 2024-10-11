@@ -16,8 +16,6 @@ from pygments.styles import get_style_by_name
 
 import pygments.style
 
-from colorama import Fore, Style as ColoramaStyle
-
 from eigengen import operations, utils, keybindings, meld
 from eigengen.progress import ProgressIndicator  # Added import
 from eigengen.config import EggConfig  # Add this import
@@ -33,7 +31,7 @@ class CustomStyle(pygments.style.Style):
         # Add more token styles as desired
     }
 
-def display_response_with_syntax_highlighting(response: str) -> None:
+def display_response_with_syntax_highlighting(color_scheme: str, response: str) -> None:
     """
     Displays the response with syntax-highlighted code blocks,
     utilizing the extract_code_blocks function from utils.py to parse code blocks.
@@ -66,8 +64,7 @@ def display_response_with_syntax_highlighting(response: str) -> None:
         # Syntax-highlight the code content
         tokens = list(pygments.lex(code, lexer=lexer))
         formatted_code = PygmentsTokens(tokens)
-        # Use the configured color scheme
-        color_scheme = EggConfig.load_config().color_scheme
+
         try:
             style = style_from_pygments_cls(get_style_by_name(color_scheme))
         except Exception:
@@ -86,18 +83,21 @@ def display_response_with_syntax_highlighting(response: str) -> None:
 
 CHAT_HELP = (
     "Available commands:\n\n"
-    "/help  Print this help text\n"
-    "/attach <path>  Attach file to context.\n"
-    "/quote <path>  Read and quote a file into the buffer.\n"
-    "/clear  Clears messages from context. Leaves files intact.\n"
-    "/meld [<path1>, ...]  Merge changes from the latest assistant message to the given paths. "
-    "If no paths are provided, applies changes to all files with code blocks in the latest assistant message.\n"
-    "/reset  Clears messages and files from context.\n"
-    "/exit  Exits chat.\n"
-    "Ctrl-j  submits your message.\n"
-    "Ctrl-x e  opens prompt in $EDITOR.\n"
-    "Ctrl-x y  copies conversation to clipboard.\n"
-    "Ctrl-x Up  cycles through response code blocks and quotes them in the buffer.\n"
+    "/help                 Display this help message.\n"
+    "/attach <path>        Attach a file to the context for reference.\n"
+    "/quote <path>         Read and quote the contents of a file into the buffer.\n"
+    "/clear                Clear all messages from the current context while retaining attached files.\n"
+    "/meld [<path1>, ...]  Merge changes from the latest assistant message into the specified file paths. "
+    "If no paths are provided, changes will be applied to all files referenced in the latest assistant message.\n"
+    "/reset                Clear all messages and remove all attached files from the context.\n"
+    "/model [<model>]      Display current model or switch to a specified model.\n"
+    "/exit                 Exit the chat session.\n\n"
+    "Keyboard Shortcuts:\n"
+    "Ctrl + J              Submit your message.\n"
+    "Ctrl + X, E           Open the prompt in your default editor ($EDITOR).\n"
+    "Ctrl + X, Y           Copy the entire conversation to the clipboard.\n"
+    "Ctrl + X, Up Arrow    Cycle through response code blocks and quote them in the buffer.\n"
+    "\nFeel free to use these commands to manage your chat session effectively!"
 )
 
 class EggChat:
@@ -323,7 +323,7 @@ class EggChat:
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
                 print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
 
-                display_response_with_syntax_highlighting(answer)
+                display_response_with_syntax_highlighting(self.config.color_scheme, answer)
                 print("")  # empty line to create a bit of separation
                 
                 self.messages.append({"role": "assistant", "content": answer})
@@ -361,3 +361,4 @@ class EggChat:
                 if path in file_contents:
                     # Update the user message with the new file content
                     self.messages[user_msg_index]["content"] = file_contents[path]
+

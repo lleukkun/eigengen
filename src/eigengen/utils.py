@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Optional
+from typing import List, Tuple, Optional
 import re
 import tempfile
 import subprocess
@@ -92,7 +92,7 @@ def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, in
 
     return code_blocks
 
-def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
+def get_prompt_from_editor_with_prefill(config: EggConfig, prefill_content: str) -> Optional[str]:
     """
     Opens a temporary file with prefilled content in the user's default editor and returns the edited content.
 
@@ -110,7 +110,7 @@ def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
 
     try:
         # Get the user's preferred editor from the configuration, prioritizing config over environment variables
-        editor = get_editor_command()
+        editor = get_editor_command(config)
         command = editor + " " + temp_file_path
         # Open the editor with the temporary file
         subprocess.run(command, shell=True, check=True)
@@ -124,7 +124,7 @@ def get_prompt_from_editor_with_prefill(prefill_content: str) -> Optional[str]:
         # Remove the temporary file to clean up
         os.remove(temp_file_path)
 
-def get_editor_command() -> str:
+def get_editor_command(config: EggConfig) -> str:
     """
     Determine the text editor command to use.
     Priority:
@@ -132,10 +132,11 @@ def get_editor_command() -> str:
     2. EDITOR environment variable
     3. Defaults to 'nano'
     """
-    config = EggConfig.load_config()
     if config.editor:
         return config.editor
-    elif os.getenv("EDITOR"):
-        return os.getenv("EDITOR")
+
+    env_editor = os.getenv("EDITOR")
+    if env_editor:
+        return env_editor
     else:
         return "nano"

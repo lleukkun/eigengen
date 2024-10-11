@@ -1,7 +1,8 @@
+import argparse
 import os
 import json
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 
 @dataclass
 class EggConfig:
@@ -10,7 +11,7 @@ class EggConfig:
     color_scheme: str = "github-dark"
 
     # command line arguments are carried here but not stored in config file
-    args: Dict[str, Any] = field(default_factory=dict)
+    args: argparse.Namespace = field(default_factory=lambda: argparse.Namespace())
 
     @staticmethod
     def load_config(config_path: Optional[str] = None) -> 'EggConfig':
@@ -31,7 +32,7 @@ class EggConfig:
                 model=data.get("model", "claude"),
                 editor=data.get("editor", "nano"),
                 color_scheme=data.get("color_scheme", "github-dark"),
-                args={}
+                args=argparse.Namespace()
             )
         except Exception as e:
             print(f"Error loading config file '{config_path}': {e}. Using default configuration.")

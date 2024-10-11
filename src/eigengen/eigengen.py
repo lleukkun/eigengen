@@ -68,7 +68,7 @@ def handle_modes(config: EggConfig) -> None:
     """
     if config.args.test_cache_loading:
         # Test cache loading, optionally with profiling
-        test_cache_loading(config.profile)
+        test_cache_loading(config.args.profile)
         return
 
     if config.args.list_history is not None:
@@ -135,7 +135,7 @@ def prepare_prompt(config: EggConfig) -> Optional[str]:
         return config.args.prompt
 
     # Open an editor for the user to input the prompt
-    return utils.get_prompt_from_editor_with_prefill("")
+    return utils.get_prompt_from_editor_with_prefill(config, "")
 
 def main() -> None:
     """
