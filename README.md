@@ -47,10 +47,23 @@ or
 export MISTRAL_API_KEY=<your-api-key>
 ```
 
+## Configuration
+
+You can place and adapt the following in $HOME/.eigengen/config.json
+```
+{
+    "model": "o1-mini",
+    "editor": "subl -w",
+    "color_scheme": "solarized-dark"
+}
+```
+
+These can be overriden with command line options.
+
 ## Tips
 
   - In addition to `eigengen` executable, we provide `egg` as well. It's shorter.
-  - EigenGen uses `EDITOR` environment variable to pick the text editor.
+  - EigenGen can use `EDITOR` environment variable to pick the text editor.
   - Combining the two, for Sublime Text you can: `alias egg='EDITOR="subl -w" egg -m gpt4'`
   - Or if you're into VSCode: `alias egg='EDITOR="code -w" egg -m gpt4'`.
   - Vim/Neovim/Emacs users can probably figure out their own solutions.
