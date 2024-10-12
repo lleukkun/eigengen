@@ -105,8 +105,8 @@ def handle_modes(config: EggConfig) -> None:
 
     if config.args.chat or config.args.prompt is None:
         # Enter chat mode if --chat is specified or no prompt is provided
-        egg_chat = chat.EggChat(config)  # Pass config to EggChat
-        egg_chat.chat_mode(git_files, list(user_files or []), initial_prompt=config.args.prompt)
+        egg_chat = chat.EggChat(config, git_files, list(user_files or []))
+        egg_chat.chat_mode(initial_prompt=config.args.prompt)
         return
 
     # Prepare the prompt

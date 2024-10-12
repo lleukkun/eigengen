@@ -3,6 +3,15 @@ import re
 import tempfile
 import subprocess
 import os
+
+from prompt_toolkit.formatted_text import PygmentsTokens
+from prompt_toolkit.shortcuts import print_formatted_text
+from prompt_toolkit.styles.pygments import style_from_pygments_cls
+import pygments
+from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.lexers.special import TextLexer
+from pygments.styles import get_style_by_name
+
 from eigengen.config import EggConfig  # Add this import
 
 def encode_code_block(code_content, file_path=''):
@@ -140,3 +149,54 @@ def get_editor_command(config: EggConfig) -> str:
         return env_editor
     else:
         return "nano"
+
+
+def display_response_with_syntax_highlighting(color_scheme: str, response: str) -> None:
+    """
+    Displays the response with syntax-highlighted code blocks,
+    utilizing the extract_code_blocks function from utils.py to parse code blocks.
+    """
+    last_end = 0
+
+    # Extract code blocks along with their positions and fences
+    code_blocks = extract_code_blocks(response)
+
+    for fence, actual_lang, actual_path, code, start, end in code_blocks:
+        # Print text before the code block
+        print(response[last_end:start], end='')
+
+        # Reconstruct the opening fence with optional language and path
+        lang_path = ';'.join(filter(None, [actual_lang, actual_path]))
+        print(f"{fence}{lang_path}")
+
+        # Determine the lexer to use for syntax highlighting
+        if actual_lang:
+            try:
+                lexer = get_lexer_by_name(actual_lang.lower())
+            except Exception:
+                lexer = guess_lexer(code)
+        else:
+            try:
+                lexer = guess_lexer(code)
+            except Exception:
+                lexer = TextLexer()
+
+        # Syntax-highlight the code content
+        tokens = list(pygments.lex(code, lexer=lexer))
+        formatted_code = PygmentsTokens(tokens)
+
+        try:
+            style = style_from_pygments_cls(get_style_by_name(color_scheme))
+        except Exception:
+            print(f"Unknown color scheme '{color_scheme}'. Falling back to 'github-dark'.")
+            style = style_from_pygments_cls(get_style_by_name("github-dark"))
+        print_formatted_text(formatted_code, end='',
+                             style=style)
+
+        # Print the closing fence
+        print(f"\n{fence}")
+
+        last_end = end
+
+    # Print any remaining text after the last code block
+    print(response[last_end:], end='')
