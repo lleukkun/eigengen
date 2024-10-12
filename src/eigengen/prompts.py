@@ -9,6 +9,8 @@ PROMPTS = {
   and method names involved.
 - You must carefully inspect the existing code to understand how it works
 - You must come up with a plan how to implement what is being asked
+- You may ask the user for clarifications.
+- You do not have to produce a plan if you think the goal has already been achieved. Ask the user for more instructions if that is the case.
 - You do not have to implement the whole plan in a single answer
 - You can make small incremental modifications that can be tested
 - You can ask the user to apply the incremental changes and report back with results
