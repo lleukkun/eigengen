@@ -49,16 +49,8 @@ export MISTRAL_API_KEY=<your-api-key>
 
 ## Configuration
 
-You can place and adapt the following in $HOME/.eigengen/config.json
-```
-{
-    "model": "o1-mini",
-    "editor": "subl -w",
-    "color_scheme": "solarized-dark"
-}
-```
-
-These can be overriden with command line options.
+You can copy `docs/sample-config.json` to your `$HOME/.eigengen/config.json` and edit the settings.
+Supported color schemes are everything from [pygments](https://pygments.org/styles/).
 
 ## Tips
 
@@ -95,7 +87,7 @@ eigengen -m gpt4 -p "your prompt content"
 ```
 
 ## Work In Progress
-  - Exploring user interaction concepts
+  - testing and cleanups
 
 ## TODO:
-  - Add progress indicator as the LLM calls can take a very long time
+  - Reintroduce diff mode. Should be done so it reuses the logic from chat /meld command.
