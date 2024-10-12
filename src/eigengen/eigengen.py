@@ -9,8 +9,6 @@ from typing import Optional
 import argparse
 import cProfile
 
-import colorama
-
 from eigengen.providers import MODEL_CONFIGS
 from eigengen import operations, log, indexing, gitfiles, chat, utils
 from eigengen.config import EggConfig  # Add this import
@@ -49,15 +47,6 @@ def parse_arguments() -> argparse.Namespace:
     args = parser.parse_args()
 
     return args
-
-def initialize_environment() -> None:
-    """
-    Initialize the environment settings.
-
-    Currently initializes colorama for cross-platform color support.
-    """
-    # Initialize colorama for cross-platform color support
-    colorama.init()
 
 def handle_modes(config: EggConfig) -> None:
     """
@@ -157,9 +146,6 @@ def main() -> None:
 
     # Store the remaining arguments
     config.args = args
-
-    # Initialize environment (e.g., color support)
-    initialize_environment()
 
     # Handle the operational mode based on updated config
     handle_modes(config)
