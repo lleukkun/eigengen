@@ -3,7 +3,6 @@ anthropic==0.34.2
 anyio==4.6.0
 certifi==2024.8.30
 charset-normalizer==3.3.2
-colorama==0.4.6
 distro==1.9.0
 fastapi==0.115.0
 filelock==3.16.1
