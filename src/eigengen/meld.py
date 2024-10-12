@@ -59,21 +59,17 @@ def apply_meld(model_nickname: str, filepath: str, original_content: str, change
         }
     ]
 
-    # Initialize and start the progress indicator
-    indicator = ProgressIndicator()
-    indicator.start()
-
-    # Process the request using the LLM and get the updated file content
     result = ""
-    try:
-        chunk_iterator = operations.process_request(model_nickname, messages, mode="meld")
-        for chunk in chunk_iterator:
-            result += chunk
-    except Exception as e:
-        print(f"An error occurred during LLM processing: {e}")
-    finally:
-        # Stop the progress indicator after response is complete or an error occurs
-        indicator.stop()
+    # Initialize and start the progress indicator
+    with ProgressIndicator() as _:
+        # Process the request using the LLM and get the updated file content
+
+        try:
+            chunk_iterator = operations.process_request(model_nickname, messages, mode="meld")
+            for chunk in chunk_iterator:
+                result += chunk
+        except Exception as e:
+            print(f"An error occurred during LLM processing: {e}")
 
     if not result:
         print("No response received from the LLM.")

@@ -135,15 +135,10 @@ class EggChat:
                 answer = ""
 
                 # Initialize and start the progress indicator
-                indicator = ProgressIndicator()
-                indicator.start()
-
-                chunk_iterator = operations.process_request(self.config.model, combined_messages, "chat")
-                for chunk in chunk_iterator:
-                    answer += chunk
-
-                # Stop the progress indicator after response is complete
-                indicator.stop()
+                with ProgressIndicator() as _:
+                    chunk_iterator = operations.process_request(self.config.model, combined_messages, "chat")
+                    for chunk in chunk_iterator:
+                        answer += chunk
 
                 # print assistant response heading + timestamp
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
