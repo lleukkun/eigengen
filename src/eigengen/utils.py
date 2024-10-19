@@ -3,10 +3,9 @@ import re
 import tempfile
 import subprocess
 import os
+import io  # Add this import for StringIO
+import pygments.formatters  # Ensure this import is present
 
-from prompt_toolkit.formatted_text import PygmentsTokens
-from prompt_toolkit.shortcuts import print_formatted_text
-from prompt_toolkit.styles.pygments import style_from_pygments_cls
 import pygments
 from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.lexers.special import TextLexer
@@ -150,24 +149,34 @@ def get_editor_command(config: EggConfig) -> str:
     else:
         return "nano"
 
-
-def display_response_with_syntax_highlighting(color_scheme: str, response: str) -> None:
+def get_formatted_response_with_syntax_highlighting(color_scheme: str, response: str) -> str:
     """
-    Displays the response with syntax-highlighted code blocks,
-    utilizing the extract_code_blocks function from utils.py to parse code blocks.
+    Returns the response with syntax-highlighted code blocks as a formatted string,
+    utilizing the extract_code_blocks function to parse code blocks.
     """
+    output = io.StringIO()
     last_end = 0
 
     # Extract code blocks along with their positions and fences
     code_blocks = extract_code_blocks(response)
 
+    # Get the Pygments style based on the color scheme
+    try:
+        pygments_style = get_style_by_name(color_scheme)
+    except Exception:
+        print(f"Unknown color scheme '{color_scheme}'. Falling back to 'github-dark'.")
+        pygments_style = get_style_by_name("github-dark")
+
+    # Create a formatter with the specified style
+    formatter = pygments.formatters.TerminalFormatter(style=pygments_style)
+
     for fence, actual_lang, actual_path, code, start, end in code_blocks:
-        # Print text before the code block
-        print(response[last_end:start], end='')
+        # Append text before the code block
+        output.write(response[last_end:start])
 
         # Reconstruct the opening fence with optional language and path
         lang_path = ';'.join(filter(None, [actual_lang, actual_path]))
-        print(f"{fence}{lang_path}")
+        output.write(f"{fence}{lang_path}\n")
 
         # Determine the lexer to use for syntax highlighting
         if actual_lang:
@@ -181,22 +190,28 @@ def display_response_with_syntax_highlighting(color_scheme: str, response: str) 
             except Exception:
                 lexer = TextLexer()
 
-        # Syntax-highlight the code content
-        tokens = list(pygments.lex(code, lexer=lexer))
-        formatted_code = PygmentsTokens(tokens)
+        # Syntax-highlight the code content, output as ANSI text
+        formatted_code = pygments.highlight(code, lexer, formatter)
 
-        try:
-            style = style_from_pygments_cls(get_style_by_name(color_scheme))
-        except Exception:
-            print(f"Unknown color scheme '{color_scheme}'. Falling back to 'github-dark'.")
-            style = style_from_pygments_cls(get_style_by_name("github-dark"))
-        print_formatted_text(formatted_code, end='',
-                             style=style)
+        output.write(formatted_code)
 
-        # Print the closing fence
-        print(f"\n{fence}")
+        # Append the closing fence
+        output.write(f"\n{fence}\n")
 
         last_end = end
 
-    # Print any remaining text after the last code block
-    print(response[last_end:], end='')
+    # Append any remaining text after the last code block
+    output.write(response[last_end:])
+
+    return output.getvalue()
+
+def pipe_output_via_pager(output_str: str) -> None:
+    """
+    Pipes the given string to a pager like 'less', retaining colors.
+    """
+    pager_command = os.environ.get('PAGER', 'less -R -E -X')
+    with subprocess.Popen(pager_command, shell=True, stdin=subprocess.PIPE) as pager:
+        if pager.stdin is not None:
+            pager.stdin.write(output_str.encode('utf-8'))
+            pager.stdin.close()
+        pager.wait()

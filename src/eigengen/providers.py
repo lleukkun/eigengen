@@ -24,6 +24,7 @@ class ModelConfig:
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
+    "llama3.2:1b": ModelConfig("ollama", "llama3.2:1b", "llama3.2:1b", 8192, 0.7),
     "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.1-70b-versatile", 7000, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 8000, 0.7),

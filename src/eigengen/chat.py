@@ -2,6 +2,7 @@ import os
 import sys
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+import subprocess  # Add this import for piping output
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
@@ -143,10 +144,14 @@ class EggChat:
                 # print assistant response heading + timestamp
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
                 print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
-
-                utils.display_response_with_syntax_highlighting(self.config.color_scheme, answer)
-                print("")  # empty line to create a bit of separation
                 
+                # Get the formatted response
+                formatted_response = utils.get_formatted_response_with_syntax_highlighting(self.config.color_scheme, answer)
+                
+                # Pipe the formatted response via pager
+                utils.pipe_output_via_pager(formatted_response)
+                print("")  # empty line to create a bit of separation
+
                 self.messages.append({"role": "assistant", "content": answer})
 
             except KeyboardInterrupt:

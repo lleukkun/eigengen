@@ -1,5 +1,6 @@
 import difflib
 import subprocess
+import os  # Added import for os
 
 from eigengen import utils, operations
 from eigengen.progress import ProgressIndicator  # Added import
@@ -90,8 +91,9 @@ def apply_meld(model_nickname: str, filepath: str, original_content: str, change
             lineterm=""
         )
     ) + "\n"  # add final newline
-    # Print the diff output
-    print(diff_output)
+
+    # Pipe the diff output via pager
+    utils.pipe_output_via_pager(diff_output)
 
     # Ask the user if they want to apply the changes
     apply_changes = input("Do you want to apply these changes? (y/n): ").strip().lower()
