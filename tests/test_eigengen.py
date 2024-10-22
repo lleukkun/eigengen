@@ -94,13 +94,17 @@ def test_groq_hello_world(capsys, monkeypatch):
 
 
 def test_mock_model(capsys, monkeypatch, mock_model_config):
-    from tests.fixtures.mock_provider import MockProvider
+    from tests.fixtures.mock_provider import create_mock_model_pair
 
-    # Patch the create_provider function to return our MockProvider
-    def mock_create_provider(model: str):
-        return MockProvider()
+    custom_responses = {
+        "Hello, world": "Hello! I'm a custom mock provider.",
+        "What's the weather like?": "It's always sunny in the world of mock providers!",
+    }
 
-    monkeypatch.setattr('eigengen.providers.create_provider', mock_create_provider)
+    def patch_create_model_pair(name: str):
+        return create_mock_model_pair(custom_responses)
+
+    monkeypatch.setattr('eigengen.providers.create_model_pair', patch_create_model_pair)
 
     # Simulate command-line arguments
     monkeypatch.setattr(sys, 'argv', [
@@ -116,5 +120,5 @@ def test_mock_model(capsys, monkeypatch, mock_model_config):
     captured = capsys.readouterr()
 
     # Check if the output matches the expected response from MockProvider
-    assert "Hello! I'm a mock provider." in captured.out
+    assert "Hello! I'm a custom mock provider." in captured.out
 
