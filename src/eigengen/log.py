@@ -4,7 +4,7 @@ import os
 import json
 import sys
 
-def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, final_answer: str) -> None:
+def log_request_response(model: str, messages: List[Dict[str, str]], final_answer: str) -> None:
     """
     Logs the request and response information to a JSON lines file for later analysis.
 
@@ -27,8 +27,7 @@ def log_request_response(model: str, messages: List[Dict[str, str]], mode: str, 
         "current_dir": os.getcwd(),
         "request": {
             "model": model,
-            "messages": messages,
-            "mode": mode
+            "messages": messages
         },
         "response": {
             "final_answer": final_answer

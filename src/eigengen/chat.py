@@ -14,7 +14,7 @@ from pygments.token import Token
 
 import pygments.style
 
-from eigengen import operations, utils, keybindings, meld
+from eigengen import operations, utils, keybindings, meld, providers, prompts
 from eigengen.progress import ProgressIndicator
 from eigengen.config import EggConfig
 from eigengen.providers import MODEL_CONFIGS
@@ -33,14 +33,16 @@ CHAT_HELP = (
     "Available commands:\n\n"
     "/help                 Display this help message.\n"
     "/attach <path>        Attach a file to the context for reference.\n"
-    "/quote <path>         Read and quote the contents of a file into the buffer.\n"
     "/clear                Clear all messages from the current context while retaining attached files.\n"
-    "/meld [<path1>, ...]  Merge changes from the latest assistant message into the specified file paths. "
-    "If no paths are provided, changes will be applied to all files referenced in the latest assistant message.\n"
-    "/reset                Clear all messages and remove all attached files from the context.\n"
+    "/exit                 Exit the chat session.\n"
+    "/meld [<path1>, ...]  Merge changes from the latest assistant message into the specified file paths.\n"
+    "                      If no paths are provided, changes will be applied\n"
+    "                      to all files referenced in the latest assistant message.\n"
+    "/mode                 Mode of the system: general, architect, programmer (default)\n"
     "/model [<model>]      Display current model or switch to a specified model.\n"
-    "/exit                 Exit the chat session.\n\n"
-    "Keyboard Shortcuts:\n"
+    "/quote <path>         Read and quote the contents of a file into the buffer.\n"
+    "/reset                Clear all messages and remove all attached files from the context.\n"
+    "\nKeyboard Shortcuts:\n"
     "Ctrl + J              Submit your message.\n"
     "Ctrl + X, E           Open the prompt in your default editor ($EDITOR).\n"
     "Ctrl + X, Y           Copy the entire conversation to the clipboard.\n"
@@ -54,6 +56,8 @@ class EggChat:
                  git_files: Optional[List[str]],
                  user_files: Optional[List[str]]):
         self.config = config  # Store the passed config
+        self.model_pair = providers.create_model_pair(config.model)
+        self.mode = config.args.chat_mode
         self.quoting_state = {
             "current_index": -1,
             "code_blocks": None,
@@ -137,7 +141,7 @@ class EggChat:
 
                 # Initialize and start the progress indicator
                 with ProgressIndicator() as _:
-                    chunk_iterator = operations.process_request(self.config.model, combined_messages, "chat")
+                    chunk_iterator = operations.process_request(self.model_pair.large, combined_messages, prompts.PROMPTS[self.mode])
                     for chunk in chunk_iterator:
                         answer += chunk
 
@@ -177,6 +181,7 @@ class EggChat:
             '/reset': self.handle_reset,
             '/meld': self.handle_meld,
             '/model': self.handle_model,
+            '/mode': self.handle_mode,
             '/exit': self.handle_exit
         }.get(command, _unknown_command)
 
@@ -241,7 +246,7 @@ class EggChat:
             paths = set(paths_input.split())
 
         for filepath in paths:
-            meld.meld_changes(self.config.model, filepath, last_assistant_message)
+            meld.meld_changes(self.model_pair.small, filepath, last_assistant_message)
 
         # Refresh file contents in the chat context
         self.refresh_file_context_messages()
@@ -271,6 +276,20 @@ class EggChat:
                 print(f"Unsupported model: {new_model}\n")
                 print_supported_models()
             return True
+
+    def handle_mode(self, *args) -> bool:
+        """Handle the /mode command."""
+        if not args:
+            print(f"Current mode: {self.mode}")
+        else:
+            new_mode = args[0].strip()
+            if new_mode in ["general", "architect", "programmer"]:
+                self.mode = new_mode
+                print(f"Mode switched to: {new_mode}")
+            else:
+                print(f"Unsupported mode: {new_mode}")
+                print("Supported modes are: general, architect, programmer")
+        return True
 
     def handle_exit(self) -> bool:
         """Handle the /exit command."""

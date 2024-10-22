@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import dataclasses
 import requests
 import json
 import time
@@ -14,6 +15,7 @@ from mistralai import Mistral
 
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+
 class ModelConfig:
     def __init__(self, provider: str, model: str, mini_model: str, max_tokens: int, temperature: float):
         self.provider = provider
@@ -24,14 +26,13 @@ class ModelConfig:
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
-    "llama3.2:1b": ModelConfig("ollama", "llama3.2:1b", "llama3.2:1b", 8192, 0.7),
+    "llama3.2:3b": ModelConfig("ollama", "llama3.2:3b", "llama3.2:3b", 8192, 0.7),
     "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.1-70b-versatile", 7000, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 8000, 0.7),
     "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 4000, 0.7),
     "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-flash-002", 8192, 0.7),
     "mistral": ModelConfig("mistral", "mistral-large-latest", "mistral-large-latest", 32768, 0.7)
-
 }
 
 class Provider(ABC):
@@ -42,6 +43,21 @@ class Provider(ABC):
                      max_tokens: int,
                      temperature: float) -> Generator[str, None, None]:
         pass
+
+
+@dataclasses.dataclass
+class Model:
+    provider: Provider
+    model_name: str
+    temperature: float
+    max_tokens: int
+
+
+@dataclasses.dataclass
+class ModelPair:
+    large: Model
+    small: Model
+
 
 class OllamaProvider(Provider):
     def __init__(self):
@@ -258,36 +274,44 @@ def get_api_key(provider: str) -> str:
     return api_key
 
 
-def create_provider(nickname: str) -> Provider:
+def create_model_pair(nickname: str) -> ModelPair:
     if nickname not in MODEL_CONFIGS:
         raise ValueError(f"Invalid model nickname: {nickname}")
 
     config = MODEL_CONFIGS[nickname]
-
+    provider = None
     if config.provider == "ollama":
-        return OllamaProvider()
+        provider = OllamaProvider()
     elif config.provider == "anthropic":
         api_key = get_api_key("anthropic")
         client = anthropic.Anthropic(api_key=api_key)
-        return AnthropicProvider(client)
+        provider =  AnthropicProvider(client)
     elif config.provider == "groq":
         api_key = get_api_key("groq")
         client = groq.Groq(api_key=api_key)
-        return GroqProvider(client)
+        provider = GroqProvider(client)
     elif config.provider == "openai":
         api_key = get_api_key("openai")
         client = openai.OpenAI(api_key=api_key)
-        return OpenAIProvider(client)
+        provider = OpenAIProvider(client)
     elif config.provider == "google":
         api_key = get_api_key("google")
         google_genai.configure(api_key=api_key)
-        return GoogleProvider()
+        provider = GoogleProvider()
     elif config.provider == "mistral":
         api_key = get_api_key("mistral")
         client = Mistral(api_key=api_key)
-        return MistralProvider(client)
+        provider = MistralProvider(client)
     else:
         raise ValueError(f"Invalid provider specified: {config.provider}")
+    return ModelPair(large=Model(provider=provider,
+                                 model_name=config.model,
+                                 temperature=config.temperature,
+                                 max_tokens=config.max_tokens),
+                     small=Model(provider=provider,
+                                 model_name=config.mini_model,
+                                 temperature=config.temperature,
+                                 max_tokens=config.max_tokens))
 
 def get_model_config(nickname: str) -> ModelConfig:
     if nickname not in MODEL_CONFIGS:

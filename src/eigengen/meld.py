@@ -2,11 +2,11 @@ import difflib
 import subprocess
 import os  # Added import for os
 
-from eigengen import utils, operations
+from eigengen import utils, operations, providers, prompts
 from eigengen.progress import ProgressIndicator  # Added import
 
 
-def meld_changes(model_nickname: str, filepath: str, response: str) -> None:
+def meld_changes(model: providers.Model, filepath: str, response: str) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
 
@@ -38,10 +38,10 @@ def meld_changes(model_nickname: str, filepath: str, response: str) -> None:
         # this is perfectly ok, we're expected to create the file
         pass
 
-    apply_meld(model_nickname, filepath, original_content, response)
+    apply_meld(model, filepath, original_content, response)
 
 
-def apply_meld(model_nickname: str, filepath: str, original_content: str, change_content: str) -> None:
+def apply_meld(model: providers.Model, filepath: str, original_content: str, change_content: str) -> None:
     # Prepare the conversation messages to send to the LLM
     messages = [
         # Send the original file content to the LLM
@@ -66,7 +66,7 @@ def apply_meld(model_nickname: str, filepath: str, original_content: str, change
         # Process the request using the LLM and get the updated file content
 
         try:
-            chunk_iterator = operations.process_request(model_nickname, messages, mode="meld")
+            chunk_iterator = operations.process_request(model, messages, prompts.PROMPTS["meld"])
             for chunk in chunk_iterator:
                 result += chunk
         except Exception as e:

@@ -22,43 +22,38 @@ def open_fd(path, flags):
         os.close(fd)  # Ensure fd is closed after the block
 
 
-def process_request(model_nickname: str, messages: List[Dict[str, str]], mode: str = "default") -> Generator[str, None, None]:
+def process_request(model: providers.Model, messages: List[Dict[str, str]], system_message: str) -> Generator[str, None, None]:
     """
     Processes a request by interfacing with the specified model and handling the conversation flow.
     Args:
-        model_nickname (str): The nickname of the model to use.
+        model (providers.Model): The Model instance to use.
         messages (List[Dict[str, str]]): The list of messages in the conversation.
-        mode (str, optional): The mode of operation. Defaults to "default".
+        system_message (str): The system message to use.
     Yields:
         str: Chunks of the final answer as they are generated.
     """
-    provider_instance: providers.Provider = providers.create_provider(model_nickname)
-    model_config = providers.get_model_config(model_nickname)
 
-    use_model = model_config.model if mode != "meld" else model_config.mini_model
 
-    # Select the appropriate system prompt based on the mode
-    system: str = PROMPTS["system"] if mode != "meld" else PROMPTS["meld"]
     steering_messages = []
-    if use_model not in ("o1-preview", "o1-mini"):
+    if model.model_name not in ("o1-preview", "o1-mini"):
         # For models other than 'o1-preview' and 'o1-mini', use a system role message
-        steering_messages = [{"role": "system", "content": system}]
+        steering_messages = [{"role": "system", "content": system_message}]
     else:
         # For 'o1-preview' and 'o1-mini', embed the operating instructions in a user-assistant exchange
         steering_messages = [
-            {"role": "user", "content": f"Your operating instructions are here:\n\n{system}"},
+            {"role": "user", "content": f"Your operating instructions are here:\n\n{system_message}"},
             {"role": "assistant", "content": "Understood. I now have my operating instructions."}
         ]
 
     combined_messages = steering_messages + messages
 
     final_answer: str = ""
-    for chunk in provider_instance.make_request(use_model, combined_messages, model_config.max_tokens, model_config.temperature):
+    for chunk in model.provider.make_request(model.model_name, combined_messages, model.max_tokens, model.temperature):
         final_answer += chunk
         yield chunk
 
     # Log the request and response
-    log.log_request_response(use_model, messages, mode, final_answer)
+    log.log_request_response(model.model_name, messages, final_answer)
 
 
 def default_mode(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
@@ -89,8 +84,9 @@ def default_mode(model: str, git_files: Optional[List[str]], user_files: Optiona
     # Add the user's prompt to the messages
     messages.append({"role": "user", "content": prompt})
 
+    model_pair = providers.create_model_pair(model)
     # Process the request and print the response
-    for chunk in process_request(model, messages, "default"):
+    for chunk in process_request(model_pair.large, messages, PROMPTS["general"]):
         print(chunk, end="", flush=True)
     print("")
 
