@@ -1,8 +1,7 @@
 import os
 import sys
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from datetime import datetime
-import subprocess  # Add this import for piping output
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
@@ -14,7 +13,7 @@ from pygments.token import Token
 
 import pygments.style
 
-from eigengen import operations, utils, keybindings, meld, providers, prompts
+from eigengen import operations, utils, keybindings, meld, providers, prompts, gitfiles
 from eigengen.progress import ProgressIndicator
 from eigengen.config import EggConfig
 from eigengen.providers import MODEL_CONFIGS
@@ -53,7 +52,6 @@ CHAT_HELP = (
 class EggChat:
     def __init__(self,
                  config: EggConfig,
-                 git_files: Optional[List[str]],
                  user_files: Optional[List[str]]):
         self.config = config  # Store the passed config
         self.model_pair = providers.create_model_pair(config.model)
@@ -67,7 +65,7 @@ class EggChat:
         self.attached_files: Dict[str, str] = {}  # attached file content
         self.pre_fill = ""
 
-        relevant_files = operations.get_context_aware_files(git_files, user_files)
+        relevant_files = user_files
 
         if relevant_files:
             for fname in relevant_files:
@@ -129,6 +127,13 @@ class EggChat:
                 # Process the user's input
                 prompt = prompt_input
                 combined_messages = []
+                if self.config.args.git_diff:
+                    git_diff = "\n".join(gitfiles.run_git_command(["git", "diff"]))
+                    combined_messages.extend([
+                        {"role": "user", "content": utils.encode_code_block(git_diff, "git_diff")},
+                        {"role": "assistant", "content": "ok"}
+                    ])
+
                 for fname, content in self.attached_files.items():
                     combined_messages.extend([
                         {"role": "user", "content": content},

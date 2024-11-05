@@ -30,8 +30,8 @@ def parse_arguments() -> argparse.Namespace:
                         help="Choose color scheme")
     parser.add_argument("--files", "-f", nargs="+",
                         help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
-    parser.add_argument("--git-files", "-g", action="store_true",
-                        help="Include files from git ls-files, filtered by .eigengen_ignore")
+    parser.add_argument("--git-diff", "-g", action="store_true",
+                        help="Include git diff output in context")
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
                         help="List the last N prompts (default 5)")
@@ -70,34 +70,20 @@ def handle_modes(config: EggConfig) -> None:
 
     # Initialize file lists
     user_files = config.args.files
-    git_files = None
-
-    if config.args.git_files:
-        # Get filtered git-tracked files
-        git_files = gitfiles.get_filtered_git_files()
-        if config.args.files:
-            # Make user-specified files relative to the git root
-            user_files = set([gitfiles.make_relative_to_git_root(x) for x in config.args.files])
 
     # Combine user files and git files
     combined_files = set()
     if user_files:
         combined_files.update(user_files)
-    if git_files:
-        combined_files.update(git_files)
 
     if config.args.index:
         # Index files, forcing reindexing if specified
         index_files(config.args.git_files, force_reindex=True)
         return
 
-    if config.args.git_files:
-        # Index git files without forcing reindex
-        index_files(config.args.git_files)
-
     if config.args.chat or config.args.prompt is None:
         # Enter chat mode if --chat is specified or no prompt is provided
-        egg_chat = chat.EggChat(config, git_files, list(user_files or []))
+        egg_chat = chat.EggChat(config, list(user_files or []))
         egg_chat.chat_mode(initial_prompt=config.args.prompt)
         return
 
@@ -110,7 +96,7 @@ def handle_modes(config: EggConfig) -> None:
     log.log_prompt(prompt)
 
     # Execute the default mode operation
-    operations.default_mode(config.model, git_files, list(user_files or []), prompt)
+    operations.default_mode(config.model, list(user_files or []), prompt)
 
 def prepare_prompt(config: EggConfig) -> Optional[str]:
     """

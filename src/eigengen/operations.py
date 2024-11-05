@@ -56,7 +56,7 @@ def process_request(model: providers.Model, messages: List[Dict[str, str]], syst
     log.log_request_response(model.model_name, messages, final_answer)
 
 
-def default_mode(model: str, git_files: Optional[List[str]], user_files: Optional[List[str]], prompt: str) -> None:
+def default_mode(model: str, user_files: Optional[List[str]], prompt: str) -> None:
     """
     Handles the default mode of operation, preparing messages and processing the request.
     Args:
@@ -117,17 +117,14 @@ def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = 
     return file_list
 
 
-def get_context_aware_files(git_files: Optional[List[str]], user_files: Optional[List[str]]) -> List[str]:
+def get_context_aware_files(user_files: Optional[List[str]]) -> List[str]:
     """
     Determines the list of files that are relevant based on the current context.
     Args:
-        git_files (Optional[List[str]]): List of git files.
         user_files (Optional[List[str]]): List of user-specified files.
     Returns:
         List[str]: List of relevant files.
     """
-    if not git_files:
-        return user_files or []
 
     # Ensure user_files are always included
     user_files = user_files or []

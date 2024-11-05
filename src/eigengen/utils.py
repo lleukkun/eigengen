@@ -165,7 +165,7 @@ def get_formatted_response_with_syntax_highlighting(color_scheme: str, response:
         pygments_style = get_style_by_name(color_scheme)
     except Exception:
         print(f"Unknown color scheme '{color_scheme}'. Falling back to 'github-dark'.")
-        pygments_style = get_style_by_name("github-dark")
+        pygments_style = get_style_by_name("monokai")
 
     # Create a formatter with the specified style
     formatter = pygments.formatters.TerminalFormatter(style=pygments_style)

@@ -2,7 +2,7 @@ import argparse
 import os
 import json
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any
+from typing import Optional
 
 @dataclass
 class EggConfig:
