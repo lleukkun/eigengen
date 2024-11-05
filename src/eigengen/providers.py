@@ -69,7 +69,7 @@ class OllamaProvider(Provider):
                      messages: List[Dict[str, str]],
                      max_tokens: int,
                      temperature: float,
-                     _) -> Generator[str, None, None]:
+                     _=None) -> Generator[str, None, None]:
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
             "model": model,
@@ -98,7 +98,7 @@ class AnthropicProvider(Provider):
                      messages: List[Dict[str, str]],
                      max_tokens: int,
                      temperature: float,
-                     _) -> Generator[str, None, None]:
+                     _=None) -> Generator[str, None, None]:
 
         if len(messages) < 1:
             return
@@ -170,7 +170,7 @@ class OpenAIProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, prediction: str|None) -> Generator[str, None, None]:
+                     max_tokens: int, temperature: float, prediction: str|None=None) -> Generator[str, None, None]:
         for attempt in range(self.max_retries):
             try:
                 params = { }
@@ -179,6 +179,8 @@ class OpenAIProvider(Provider):
 
                 if not model.startswith("o1"):
                     params["temperature"] = temperature
+                    if prediction:
+                        params["prediction"] = prediction
 
                 response = self.client.chat.completions.create(
                     model=model,
@@ -211,7 +213,7 @@ class GoogleProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, _) -> Generator[str, None, None]:
+                     max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
 
@@ -260,7 +262,7 @@ class MistralProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, _) -> Generator[str, None, None]:
+                     max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.stream(

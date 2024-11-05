@@ -22,7 +22,7 @@ def open_fd(path, flags):
         os.close(fd)  # Ensure fd is closed after the block
 
 
-def process_request(model: providers.Model, messages: List[Dict[str, str]], system_message: str) -> Generator[str, None, None]:
+def process_request(model: providers.Model, messages: List[Dict[str, str]], system_message: str, prediction: str|None=None) -> Generator[str, None, None]:
     """
     Processes a request by interfacing with the specified model and handling the conversation flow.
     Args:
