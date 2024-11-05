@@ -25,10 +25,10 @@ class ModelConfig:
         self.temperature = temperature
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
-    "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20240620", "claude-3-5-sonnet-20240620", 8192, 0.7),
+    "claude": ModelConfig("anthropic", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", 8192, 0.7),
     "llama3.2:3b": ModelConfig("ollama", "llama3.2:3b", "llama3.2:3b", 8192, 0.7),
     "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.1-70b-versatile", 7000, 0.5),
-    "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
+    "gpt4": ModelConfig("openai", "gpt-4o", "gpt-4o-mini", 128000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 8000, 0.7),
     "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 4000, 0.7),
     "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-flash-002", 8192, 0.7),
@@ -41,7 +41,8 @@ class Provider(ABC):
                      model: str,
                      messages: List[Dict[str, str]],
                      max_tokens: int,
-                     temperature: float) -> Generator[str, None, None]:
+                     temperature: float,
+                     prediction: str|None) -> Generator[str, None, None]:
         pass
 
 
@@ -63,8 +64,12 @@ class OllamaProvider(Provider):
     def __init__(self):
         super().__init__()
 
-    def make_request(self, model, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float) -> Generator[str, None, None]:
+    def make_request(self,
+                     model: str,
+                     messages: List[Dict[str, str]],
+                     max_tokens: int,
+                     temperature: float,
+                     _) -> Generator[str, None, None]:
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
             "model": model,
@@ -88,14 +93,20 @@ class AnthropicProvider(Provider):
         super().__init__()
         self.client: anthropic.Anthropic = client
 
-    def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+    def make_request(self,
+                     model: str,
+                     messages: List[Dict[str, str]],
+                     max_tokens: int,
+                     temperature: float,
+                     _) -> Generator[str, None, None]:
 
         if len(messages) < 1:
             return
 
         system_message = messages[0]["content"]
         messages = messages[1:]
+        max_retries = 5
+        base_delay = 1
 
         for attempt in range(max_retries):
             try:
@@ -121,10 +132,13 @@ class GroqProvider(Provider):
     def __init__(self, client: groq.Groq):
         super().__init__()
         self.client: groq.Groq = client
+        self.max_retries = 5
+        self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
-        for attempt in range(max_retries):
+                     max_tokens: int, temperature: float, _) -> Generator[str, None, None]:
+
+        for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.completions.create(
                     messages=cast(List, messages),
@@ -140,22 +154,24 @@ class GroqProvider(Provider):
                         yield content
                 return
             except groq.RateLimitError as e:
-                if attempt == max_retries - 1:
+                if attempt == self.max_retries - 1:
                     raise e
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
                 print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
-        raise IOError(f"Unable to complete API call in {max_retries} retries")
+        raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
 
 class OpenAIProvider(Provider):
     def __init__(self, client: openai.OpenAI):
         super().__init__()
         self.client: openai.OpenAI = client
+        self.max_retries = 5
+        self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
-        for attempt in range(max_retries):
+                     max_tokens: int, temperature: float, prediction: str|None) -> Generator[str, None, None]:
+        for attempt in range(self.max_retries):
             try:
                 params = { }
 
@@ -180,26 +196,28 @@ class OpenAIProvider(Provider):
                     yield content or ""
                 return
             except openai.RateLimitError as e:
-                if attempt == max_retries - 1:
+                if attempt == self.max_retries - 1:
                     raise e
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
                 print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
-        raise IOError(f"Unable to complete API call in {max_retries} retries")
+        raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
 
 class GoogleProvider(Provider):
     def __init__(self):
         super().__init__()
+        self.max_retries = 5
+        self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+                     max_tokens: int, temperature: float, _) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
 
         system_message = messages[0]["content"]
 
-        for attempt in range(max_retries):
+        for attempt in range(self.max_retries):
             try:
                 google_model = google_genai.GenerativeModel(model, system_instruction=system_message)
                 chat = google_model.start_chat(
@@ -225,12 +243,12 @@ class GoogleProvider(Provider):
                         yield chunk.text
                 return
             except Exception as e:
-                if attempt == max_retries - 1:
+                if attempt == self.max_retries - 1:
                     raise e
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
                 print(f"Error occurred. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
-        raise IOError(f"Unable to complete API call in {max_retries} retries")
+        raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
 
 
@@ -238,10 +256,12 @@ class MistralProvider(Provider):
     def __init__(self, client: Mistral):
         super().__init__()
         self.client: Mistral = client
+        self.max_retries = 5
+        self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
-        for attempt in range(max_retries):
+                     max_tokens: int, temperature: float, _) -> Generator[str, None, None]:
+        for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.stream(
                     model=model,
@@ -258,12 +278,12 @@ class MistralProvider(Provider):
                         yield content
                 return
             except Exception as e:
-                if attempt == max_retries - 1:
+                if attempt == self.max_retries - 1:
                     raise e
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
                 print(f"Error occurred. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
-        raise IOError(f"Unable to complete API call in {max_retries} retries")
+        raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
 
 def get_api_key(provider: str) -> str:
