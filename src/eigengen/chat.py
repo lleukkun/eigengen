@@ -153,10 +153,10 @@ class EggChat:
                 # print assistant response heading + timestamp
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
                 print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
-                
+
                 # Get the formatted response
                 formatted_response = utils.get_formatted_response_with_syntax_highlighting(self.config.color_scheme, answer)
-                
+
                 # Pipe the formatted response via pager
                 utils.pipe_output_via_pager(formatted_response)
                 print("")  # empty line to create a bit of separation

@@ -44,8 +44,8 @@ def parse_arguments() -> argparse.Namespace:
     # Add the --chat (-c) argument to enter chat mode
     parser.add_argument("--chat", "-c", action="store_true",
                         help="Enter chat mode")
-    parser.add_argument("--chat-mode", "-M", default="programmer",
-                        help="Choose operating mode: general, architect, programmer (default)")
+    parser.add_argument("--chat-mode", "-M", default="general", choices=["general", "architect", "programmer"],
+                        help="Choose operating mode")
 
     args = parser.parse_args()
 

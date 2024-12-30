@@ -5,12 +5,13 @@ import json
 import time
 import random
 import os
-from typing import Any, Dict, Iterable, List, Generator, cast
+from typing import Any, Dict, Iterable, List, Generator, Union, cast
 
 import anthropic
 import groq
 import openai
-import google.generativeai as google_genai
+from google import genai
+from google.genai import types
 from mistralai import Mistral
 
 OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -25,13 +26,13 @@ class ModelConfig:
         self.temperature = temperature
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
-    "claude": ModelConfig("anthropic", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", 8192, 0.7),
+    "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20241022", 8192, 0.7),
     "llama3.2:3b": ModelConfig("ollama", "llama3.2:3b", "llama3.2:3b", 8192, 0.7),
-    "groq": ModelConfig("groq", "llama-3.2-90b-text-preview", "llama-3.1-70b-versatile", 7000, 0.5),
-    "gpt4": ModelConfig("openai", "gpt-4o", "gpt-4o-mini", 128000, 0.7),
-    "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 8000, 0.7),
-    "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 4000, 0.7),
-    "gemini": ModelConfig("google", "gemini-1.5-pro-002", "gemini-1.5-flash-002", 8192, 0.7),
+    "groq": ModelConfig("groq", "llama-3.3-70b-versatile", "llama-3.3-70b-versatile", 32768, 0.5),
+    "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
+    "o1": ModelConfig("openai", "o1", "gpt-4o-mini", 100000, 0.7),
+    "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 65536, 0.7),
+    "gemini": ModelConfig("google", "gemini-2.0-flash-thinking-exp-1219", "gemini-2.0-flash-exp", 8192, 0.7),
     "mistral": ModelConfig("mistral", "mistral-large-latest", "mistral-large-latest", 32768, 0.7)
 }
 
@@ -170,12 +171,20 @@ class OpenAIProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, prediction: str|None=None) -> Generator[str, None, None]:
-        for attempt in range(self.max_retries):
+                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+
+        # map to openai specifics
+        openai_messages: List[openai.types.chat.ChatCompletionMessageParam] = []
+
+        for message in messages:
+            role = "developer" if message["role"] == "system" else "user"
+            openai_messages.append({ "role": role, "content": message["content"] })
+
+        for attempt in range(max_retries):
             try:
                 params = { }
 
-                use_stream = True if model not in ["o1-preview", "o1-mini"] else False
+                use_stream = True if model not in ["o1", "o1-mini"] else False
 
                 if not model.startswith("o1"):
                     params["temperature"] = temperature
@@ -207,10 +216,9 @@ class OpenAIProvider(Provider):
 
 
 class GoogleProvider(Provider):
-    def __init__(self):
+    def __init__(self, client: genai.Client):
         super().__init__()
-        self.max_retries = 5
-        self.base_delay = 1
+        self.client = client
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
@@ -221,28 +229,32 @@ class GoogleProvider(Provider):
 
         for attempt in range(self.max_retries):
             try:
-                google_model = google_genai.GenerativeModel(model, system_instruction=system_message)
-                chat = google_model.start_chat(
-                    history=cast(List, [
-                        {"role": "user", "parts": message["content"]} if message["role"] == "user"
-                        else {"role": "model", "parts": message["content"]}
-                        for message in messages[1:-1]
-                    ])
+                chat = self.client.chats.create(
+                    model=model,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_message,
+                        candidate_count=1,
+                        max_output_tokens=max_tokens,
+                        temperature=temperature,
+                    ),
+                    history=cast(
+                        List[types.Content],
+                        [
+                            {"role": "user", "parts": message["content"]}
+                            if message["role"] == "user"
+                            else {"role": "model", "parts": message["content"]}
+                            for message in messages[1:-1]
+                        ],
+                    ),
                 )
                 response = chat.send_message(
                     messages[-1]["content"],
-                    generation_config=google_genai.types.GenerationConfig(
-                        candidate_count=1,
-                        stop_sequences=[],
-                        max_output_tokens=max_tokens,
-                        temperature=temperature
-                    ),
-                    stream=True
                 )
-
-                for chunk in response:
-                    if chunk.text is not None:
-                        yield chunk.text
+                if response.candidates:
+                    print(response.candidates[0].content.parts[0].text)
+                    yield response.candidates[0].content.parts[0].text or ""
+                else:
+                    yield ""
                 return
             except Exception as e:
                 if attempt == self.max_retries - 1:
@@ -318,8 +330,8 @@ def create_model_pair(nickname: str) -> ModelPair:
         provider = OpenAIProvider(client)
     elif config.provider == "google":
         api_key = get_api_key("google")
-        google_genai.configure(api_key=api_key)
-        provider = GoogleProvider()
+        client = genai.Client(api_key=api_key)
+        provider = GoogleProvider(client)
     elif config.provider == "mistral":
         api_key = get_api_key("mistral")
         client = Mistral(api_key=api_key)
