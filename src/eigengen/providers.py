@@ -219,6 +219,8 @@ class GoogleProvider(Provider):
     def __init__(self, client: genai.Client):
         super().__init__()
         self.client = client
+        self.max_retries = 5
+        self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
                      max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
@@ -251,7 +253,6 @@ class GoogleProvider(Provider):
                     messages[-1]["content"],
                 )
                 if response.candidates:
-                    print(response.candidates[0].content.parts[0].text)
                     yield response.candidates[0].content.parts[0].text or ""
                 else:
                     yield ""
