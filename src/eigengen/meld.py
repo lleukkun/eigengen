@@ -1,6 +1,6 @@
 import difflib
 import subprocess
-import os  # Added import for os
+import re
 
 from eigengen import utils, operations, providers, prompts
 from eigengen.progress import ProgressIndicator  # Added import
@@ -42,6 +42,8 @@ def meld_changes(model: providers.Model, filepath: str, response: str) -> None:
 
 
 def apply_meld(model: providers.Model, filepath: str, original_content: str, change_content: str) -> None:
+    # remove <think></think> tags and the intervening text from the change_content
+    change_content = re.sub(r"<think>.*?</think>", "", change_content, flags=re.DOTALL)
     # Prepare the conversation messages to send to the LLM
     messages = [
         # Send the original file content to the LLM
@@ -78,7 +80,10 @@ def apply_meld(model: providers.Model, filepath: str, original_content: str, cha
     if not result:
         print("No response received from the LLM.")
         return
-
+    # remove <think></think> tags and the intervening text
+    result = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL)
+    # remove whitespace at the beginning and end of the response block
+    result = result.strip()
     processed_file_lines = "".join(result).splitlines()
     if processed_file_lines[0].startswith("```"):
         # we expect this, but some models may fail to wrap the output with fences

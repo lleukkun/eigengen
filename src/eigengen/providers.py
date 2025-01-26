@@ -5,7 +5,7 @@ import json
 import time
 import random
 import os
-from typing import Any, Dict, Iterable, List, Generator, Union, cast
+from typing import Any, Dict, Iterable, List, Generator, Optional, cast
 
 import anthropic
 import groq
@@ -27,7 +27,8 @@ class ModelConfig:
 
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20241022", 8192, 0.7),
-    "llama3.2:3b": ModelConfig("ollama", "llama3.2:3b", "llama3.2:3b", 8192, 0.7),
+    "deepseek-r1:32b": ModelConfig("ollama", "deepseek-r1:32b", "deepseek-r1:32b", 8192, 0.7),
+    "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", "deepseek-reasoner", 8192, 0.7),
     "groq": ModelConfig("groq", "llama-3.3-70b-versatile", "llama-3.3-70b-versatile", 32768, 0.5),
     "gpt4": ModelConfig("openai", "gpt-4o-2024-08-06", "gpt-4o-mini", 128000, 0.7),
     "o1": ModelConfig("openai", "o1", "gpt-4o-mini", 100000, 0.7),
@@ -171,13 +172,17 @@ class OpenAIProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5, base_delay: int = 1) -> Generator[str, None, None]:
+                     max_tokens: int, temperature: float, max_retries: int = 5,
+                     base_delay: int = 1, prediction: Optional[str] = None) -> Generator[str, None, None]:
 
         # map to openai specifics
         openai_messages: List[openai.types.chat.ChatCompletionMessageParam] = []
 
         for message in messages:
-            role = "developer" if message["role"] == "system" else "user"
+            role = message["role"]
+            if model not in ["deepseek-reasoner"]:
+                role = "system" if message["role"] == "system" else "user"
+
             openai_messages.append({ "role": role, "content": message["content"] })
 
         for attempt in range(max_retries):
@@ -337,6 +342,10 @@ def create_model_pair(nickname: str) -> ModelPair:
         api_key = get_api_key("mistral")
         client = Mistral(api_key=api_key)
         provider = MistralProvider(client)
+    elif config.provider == "deepseek":
+        api_key = get_api_key("deepseek")
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        provider = OpenAIProvider(client)
     else:
         raise ValueError(f"Invalid provider specified: {config.provider}")
     return ModelPair(large=Model(provider=provider,
