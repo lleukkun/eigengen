@@ -125,28 +125,23 @@ class EggChat:
                     continue
 
                 # Process the user's input
-                prompt = prompt_input
-                combined_messages = []
+                combined_message = prompt_input
                 if self.config.args.git_diff:
                     git_diff = "\n".join(gitfiles.run_git_command(["git", "diff"]))
-                    combined_messages.extend([
-                        {"role": "user", "content": utils.encode_code_block(git_diff, "git_diff")},
-                        {"role": "assistant", "content": "ok"}
-                    ])
+                    combined_message += utils.encode_code_block(git_diff, "git_diff")
 
                 for fname, content in self.attached_files.items():
-                    combined_messages.extend([
-                        {"role": "user", "content": content},
-                        {"role": "assistant", "content": "ok"}
-                    ])
-                self.messages.append({"role": "user", "content": prompt})
-                combined_messages.extend(self.messages)
+                    combined_message += utils.encode_code_block(content, fname)
+
+                combined_messages = self.messages + [{"role": "user", "content": combined_message}]
 
                 answer = ""
 
                 # Initialize and start the progress indicator
                 with ProgressIndicator() as _:
-                    chunk_iterator = operations.process_request(self.model_pair.large, combined_messages, prompts.PROMPTS[self.mode])
+                    chunk_iterator = operations.process_request(self.model_pair.large,
+                                                                combined_messages,
+                                                                prompts.get_prompt(self.mode))
                     for chunk in chunk_iterator:
                         answer += chunk
 

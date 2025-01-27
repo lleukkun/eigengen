@@ -68,10 +68,10 @@ def default_mode(model: str, user_files: Optional[List[str]], prompt: str) -> No
     messages: List[Dict[str, str]] = []
 
     # Get the relevant files based on context
-    relevant_files = get_context_aware_files(git_files, user_files)
+    relevant_files = get_context_aware_files(user_files)
 
     if relevant_files:
-        project_root = gitfiles.find_git_root() if git_files else os.getcwd()
+        project_root = os.getcwd()
         with open_fd(project_root, os.O_RDONLY) as dir_fd:
             for fname in relevant_files:
                 with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
@@ -130,14 +130,10 @@ def get_context_aware_files(user_files: Optional[List[str]]) -> List[str]:
     user_files = user_files or []
     relevant_files = set(user_files)
 
-    # Get locally modified git files if in git mode
-    local_modifications = gitfiles.get_locally_modified_git_files() if git_files else []
-    relevant_files.update(local_modifications)
-
     # If there are no user_files and no local modifications, add default context
-    if not user_files and not local_modifications:
+    if not user_files:
         # Get default context (top-3 files with highest total_refcount)
-        default_context = indexing.get_default_context(git_files)
+        default_context = indexing.get_default_context([])
         relevant_files.update(default_context)
 
     # Read the cache state

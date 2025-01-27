@@ -1,25 +1,14 @@
 import os
 
-
-class PromptProvider:
-    def __init__(self):
-        # we look for prompts from:
-        #  ~/.eigengen/general.txt
-        #  ~/.eigengen/architect.txt
-        #  ~/.eigengen/programmer.txt
-        #  ~/.eigengen/meld.txt
-        # if the file is not found, we use the default prompt
-        prompts = {}
-        for role in ["general", "architect", "programmer", "meld"]:
-            try:
-                with open(os.path.expanduser(f"~/.eigengen/{role}.txt")) as f:
-                    prompts[role] = f.read()
-            except FileNotFoundError:
-                prompts[role] = PROMPTS[role]
-        self.prompts = prompts
-
-    def get_prompt(self, role):
-        return self.prompts[role]
+def get_prompt(role: str) -> str:
+    # we look for prompts from:
+    #  ~/.eigengen/{role}.txt
+    # if the file is not found, we use the default prompt
+    try:
+        with open(os.path.expanduser(f"~/.eigengen/{role}.txt")) as f:
+            return(f.read())
+    except FileNotFoundError:
+        return PROMPTS[role]
 
 
 PROMPTS = {

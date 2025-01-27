@@ -70,7 +70,7 @@ def apply_meld(model: providers.Model, filepath: str, original_content: str, cha
         try:
             chunk_iterator = operations.process_request(model,
                                                         messages,
-                                                        prompts.PROMPTS["meld"],
+                                                        prompts.get_prompt("meld"),
                                                         utils.encode_code_block(original_content, filepath))
             for chunk in chunk_iterator:
                 result += chunk
