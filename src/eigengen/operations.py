@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Generator
 import os
 import contextlib
 
-from eigengen import log, providers, utils, gitfiles, indexing
+from eigengen import log, providers, utils
 from eigengen.prompts import PROMPTS as PROMPTS
 
 @contextlib.contextmanager
@@ -61,28 +61,22 @@ def default_mode(model: str, user_files: Optional[List[str]], prompt: str) -> No
     Handles the default mode of operation, preparing messages and processing the request.
     Args:
         model (str): The model nickname to use.
-        git_files (Optional[List[str]]): List of git files for context.
         user_files (Optional[List[str]]): List of user-specified files for context.
         prompt (str): The user's prompt.
     """
     messages: List[Dict[str, str]] = []
+    msg_content = prompt
 
-    # Get the relevant files based on context
-    relevant_files = get_context_aware_files(user_files)
-
-    if relevant_files:
+    if user_files:
         project_root = os.getcwd()
         with open_fd(project_root, os.O_RDONLY) as dir_fd:
-            for fname in relevant_files:
+            for fname in user_files:
                 with os.fdopen(os.open(fname, os.O_RDONLY, dir_fd=dir_fd), 'r') as f:
                     original_content = f.read()
                 # Add the content of the file to the messages
-                messages += [
-                    {"role": "user", "content": utils.encode_code_block(original_content, fname)},
-                    {"role": "assistant", "content": "ok"}
-                ]
+                msg_content += "\n" + utils.encode_code_block(original_content, fname)
     # Add the user's prompt to the messages
-    messages.append({"role": "user", "content": prompt})
+    messages.append({"role": "user", "content": msg_content})
 
     model_pair = providers.create_model_pair(model)
     # Process the request and print the response
@@ -91,7 +85,7 @@ def default_mode(model: str, user_files: Optional[List[str]], prompt: str) -> No
     print("")
 
 
-def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = None) -> List[str]:
+def get_file_list(user_files: Optional[List[str]] = None) -> List[str]:
     """
     Compiles a list of files to be used based on git files and user-specified files.
     Args:
@@ -103,58 +97,7 @@ def get_file_list(use_git_files: bool = True, user_files: Optional[List[str]] = 
     file_set = set()
 
     if user_files:
-        if use_git_files:
-            # Make user files relative to the git root
-            user_files = [gitfiles.make_relative_to_git_root(f) for f in user_files]
         file_set.update(user_files)
-
-    if use_git_files:
-        # Get the filtered list of git files
-        git_files = set(gitfiles.get_filtered_git_files())
-        file_set.update(git_files)
 
     file_list = list(file_set) if file_set else []
     return file_list
-
-
-def get_context_aware_files(user_files: Optional[List[str]]) -> List[str]:
-    """
-    Determines the list of files that are relevant based on the current context.
-    Args:
-        user_files (Optional[List[str]]): List of user-specified files.
-    Returns:
-        List[str]: List of relevant files.
-    """
-
-    # Ensure user_files are always included
-    user_files = user_files or []
-    relevant_files = set(user_files)
-
-    # If there are no user_files and no local modifications, add default context
-    if not user_files:
-        # Get default context (top-3 files with highest total_refcount)
-        default_context = indexing.get_default_context([])
-        relevant_files.update(default_context)
-
-    # Read the cache state
-    cache_state = indexing.read_cache_state()
-
-    # Find files that use symbols defined in the relevant files
-    files_using_relevant_symbols = {}
-    for file in relevant_files:
-        if file in cache_state.entries:
-            entry = cache_state.entries[file]
-            for symbol in entry.provides:
-                for using_file, using_entry in cache_state.entries.items():
-                    if symbol in using_entry.uses and using_file not in relevant_files:
-                        files_using_relevant_symbols[using_file] = files_using_relevant_symbols.get(using_file, 0) + 1
-
-    # Sort files by relevance (number of used symbols) and take the top 5
-    sorted_files = sorted(files_using_relevant_symbols.items(), key=lambda x: x[1], reverse=True)
-    top_5_relevant_files = [file for file, _ in sorted_files[:5]]
-
-    # Add the top 5 most relevant files to the relevant_files set
-    relevant_files.update(top_5_relevant_files)
-
-    print(f"relevant files: {relevant_files}")
-    return list(relevant_files)

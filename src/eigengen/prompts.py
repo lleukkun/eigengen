@@ -40,8 +40,8 @@ Focus on making changes that are specific, relevant and testable.
 Examples of how you must fence your code blocks:
 ```programming_language;dirpath/filename
 ```
-- If you are modifying a class method, you must make it obvious even if you leave out parts of the implementation.
-  Example for python would look like:
+If you are modifying a class method, you must make it obvious even if you leave out parts of the implementation.
+Example for python would look like:
 ```python;src/hello/myclass.py
 class MyClass:
     # ... existing code unmodified
@@ -59,7 +59,7 @@ file you received. Do not change anything in the suggested changes.
 You must respond with the full file contents. You must encapsulate the
 file contents in a code block with the appropriate language tag and path.
 You must start your answer like this:
-```language;path/to/file
+```programming_language;dirpath/filename
 
 """
 }
