@@ -32,9 +32,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
     parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
                         help="List the last N prompts (default 5)")
-    parser.add_argument("--profile", "-P", action="store_true",
-                        help="Profile cache loading")
-    # Add the --chat (-c) argument to enter chat mode
     parser.add_argument("--chat", "-c", action="store_true",
                         help="Enter chat mode")
     parser.add_argument("--chat-mode", "-M", default="programmer", choices=["general", "architect", "programmer"],
