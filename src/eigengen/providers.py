@@ -29,7 +29,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20241022", 8192, 0.7),
     "deepseek-r1:32b": ModelConfig("ollama", "deepseek-r1:32b", "deepseek-r1:32b", 8192, 0.7),
     "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", "deepseek-chat", 8192, 0.7),
-    "groq": ModelConfig("groq", "llama-3.3-70b-versatile", "llama-3.3-70b-versatile", 32768, 0.5),
+    "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", "deepseek-r1-distill-llama-70b", 32768, 0.5),
     "o1": ModelConfig("openai", "o1", "gpt-4o-mini", 100000, 0.7),
     "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 100000, 0.7),
     "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 65536, 0.7),
@@ -138,7 +138,7 @@ class GroqProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, _) -> Generator[str, None, None]:
+                     max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
 
         for attempt in range(self.max_retries):
             try:
