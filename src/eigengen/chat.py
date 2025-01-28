@@ -120,9 +120,11 @@ class EggChat:
                 if prompt_input.strip() == '':
                     continue
 
-                message_content = prompt_input + "\n" + self.file_content
-                # clear file content after use so we only include it once
-                self.file_content = ""
+                message_content = prompt_input
+                if self.file_content and self.file_content.strip() != "":
+                    message_content += "\n" + self.file_content
+                    # clear file content after use so we only include it once
+                    self.file_content = ""
 
                 # Process the user's input
                 self.messages.append({"role": "user", "content": message_content})

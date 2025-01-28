@@ -179,10 +179,14 @@ class OpenAIProvider(Provider):
 
         for message in messages:
             role = message["role"]
-            if model not in ["deepseek-reasoner"]:
-                role = "system" if message["role"] == "system" else "user"
-
-            openai_messages.append({ "role": role, "content": message["content"] })
+            if role == "system" and model in ["o1-preview", "o1-mini"]:
+                # need to pass the system message as a user message for these models
+                openai_messages.extend([
+                    { "role": "user", "content": message["content"] },
+                    { "role": "assistant", "content": "Acknowledge." }
+                ])
+            else:
+                openai_messages.append({ "role": role, "content": message["content"] })
 
         for attempt in range(max_retries):
             try:
@@ -197,7 +201,7 @@ class OpenAIProvider(Provider):
 
                 response = self.client.chat.completions.create(
                     model=model,
-                    messages=cast(List, messages),
+                    messages=cast(List, openai_messages),
                     stream=use_stream,
                     **params
                 )
@@ -249,7 +253,7 @@ class GoogleProvider(Provider):
                             {"role": "user", "parts": message["content"]}
                             if message["role"] == "user"
                             else {"role": "model", "parts": message["content"]}
-                            for message in messages[1:-1]
+                            for message in messages[:-1]
                         ],
                     ),
                 )

@@ -1,6 +1,7 @@
 from typing import Dict, List
 from itertools import cycle
 from datetime import datetime
+import time
 
 from prompt_toolkit.key_binding import KeyBindings
 
@@ -12,6 +13,9 @@ class ChatKeyBindingsManager:
         self.kb = KeyBindings()
         self.quoting_state = quoting_state
         self.messages = messages
+        self.pasting = False
+        self.last_keypress_time = 0.0
+        self.buffer = ""
 
         self._register_bindings()
 
@@ -21,6 +25,34 @@ class ChatKeyBindingsManager:
 
     def _register_bindings(self):
         # Register custom key bindings for the chat application
+
+        @self.kb.add("<any>")
+        def _(event):
+            """
+            Handle any key event.
+
+            We handle paste detection here to prevent spurious newlines.
+            """
+            current_time = time.time()
+            if self.last_keypress_time:
+                time_diff = (
+                    current_time - self.last_keypress_time
+                ) * 1000  # Convert to milliseconds
+                if time_diff < 10:  # Threshold for paste detection (adjust as needed)
+                    self.pasting = True
+                else:
+                    self.pasting = False
+
+            self.last_keypress_time = current_time
+            data = event.data
+
+            if self.pasting:
+                event.app.current_buffer.insert_text(data)
+            else:
+                if data == "\r":
+                    # Enter key pressed; handle it in the 'Enter' key event
+                    return
+                event.app.current_buffer.insert_text(data)
 
         @self.kb.add("c-x", "up")
         def _(event):

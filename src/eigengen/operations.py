@@ -35,15 +35,10 @@ def process_request(model: providers.Model, messages: List[Dict[str, str]], syst
 
 
     steering_messages = []
-    if model.model_name not in ("o1-preview", "o1-mini"):
-        # For models other than 'o1-preview' and 'o1-mini', use a system role message
-        steering_messages = [{"role": "system", "content": system_message}]
-    else:
-        # For 'o1-preview' and 'o1-mini', embed the operating instructions in a user-assistant exchange
-        steering_messages = [
-            {"role": "user", "content": f"Your operating instructions are here:\n\n{system_message}"},
-            {"role": "assistant", "content": "Understood. I now have my operating instructions."}
-        ]
+    steering_role = "system"
+    steering_messages = [
+        {"role": steering_role, "content": system_message}
+    ]
 
     combined_messages = steering_messages + messages
 
