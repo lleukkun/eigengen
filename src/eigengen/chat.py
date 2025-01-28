@@ -13,7 +13,7 @@ from pygments.token import Token
 
 import pygments.style
 
-from eigengen import operations, utils, keybindings, meld, providers, prompts, gitfiles
+from eigengen import operations, utils, keybindings, meld, providers, prompts
 from eigengen.progress import ProgressIndicator
 from eigengen.config import EggConfig
 from eigengen.providers import MODEL_CONFIGS
@@ -31,16 +31,15 @@ class CustomStyle(pygments.style.Style):
 CHAT_HELP = (
     "Available commands:\n\n"
     "/help                 Display this help message.\n"
-    "/attach <path>        Attach a file to the context for reference.\n"
-    "/clear                Clear all messages from the current context while retaining attached files.\n"
     "/exit                 Exit the chat session.\n"
-    "/meld [<path1>, ...]  Merge changes from the latest assistant message into the specified file paths.\n"
+    "/meld [<path1>, ...]  Merge changes from the latest assistant message into\n"
+    "                      the specified file paths.\n"
     "                      If no paths are provided, changes will be applied\n"
     "                      to all files referenced in the latest assistant message.\n"
     "/mode                 Mode of the system: general, architect, programmer (default)\n"
     "/model [<model>]      Display current model or switch to a specified model.\n"
     "/quote <path>         Read and quote the contents of a file into the buffer.\n"
-    "/reset                Clear all messages and remove all attached files from the context.\n"
+    "/reset                Clear all messages.\n"
     "\nKeyboard Shortcuts:\n"
     "Ctrl + J              Submit your message.\n"
     "Ctrl + X, E           Open the prompt in your default editor ($EDITOR).\n"
@@ -62,17 +61,16 @@ class EggChat:
             "cycle_iterator": None
         }
         self.messages: List[Dict[str, str]] = []
-        self.attached_files: Dict[str, str] = {}  # attached file content
         self.pre_fill = ""
 
         relevant_files = user_files
-
+        self.file_content = ""
         if relevant_files:
             for fname in relevant_files:
                 if os.path.exists(fname):
                     with open(fname, 'r') as f:
                         content = f.read()
-                    self.attached_files[fname] = utils.encode_code_block(content, fname)
+                    self.file_content += "\n" + utils.encode_code_block(content, fname)
 
         self.kbm = keybindings.ChatKeyBindingsManager(self.quoting_state, self.messages)
 
@@ -93,6 +91,7 @@ class EggChat:
         )
 
         self.pre_fill = initial_prompt
+
         while True:
             try:
                 style = Style.from_dict({
@@ -113,9 +112,6 @@ class EggChat:
                 )
                 self.pre_fill = ""  # Reset pre_fill after use
 
-                # Refresh the file context messages before processing user input
-                self.refresh_file_context_messages()
-
                 if prompt_input.startswith("/"):
                     # Input is a command
                     if (self.handle_command(prompt_input)):
@@ -124,23 +120,18 @@ class EggChat:
                 if prompt_input.strip() == '':
                     continue
 
+                message_content = prompt_input + "\n" + self.file_content
+                # clear file content after use so we only include it once
+                self.file_content = ""
+
                 # Process the user's input
-                combined_message = prompt_input
-                if self.config.args.git_diff:
-                    git_diff = "\n".join(gitfiles.run_git_command(["git", "diff"]))
-                    combined_message += utils.encode_code_block(git_diff, "git_diff")
-
-                for fname, content in self.attached_files.items():
-                    combined_message += utils.encode_code_block(content, fname)
-
-                combined_messages = self.messages + [{"role": "user", "content": combined_message}]
-
+                self.messages.append({"role": "user", "content": message_content})
                 answer = ""
 
                 # Initialize and start the progress indicator
                 with ProgressIndicator() as _:
                     chunk_iterator = operations.process_request(self.model_pair.large,
-                                                                combined_messages,
+                                                                self.messages,
                                                                 prompts.get_prompt(self.mode))
                     for chunk in chunk_iterator:
                         answer += chunk
@@ -175,9 +166,7 @@ class EggChat:
 
         handler = {
             '/help': self.handle_help,
-            '/attach': self.handle_attach,
             '/quote': self.handle_quote,
-            '/clear': self.handle_clear,
             '/reset': self.handle_reset,
             '/meld': self.handle_meld,
             '/model': self.handle_model,
@@ -193,17 +182,6 @@ class EggChat:
         print(CHAT_HELP)
         return True
 
-    def handle_attach(self, file_to_load: str) -> bool:
-        """Handle the /attach command."""
-        if os.path.exists(file_to_load):
-            with open(file_to_load, 'r') as f:
-                content = f.read()
-            self.attached_files[file_to_load] = utils.encode_code_block(content, file_to_load)
-            print(f"File '{file_to_load}' loaded into context.\n")
-        else:
-            print(f"File '{file_to_load}' not found.\n")
-        return True
-
     def handle_quote(self, file_to_quote: str) -> bool:
         """Handle the /quote command."""
         if os.path.exists(file_to_quote):
@@ -216,17 +194,10 @@ class EggChat:
             print(f"File '{file_to_quote}' not found.\n")
         return True
 
-    def handle_clear(self) -> bool:
-        """Handle the /clear command."""
-        self.messages = []
-        print("Chat messages cleared, existing file context retained.\n")
-        return True
-
     def handle_reset(self) -> bool:
         """Handle the /reset command."""
         self.messages = []
-        self.attached_files = {}
-        print("Chat messages and file context cleared.\n")
+        print("Chat messages cleared.\n")
         return True
 
     def handle_meld(self, paths_input: Optional[str] = None) -> bool:
@@ -295,18 +266,3 @@ class EggChat:
         """Handle the /exit command."""
         sys.exit(0)
         return True  # This line will not be reached, but added for consistency
-
-
-    def refresh_file_context_messages(self) -> None:
-        """
-        Refreshes all file content messages in the chat context.
-        """
-
-        for filepath in list(self.attached_files.keys()):
-            if os.path.exists(filepath):
-                with open(filepath, 'r') as f:
-                    content = f.read()
-                self.attached_files[filepath] = utils.encode_code_block(content, filepath)
-            else:
-                print(f"File '{filepath}' not found. Removing from context\n")
-                del self.attached_files[filepath]
