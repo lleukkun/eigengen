@@ -250,10 +250,10 @@ class GoogleProvider(Provider):
                     history=cast(
                         List[types.Content],
                         [
-                            {"role": "user", "parts": message["content"]}
+                            {"role": "user", "parts": [{"text": message["content"]}]}
                             if message["role"] == "user"
-                            else {"role": "model", "parts": message["content"]}
-                            for message in messages[:-1]
+                            else {"role": "model", "parts": [{"text": message["content"]}]}
+                            for message in messages[1:-1]
                         ],
                     ),
                 )
