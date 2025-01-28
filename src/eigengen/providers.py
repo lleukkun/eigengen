@@ -28,9 +28,10 @@ class ModelConfig:
 MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20241022", 8192, 0.7),
     "deepseek-r1:32b": ModelConfig("ollama", "deepseek-r1:32b", "deepseek-r1:32b", 8192, 0.7),
-    "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", "deepseek-reasoner", 8192, 0.7),
+    "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", "deepseek-chat", 8192, 0.7),
     "groq": ModelConfig("groq", "llama-3.3-70b-versatile", "llama-3.3-70b-versatile", 32768, 0.5),
     "o1": ModelConfig("openai", "o1", "gpt-4o-mini", 100000, 0.7),
+    "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 100000, 0.7),
     "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 65536, 0.7),
     "gemini": ModelConfig("google", "gemini-2.0-flash-thinking-exp", "gemini-2.0-flash-exp", 8192, 0.7),
     "mistral": ModelConfig("mistral", "mistral-large-latest", "mistral-large-latest", 32768, 0.7)
