@@ -221,8 +221,6 @@ class EggChat:
         for filepath in paths:
             meld.meld_changes(self.model_pair.small, filepath, last_assistant_message)
 
-        # Refresh file contents in the chat context
-        self.refresh_file_context_messages()
         return True
 
     def handle_model(self, *args) -> bool:
