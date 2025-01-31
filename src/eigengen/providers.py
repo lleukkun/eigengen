@@ -31,8 +31,7 @@ MODEL_CONFIGS: Dict[str, ModelConfig] = {
     "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", "deepseek-chat", 8192, 0.7),
     "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", "deepseek-r1-distill-llama-70b", 32768, 0.5),
     "o1": ModelConfig("openai", "o1", "gpt-4o-mini", 100000, 0.7),
-    "o1-preview": ModelConfig("openai", "o1-preview", "gpt-4o-mini", 100000, 0.7),
-    "o1-mini": ModelConfig("openai", "o1-mini", "gpt-4o-mini", 65536, 0.7),
+    "o3-mini": ModelConfig("openai", "o3-mini", "gpt-4o-mini", 100000, 0.7),
     "gemini": ModelConfig("google", "gemini-2.0-flash-thinking-exp", "gemini-2.0-flash-exp", 8192, 0.7),
     "mistral": ModelConfig("mistral", "mistral-large-latest", "mistral-large-latest", 32768, 0.7)
 }
@@ -195,7 +194,7 @@ class OpenAIProvider(Provider):
 
                 use_stream = True if model not in ["o1", "o1-mini"] else False
 
-                if not model.startswith("o1"):
+                if model not in ["o1", "o3-mini"]:
                     params["temperature"] = temperature
                     if prediction:
                         params["prediction"] = prediction
