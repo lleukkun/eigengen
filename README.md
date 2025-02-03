@@ -1,32 +1,29 @@
 EigenGen
 ========
 
-EigenGen is a CLI Large Language Model frontend. It is designed for working with code.
-EigenGen uses a two-stage process where larger LLM is used to solve the task and produce
-dense output, which is then given to a smaller LLM which applies the changes and produces
-the complete file output. Finally this is then used to produce diffs which the user can choose to apply.
+EigenGen is a CLI Large Language Model frontend. It is designed for working with code and incorporates
+a locally running content retrieval system (RAG) based on sqlite-vec for database and
+SFR-Embedding-Code-2B_R for embeddings. EigenGen uses a two-stage process where larger LLM
+is used to solve the task and produce dense output, which is then given to a smaller LLM which
+applies the changes and produces the complete file output. Finally this is then used to produce
+diffs which the user can choose to apply.
 
 ### Supported Models
 EigenGen currently works correctly with:
-  - OpenAI o1-preview, o1-mini, GPT4o (/meld by gpt-4o-mini)
+  - DeepSeek deepseek-r1 (/meld by v3)
+  - OpenAI o3-mini, o1 (/meld by gpt-4o-mini)
   - Anthropic claude-3-5-sonnet (uses same model for /meld operation, haiku has too low output token limit)
-  - llama3.2:90b via Groq (/meld by llama3.1-70b-versatile)
-  - Google Gemini 1.5 pro 002 (/meld by gemini-1.5-flash-002 )
+  - deepseek-r1:70b via Groq (/meld by same)
+  - Google gemini-2.0-flash-thinking-exp (/meld by gemini-2.0-flash-exp)
   - Mistral Large v2 (/meld uses the same)
-
-Note: Mistral Large seems to have some trouble working with the EigenGen prompting. Similar issues happen
-with all Mistral models regardless of size. Perhaps they require some distinctly different approach.
 
 ## Features
 
-  - Basic prompt/answer flow with -p "Type your prompt here".
-  - --chat mode allows discussing the changes and when the assistant answers with code blocks of changes,
+  - Integrated RAG functionality for context retrieval, powered by locally executed SFR-Embedding-Code-2B_R
+    along with sqlite-vec database. egg --add-git can be used to add git repositories to the database.
+  - --chat mode allows discussing the changes and when the assistant answers with code blocks,
     they can be applied with '/meld' command.
-  - Add 'git ls-files' files to context automatically with -g, filtered by .eigengen_ignore.
-  - eigengen -g --index creates an index cache in ~/.eigengen/cache for semi-automatic context detection. When
-    using -g switch after creating the index, eigengen includes any locally modified files as determined by git
-    plus any files listed with -f argument, and then further adds those files that reference symbols defined in
-    this list of files.
+
 
 
 ## Installation
@@ -77,13 +74,13 @@ For testing install pytest.
 
 ```
 # start a new chat pre-filling initial message from the command line
-eigengen -g --chat -p "Please implement a TODO-list web app using react + javascript, thank you. Provide the full project directory structure, please. It should allow adding, editing and deleting entries."
+eigengen --chat -p "Please implement a TODO-list web app using react + javascript, thank you. Provide the full project directory structure, please. It should allow adding, editing and deleting entries."
 ```
 
-By default eigengen uses claude-3-5-sonnet. In order to use OpenAI GPT4o model, please give --model, -m argument
+By default eigengen uses claude-3-5-sonnet. In order to use OpenAI o3-mini model, please give --model, -m argument
 like this:
 ```
-eigengen -m gpt4 -p "your prompt content"
+eigengen -m o3-mini -p "your prompt content"
 ```
 
 ## Work In Progress
