@@ -155,7 +155,7 @@ class EggChat:
                     context_blocks = []
                     for file_path, mod_time, content in retrieved_results:
                         # rebase the file path to the current working directory
-                        file_path = os.path.relpath(file_path)
+                        file_path = os.path.relpath(file_path, start=self.git_root)
                         print(f"Retrieved file: {file_path}")
                         block = f"In file: {file_path}\nContent:\n{content}\n---"
                         context_blocks.append(block)

@@ -1,6 +1,7 @@
 import sqlite3
 import sqlite_vec
 import struct
+import hashlib # Import hashlib for checksum calculation
 from typing import List, Tuple
 
 import torch
@@ -42,6 +43,7 @@ class EggRag:
                 id INTEGER PRIMARY KEY,
                 file_path TEXT,
                 modification_time INTEGER,
+                content_hash TEXT, -- Add content_hash column
                 content TEXT
             )
             """
@@ -58,33 +60,43 @@ class EggRag:
     def add_file(self, file_path: str, modification_time: int, content: str) -> None:
         """
         Computes the embedding of the file content and stores metadata and embedding in the database.
+        Only updates if the file content has changed since last indexing.
 
         Args:
             file_path (str): The file path.
             modification_time (int): Modification time (e.g. Unix timestamp).
             content (str): File content.
         """
+        content_hash = hashlib.sha256(content.encode()).hexdigest() # Calculate content hash
+        cur = self.db.cursor()
+
+        # Check if the file is already indexed and if the content hash is the same
+        cur.execute("SELECT id, content_hash FROM egg_rag_meta WHERE file_path = ?", (file_path,))
+        row = cur.fetchone()
+        if row:
+            existing_id, existing_hash = row
+            if existing_hash == content_hash:
+                print(f"Content of '{file_path}' has not changed. Skipping indexing.")
+                return # Skip indexing if content is the same
+            else:
+                print(f"Content of '{file_path}' has changed. Re-indexing.")
+                cur.execute("DELETE FROM egg_rag_meta WHERE id = ?", (existing_id,))
+                cur.execute("DELETE FROM egg_rag_embeddings WHERE rowid = ?", (existing_id,))
+
+
         # Compute embedding
         embedding_tensor = self.embeddings_provider.generate_embeddings(content)
         embedding_list = embedding_tensor[0].tolist()
         serialized_embedding = serialize_f32(embedding_list)
 
-        cur = self.db.cursor()
-
-        # check if the file is already indexed and if yes, delete the previous entry
-        cur.execute("SELECT id FROM egg_rag_meta WHERE file_path = ?", (file_path,))
-        row = cur.fetchone()
-        if row:
-            cur.execute("DELETE FROM egg_rag_meta WHERE id = ?", (row[0],))
-            cur.execute("DELETE FROM egg_rag_embeddings WHERE rowid = ?", (row[0],))
 
         # Insert metadata and get the rowid.
         cur.execute(
             """
-            INSERT INTO egg_rag_meta (file_path, modification_time, content)
-            VALUES (?, ?, ?)
+            INSERT INTO egg_rag_meta (file_path, modification_time, content_hash, content)
+            VALUES (?, ?, ?, ?)
             """,
-            (file_path, modification_time, content),
+            (file_path, modification_time, content_hash, content), # Include content_hash
         )
         row_id = cur.lastrowid
         # Insert embedding with same rowid.
