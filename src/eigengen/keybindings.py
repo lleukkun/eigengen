@@ -49,7 +49,7 @@ class ChatKeyBindingsManager:
             if self.pasting:
                 event.app.current_buffer.insert_text(data)
             else:
-                if data == "\r":
+                if data == "\n":
                     # Enter key pressed; handle it in the 'Enter' key event
                     return
                 event.app.current_buffer.insert_text(data)

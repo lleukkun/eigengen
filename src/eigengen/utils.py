@@ -11,7 +11,8 @@ from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.lexers.special import TextLexer
 from pygments.styles import get_style_by_name
 
-from eigengen.config import EggConfig  # Add this import
+from eigengen.config import EggConfig
+from eigengen.eggrag import EggRag
 
 def encode_code_block(code_content, file_path=''):
     """
@@ -215,3 +216,70 @@ def pipe_output_via_pager(output_str: str) -> None:
             pager.stdin.write(output_str.encode('utf-8'))
             pager.stdin.close()
         pager.wait()
+
+def get_git_files() -> list[str]:
+    """
+    Returns list of Git-tracked files in current repository.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"], capture_output=True, check=True
+        )
+        return result.stdout.decode("utf-8").split("\x00")[:-1]
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Git error: {str(e)}")
+        return []
+
+
+def find_git_root() -> Optional[str]:
+    """
+    Returns the path to the root of the current Git repository.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return None
+
+def process_file_for_rag(
+    file_path: str, egg_rag: EggRag, for_chat: bool = False, print_error: bool = False
+) -> Optional[str]:
+    """
+    Reads the file, obtains its modification time, and adds it to EggRag.
+    If for_chat is True, returns the file content as an encoded code block (using utils.encode_code_block);
+    otherwise, returns None.
+
+    Args:
+        file_path (str): Absolute path to the file.
+        egg_rag (EggRag): The EggRag instance to add the file to.
+        for_chat (bool, optional): Whether the file content should be returned (for chat display). Defaults to False.
+        print_error (bool, optional): Whether to print errors when reading the file. Defaults to False.
+
+    Returns:
+        Optional[str]: The encoded code block if for_chat is True, otherwise None.
+    """
+    if not os.path.exists(file_path):
+        if print_error:
+            print(f"File not found: {file_path}")
+        return None
+
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        modification_time = int(os.path.getmtime(file_path))
+        egg_rag.add_file(file_path, modification_time, content)
+        if for_chat:
+            # Use the existing utility to encode the content as a code block.
+            from eigengen import utils  # avoid circular import if necessary
+
+            return utils.encode_code_block(content, file_path)
+    except Exception as e:
+        if print_error:
+            print(f"Failed to process '{file_path}': {e}")
+            print(f"Failed to process '{file_path}': {e}")
+    return None

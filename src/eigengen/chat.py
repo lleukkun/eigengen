@@ -18,6 +18,10 @@ from eigengen.progress import ProgressIndicator
 from eigengen.config import EggConfig
 from eigengen.providers import MODEL_CONFIGS
 
+# New imports for EggRag support
+from eigengen.eggrag import EggRag
+from eigengen.embeddings import CodeEmbeddings
+
 class CustomStyle(pygments.style.Style):
     default_style = ""
     styles = {
@@ -63,14 +67,25 @@ class EggChat:
         self.messages: List[Dict[str, str]] = []
         self.pre_fill = ""
 
-        relevant_files = user_files
+        # find current git root if any
+        self.git_root = utils.find_git_root()
+
+        # Initialize EggRag instance to store file embeddings.
+        # The EggRag database will be located at ~/.eigengen/rag.db.
+        rag_db_path = os.path.expanduser("~/.eigengen/rag.db")
+        os.makedirs(os.path.dirname(rag_db_path), exist_ok=True)
+        embedding_dim = 2304  # Adjust the embedding dimension if needed.
+        embeddings_provider = CodeEmbeddings()
+        self.egg_rag = EggRag(rag_db_path, embedding_dim, embeddings_provider)
+
+        # Process user provided files: concatenate them for chat display and add each to EggRag.
         self.file_content = ""
-        if relevant_files:
-            for fname in relevant_files:
-                if os.path.exists(fname):
-                    with open(fname, 'r') as f:
-                        content = f.read()
-                    self.file_content += "\n" + utils.encode_code_block(content, fname)
+        if user_files:
+            for fname in user_files:
+                abs_path = os.path.abspath(fname)
+                result = utils.process_file_for_rag(abs_path, self.egg_rag, for_chat=True)
+                if result:
+                    self.file_content += "\n" + result
 
         self.kbm = keybindings.ChatKeyBindingsManager(self.quoting_state, self.messages)
 
@@ -120,44 +135,80 @@ class EggChat:
                 if prompt_input.strip() == '':
                     continue
 
-                message_content = prompt_input
+                # Prepare the original user message. If file content is present,
+                # append it and then clear for one-time use.
+                original_message = prompt_input
                 if self.file_content and self.file_content.strip() != "":
-                    message_content += "\n" + self.file_content
-                    # clear file content after use so we only include it once
+                    original_message += "\n" + self.file_content
                     self.file_content = ""
 
-                # Process the user's input
-                self.messages.append({"role": "user", "content": message_content})
-                answer = ""
+                # Build a retrieval query from the conversation including the new message.
+                retrieval_query = "\n".join(
+                    m["content"] for m in self.messages if m["role"] == "user"
+                ) + "\n" + original_message
 
-                # Initialize and start the progress indicator
+                # Retrieve additional context from EggRag (using top 5 matches).
+
+                retrieved_results = self.egg_rag.retrieve(retrieval_query, top_n=5, path_prefix=self.git_root)
+                rag_context = ""
+                if retrieved_results:
+                    context_blocks = []
+                    for file_path, mod_time, content in retrieved_results:
+                        # rebase the file path to the current working directory
+                        file_path = os.path.relpath(file_path)
+                        print(f"Retrieved file: {file_path}")
+                        block = f"In file: {file_path}\nContent:\n{content}\n---"
+                        context_blocks.append(block)
+                    rag_context = "\n".join(context_blocks)
+
+                # Create an extended message for the provider by appending the retrieved context.
+                if rag_context:
+                    extended_message = original_message + "\n\nRetrieved Context:\n" + rag_context
+                else:
+                    extended_message = original_message
+
+                # Create a temporary message list that includes the extended user message.
+                local_messages = self.messages + [{"role": "user", "content": extended_message}]
+
+                answer = ""
+                # Use a progress indicator when processing the request.
                 with ProgressIndicator() as _:
-                    chunk_iterator = operations.process_request(self.model_pair.large,
-                                                                self.messages,
-                                                                prompts.get_prompt(self.mode))
+                    chunk_iterator = operations.process_request(
+                        self.model_pair.large,
+                        local_messages,
+                        prompts.get_prompt(self.mode)
+                    )
                     for chunk in chunk_iterator:
                         answer += chunk
 
-                # print assistant response heading + timestamp
+                # Print assistant response header with timestamp.
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
-                print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
+                print_formatted_text(
+                    FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]),
+                    style=style
+                )
 
-                # Get the formatted response
-                formatted_response = utils.get_formatted_response_with_syntax_highlighting(self.config.color_scheme, answer)
+                formatted_response = utils.get_formatted_response_with_syntax_highlighting(
+                    self.config.color_scheme, answer
+                )
 
-                # Pipe the formatted response via pager
+                # Output via pager.
                 utils.pipe_output_via_pager(formatted_response)
-                print("")  # empty line to create a bit of separation
+                print("")  # Add an empty line for separation
 
+                # Store the original message (without the retrieved context) in the conversation history.
+                self.messages.append({"role": "user", "content": original_message})
                 self.messages.append({"role": "assistant", "content": answer})
 
             except KeyboardInterrupt:
                 # Handle Ctrl+C to cancel the current input
-                self.pre_fill = ""  # Reset pre_fill after Ctrl-C
+                self.pre_fill = ""
                 continue
             except EOFError:
                 # Handle Ctrl+D to exit
                 break
+
+
 
     def handle_command(self, prompt_input: str) -> bool:
         command, *args = prompt_input.strip().split(maxsplit=1)
