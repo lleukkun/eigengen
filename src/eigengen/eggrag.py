@@ -85,7 +85,8 @@ class EggRag:
 
 
         # Compute embedding
-        embedding_tensors = self.embeddings_provider.generate_embeddings(content, kind="passage")
+        preamble = f"filename: {file_path}\n"
+        embedding_tensors = self.embeddings_provider.generate_embeddings(preamble + content, kind="passage")
         # we have now a tensor of shape (chunks, embedding_dim)
         # we will use each chunk embedding to reference the same file in the metadata table
         # and store the embedding in the virtual table
