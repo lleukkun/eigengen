@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 import torch
-import torch.nn.functional as F
-from transformers import AutoModel
+from sentence_transformers import SentenceTransformer
 
 
 @dataclass
@@ -13,27 +12,29 @@ class CodeEmbeddingInput:
 class CodeEmbeddings:
     def __init__(self, model_path: str = "Salesforce/SFR-Embedding-Code-2B_R", max_length: int = 32768):
         self.model_path = model_path
-        self.model = AutoModel.from_pretrained(
-            self.model_path,
-            trust_remote_code=True
+        self.model = SentenceTransformer(
+            "Salesforce/SFR-Embedding-Code-2B_R", trust_remote_code=True
         )
+
         self.max_length = max_length
 
 
     def generate_query_embeddings(self, query: str) -> torch.Tensor:
         """Generate embeddings from a query"""
-        query_instruction_example = "Given Code or Text, retrieval relevant content"
-        query_embeddings = self.model.encode_queries(
-            [query], instruction=query_instruction_example, max_length=self.max_length
+        query_instruction_example = (
+            "Instruct: Given Code or Text, retrieval relevant content\nQuery: "
         )
-        normalized = F.normalize(query_embeddings)
 
-        return normalized
+        query_embeddings = self.model.encode(
+            [query], prompt=query_instruction_example
+        )
+
+        return query_embeddings
 
     def generate_embeddings(self, passage: str) -> torch.Tensor:
         """Generate embeddings from tokenized input"""
-        normalized = F.normalize(self.model.encode_corpus([passage], max_length=self.max_length))
-        return normalized
+        embeddings = self.model.encode([passage])
+        return embeddings
 
     @classmethod
     def compute_similarity_scores(
