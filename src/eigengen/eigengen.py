@@ -103,7 +103,7 @@ def _handle_git_rag_mode(config: EggConfig) -> None:
     rag_db_path = os.path.join(config_dir, "rag.db")
 
     # Initialize RAG components
-    embedding_dim = 2304
+    embedding_dim = 1024
     rag = EggRag(
         db_path=rag_db_path,
         embedding_dim=embedding_dim,

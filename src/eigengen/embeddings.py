@@ -1,39 +1,66 @@
 from dataclasses import dataclass
 import torch
-from sentence_transformers import SentenceTransformer
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModel
 
 
 @dataclass
 class CodeEmbeddingInput:
     texts: list[str]
-    model_path: str = "Salesforce/SFR-Embedding-Code-2B_R"
-    max_length: int = 32768
+    model_path: str = "intfloat/multilingual-e5-large"
+    max_length: int = 512
+
+
+
+def average_pool(last_hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    last_hidden = last_hidden_states.masked_fill(~attention_mask[..., None].bool(), 0.0)
+    return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
+
 
 class CodeEmbeddings:
-    def __init__(self, model_path: str = "Salesforce/SFR-Embedding-Code-2B_R", max_length: int = 32768):
+    def __init__(
+        self,
+        model_path: str = "intfloat/multilingual-e5-large",
+        max_length: int = 32768,
+    ):
         self.model_path = model_path
-        self.model = SentenceTransformer(
-            "Salesforce/SFR-Embedding-Code-2B_R", trust_remote_code=True
+        self.model = AutoModel.from_pretrained(model_path, trust_remote_code=True)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path, trust_remote_code=True
         )
 
         self.max_length = max_length
 
 
-    def generate_query_embeddings(self, query: str) -> torch.Tensor:
-        """Generate embeddings from a query"""
-        query_instruction_example = (
-            "Instruct: Given Code or Text, retrieval relevant content\nQuery: "
-        )
-
-        query_embeddings = self.model.encode(
-            [query], prompt=query_instruction_example
-        )
-
-        return query_embeddings
-
-    def generate_embeddings(self, passage: str) -> torch.Tensor:
+    def generate_embeddings(self, input_text: str, kind: str = "passage") -> list[torch.Tensor]:
         """Generate embeddings from tokenized input"""
-        embeddings = self.model.encode([passage])
+        # tokenize the input
+        batch_dict = self.tokenizer([f"{kind}: {input_text}"], return_tensors="pt", max_length=128000, truncation=True)
+        # reshape the batch_dict token tensor so that we get 512 token sub-passages
+        # we will use these sub-passages to encode the embeddings
+        max_tokens = 512
+        overlap = 0.25
+        stride = int(max_tokens * (1 - overlap))
+        token_chunks = []
+        i = 0
+        embeddings = []
+        while i < (batch_dict["input_ids"].shape[1]):
+            # Always slice exactly max_tokens or fewer tokens from the list
+            chunk = batch_dict["input_ids"][:, i:i + max_tokens]
+            token_chunks.append(chunk)
+            i += stride
+
+        for idx, chunk in enumerate(token_chunks):
+            # Convert chunk to a PyTorch tensor and add batch dimension
+            input_ids = chunk
+            # Create an attention mask of 1s (or compute it appropriately)
+            attention_mask = torch.ones_like(input_ids)
+
+            # Feed directly into the model
+            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+            # normalize
+            embeddings.append(F.normalize(average_pool(outputs.last_hidden_state, attention_mask), p=2, dim=1))
+
         return embeddings
 
     @classmethod

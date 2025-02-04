@@ -1,4 +1,5 @@
 from typing import List, Tuple, Optional
+import traceback
 import re
 import tempfile
 import subprocess
@@ -280,6 +281,7 @@ def process_file_for_rag(
             return utils.encode_code_block(content, file_path)
     except Exception as e:
         if print_error:
-            print(f"Failed to process '{file_path}': {e}")
-            print(f"Failed to process '{file_path}': {e}")
+            print(f"Error reading file: {file_path}: {str(e)}")
+            print(traceback.format_exc())
+
     return None

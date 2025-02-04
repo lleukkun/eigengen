@@ -4,8 +4,8 @@ import struct
 import hashlib # Import hashlib for checksum calculation
 from typing import List, Tuple
 
-import torch
 from eigengen.embeddings import CodeEmbeddings
+
 
 def serialize_f32(vector: List[float]) -> bytes:
     """Serializes a list of floats into a compact binary format."""
@@ -52,7 +52,7 @@ class EggRag:
         cur.execute(
             f"""
             CREATE VIRTUAL TABLE IF NOT EXISTS egg_rag_embeddings
-            USING vec0(rowid INTEGER PRIMARY KEY, path TEXT, embedding float[{self.embedding_dim}])
+            USING vec0(metaid INTEGER, path TEXT, embedding float[{self.embedding_dim}])
             """
         )
         self.db.commit()
@@ -85,10 +85,17 @@ class EggRag:
 
 
         # Compute embedding
-        embedding_tensor = self.embeddings_provider.generate_embeddings(content)
-        embedding_list = embedding_tensor[0].tolist()
-        serialized_embedding = serialize_f32(embedding_list)
+        embedding_tensors = self.embeddings_provider.generate_embeddings(content, kind="passage")
+        # we have now a tensor of shape (chunks, embedding_dim)
+        # we will use each chunk embedding to reference the same file in the metadata table
+        # and store the embedding in the virtual table
 
+        # create a list of serialized embeddings
+        serialized_embeddings = []
+        for index in range(len(embedding_tensors)):
+            vector = embedding_tensors[index][0].tolist()
+            serialized_embedding = serialize_f32(vector)
+            serialized_embeddings.append(serialized_embedding)
 
         # Insert metadata and get the rowid.
         cur.execute(
@@ -98,12 +105,13 @@ class EggRag:
             """,
             (file_path, modification_time, content_hash, content), # Include content_hash
         )
-        row_id = cur.lastrowid
-        # Insert embedding with same rowid.
-        cur.execute(
-            "INSERT INTO egg_rag_embeddings (rowid, path, embedding) VALUES (?, ?, ?)",
-            (row_id, file_path, serialized_embedding),
+        meta_id = cur.lastrowid
+        # Insert embeddings with same rowid.
+        cur.executemany(
+            "INSERT INTO egg_rag_embeddings (metaid, path, embedding) VALUES (?, ?, ?)",
+            [(meta_id, file_path, serialized_embedding) for serialized_embedding in serialized_embeddings],
         )
+
         self.db.commit()
 
     def retrieve(self, query_content: str, top_n: int, path_prefix: str | None = None) -> List[Tuple[str, int, str]]:
@@ -119,25 +127,28 @@ class EggRag:
             content, and the computed distance from the query embedding.
         """
         # Compute embedding for the query.
-        embedding_tensor = self.embeddings_provider.generate_query_embeddings(query_content)
-        query_embedding = embedding_tensor[0].tolist()
+        embedding_tensor = self.embeddings_provider.generate_embeddings(query_content, kind="query")
+        query_embedding = embedding_tensor[0][0].tolist()
         serialized_query = serialize_f32(query_embedding)
 
         # first extract the rowids of the top N matches
         vector_query_sql = """
-            SELECT rowid, vec_distance_cosine(embedding, ?) as distance FROM egg_rag_embeddings
+            SELECT metaid, vec_distance_cosine(embedding, ?) as distance FROM egg_rag_embeddings
             WHERE path like ?
             ORDER BY distance ASC
             LIMIT ?
         """
         active_prefix = path_prefix if path_prefix else ""
         cur = self.db.execute(
-            vector_query_sql, (serialized_query, f"{active_prefix}%", top_n)
+            vector_query_sql, (serialized_query, f"{active_prefix}%", top_n * 5)
         )
 
-        rowids = cur.fetchall()
-        if not rowids:
+        metaids = cur.fetchall()
+        if not metaids:
             return []
+        # get unique rowids
+        rowids = list(set(metaids))
+
         # then fetch the metadata for the top N matches
         rowids_str = ", ".join(str(rowid) for rowid, _ in rowids)
         meta_query_sql = f"""

@@ -74,7 +74,7 @@ class EggChat:
         # The EggRag database will be located at ~/.eigengen/rag.db.
         rag_db_path = os.path.expanduser("~/.eigengen/rag.db")
         os.makedirs(os.path.dirname(rag_db_path), exist_ok=True)
-        embedding_dim = 2304  # Adjust the embedding dimension if needed.
+        embedding_dim = 1024  # Adjust the embedding dimension if needed.
         embeddings_provider = CodeEmbeddings()
         self.egg_rag = EggRag(rag_db_path, embedding_dim, embeddings_provider)
 
