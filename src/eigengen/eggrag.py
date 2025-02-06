@@ -1,10 +1,10 @@
 import sqlite3
-#import sqlite_vec        # Removed dependency on sqlite-vec
 import struct
 import hashlib  # Import hashlib for checksum calculation
 from typing import List, Tuple
 import hnswlib   # New import for nearest neighbour search
 import numpy as np
+import time  # Added for retry delay
 
 from eigengen import providers, operations, prompts
 from eigengen.embeddings import CodeEmbeddings
@@ -45,7 +45,8 @@ def deserialize_embedding_matrix(blob: bytes) -> List[List[float]]:
 
 def get_summary(model: providers.Model, content: str) -> str:
     """
-    Generates a summary of the content using the specified model.
+    Generates a summary of the content using the specified model,
+    retrying up to 3 attempts in case of errors.
 
     Args:
         model (providers.Model): The model to use for summarization.
@@ -53,10 +54,23 @@ def get_summary(model: providers.Model, content: str) -> str:
 
     Returns:
         str: The summary of the content.
+
+    Raises:
+        Exception: The last exception encountered if all retries fail.
     """
-    messages = [{"role": "user", "content": content}]
-    chunks = operations.process_request(model, messages, prompts.get_prompt("summarize"))
-    return "".join(chunks)
+    attempts = 3  # Total attempts: initial try + 2 retries
+    for attempt in range(attempts):
+        try:
+            messages = [{"role": "user", "content": content}]
+            chunks = operations.process_request(model, messages, prompts.get_prompt("summarize"))
+            return "".join(chunks)
+        except Exception as e:
+            if attempt < attempts - 1:
+                delay = 2 ** attempt  # exponential backoff
+                print(f"Error generating summary (attempt {attempt + 1}/{attempts}): {e}. Retrying in {delay} seconds...")
+                time.sleep(delay)
+            else:
+                raise e
 
 
 class EggRag:

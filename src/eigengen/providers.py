@@ -28,14 +28,48 @@ class ProviderConfig:
         self.temperature = temperature
 
 PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
-    "claude": ProviderConfig("anthropic", "claude-3-5-sonnet-latest", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", 8192, 0.7),
-    "deepseek-r1:32b": ProviderConfig("ollama", "deepseek-r1:32b", "deepseek-r1:32b", "deepseek-r1:1.5b", 8192, 0.7),
-    "deepseek-r1": ProviderConfig("deepseek", "deepseek-reasoner", "deepseek-chat", "deepseek-chat", 8192, 0.7),
-    "groq": ProviderConfig("groq", "deepseek-r1-distill-llama-70b", "deepseek-r1-distill-llama-70b", "llama-3.1-8b-instant", 32768, 0.5),
+    "claude": ProviderConfig(
+        "anthropic",
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-haiku-latest",
+        8192,
+        0.7,
+    ),
+    "deepseek-r1:32b": ProviderConfig(
+        "ollama", "deepseek-r1:32b", "deepseek-r1:32b", "llama3.2:3b", 8192, 0.7
+    ),
+    "deepseek-r1": ProviderConfig(
+        "deepseek", "deepseek-reasoner", "deepseek-chat", "deepseek-chat", 8192, 0.7
+    ),
+    "groq": ProviderConfig(
+        "groq",
+        "deepseek-r1-distill-llama-70b",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        32768,
+        0.5,
+    ),
     "o1": ProviderConfig("openai", "o1", "gpt-4o-mini", "gpt-4o-mini", 100000, 0.7),
-    "o3-mini": ProviderConfig("openai", "o3-mini", "gpt-4o-mini", "gpt-4o-mini", 100000, 0.7),
-    "gemini": ProviderConfig("google", "gemini-2.0-flash-thinking-exp", "gemini-2.0-flash-exp", "gemini-2.0-flash-exp", 8192, 0.7),
-    "mistral": ProviderConfig("mistral", "mistral-large-latest", "mistral-large-latest","codestral-latest", 32768, 0.7)
+    "o3-mini": ProviderConfig(
+        "openai", "o3-mini", "gpt-4o-mini", "gpt-4o-mini", 100000, 0.7
+    ),
+    "gemini": ProviderConfig(
+        "google",
+        "gemini-2.0-flash-thinking-exp",
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-flash-exp",
+        8192,
+        0.7,
+    ),
+    "mistral": ProviderConfig(
+        "mistral",
+        "mistral-large-latest",
+        "mistral-large-latest",
+        "codestral-latest",
+        32768,
+        0.7,
+    ),
 }
 
 class Provider(ABC):
