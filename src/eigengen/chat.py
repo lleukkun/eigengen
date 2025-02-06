@@ -90,7 +90,7 @@ class EggChat:
                     continue
                 self.files_history.add(fname)
                 abs_path = os.path.abspath(fname)
-
+                print(f"Processing file: {abs_path}")  # <-- New print statement
                 result = utils.process_file_for_rag(abs_path, self.egg_rag, for_chat=True)
                 if result:
                     self.file_content += "\n" + result
@@ -261,6 +261,7 @@ class EggChat:
     def handle_reset(self) -> bool:
         """Handle the /reset command."""
         self.messages = []
+        self.files_history = set()
         print("Chat messages cleared.\n")
         return True
 
@@ -282,6 +283,10 @@ class EggChat:
 
         for filepath in paths:
             meld.meld_changes(self.model_tuple.small, filepath, last_assistant_message)
+            # Reindex the affected file after melding changes.
+            abs_filepath = os.path.abspath(filepath)
+            utils.process_file_for_rag(abs_filepath, self.egg_rag, for_chat=False)
+            print(f"Reindexed file: {filepath}")  # <-- New print statement
 
         return True
 
