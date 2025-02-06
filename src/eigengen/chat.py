@@ -16,7 +16,7 @@ import pygments.style
 from eigengen import operations, utils, keybindings, meld, providers, prompts
 from eigengen.progress import ProgressIndicator
 from eigengen.config import EggConfig
-from eigengen.providers import MODEL_CONFIGS
+from eigengen.providers import PROVIDER_CONFIGS
 
 # New imports for EggRag support
 from eigengen.eggrag import EggRag
@@ -57,7 +57,7 @@ class EggChat:
                  config: EggConfig,
                  user_files: Optional[List[str]]):
         self.config = config  # Store the passed config
-        self.model_pair = providers.create_model_pair(config.model)
+        self.model_tuple = providers.create_model_tuple(config.model)
         self.mode = config.args.chat_mode
         self.quoting_state = {
             "current_index": -1,
@@ -70,19 +70,27 @@ class EggChat:
         # find current git root if any
         self.git_root = utils.find_git_root()
 
+        # keep a set of file paths that have been introduced to the chat history
+        # to avoid spamming the chat with the same file content
+        self.files_history: set[str] = set()
+
         # Initialize EggRag instance to store file embeddings.
         # The EggRag database will be located at ~/.eigengen/rag.db.
         rag_db_path = os.path.expanduser("~/.eigengen/rag.db")
         os.makedirs(os.path.dirname(rag_db_path), exist_ok=True)
         embedding_dim = 1024  # Adjust the embedding dimension if needed.
         embeddings_provider = CodeEmbeddings()
-        self.egg_rag = EggRag(rag_db_path, embedding_dim, embeddings_provider)
+        self.egg_rag = EggRag(self.model_tuple.summary, rag_db_path, embedding_dim, embeddings_provider)
 
         # Process user provided files: concatenate them for chat display and add each to EggRag.
         self.file_content = ""
         if user_files:
             for fname in user_files:
+                if fname in self.files_history:
+                    continue
+                self.files_history.add(fname)
                 abs_path = os.path.abspath(fname)
+
                 result = utils.process_file_for_rag(abs_path, self.egg_rag, for_chat=True)
                 if result:
                     self.file_content += "\n" + result
@@ -143,19 +151,22 @@ class EggChat:
                     self.file_content = ""
 
                 # Build a retrieval query from the conversation including the new message.
-                retrieval_query = "\n".join(
-                    m["content"] for m in self.messages if m["role"] == "user"
-                ) + "\n" + original_message
+                query_messages = [{"role": "user", "content": original_message}]
+                retrieval_chunks = operations.process_request(self.model_tuple.summary, query_messages, prompts.get_prompt("summarize_query"))
+                retrieval_query = "".join(retrieval_chunks)
 
                 # Retrieve additional context from EggRag (using top 5 matches).
 
-                retrieved_results = self.egg_rag.retrieve(retrieval_query, top_n=5, path_prefix=self.git_root)
+                retrieved_results = self.egg_rag.retrieve(retrieval_query, top_n=10, path_prefix=self.git_root)
                 rag_context = ""
                 if retrieved_results:
                     context_blocks = []
-                    for file_path, mod_time, content in retrieved_results:
+                    for file_path, _, content in retrieved_results:
                         # rebase the file path to the current working directory
                         file_path = os.path.relpath(file_path, start=self.git_root)
+                        if file_path in self.files_history:
+                            continue
+                        self.files_history.add(file_path)
                         print(f"Retrieved file: {file_path}")
                         block = f"In file: {file_path}\nContent:\n{content}\n---"
                         context_blocks.append(block)
@@ -174,7 +185,7 @@ class EggChat:
                 # Use a progress indicator when processing the request.
                 with ProgressIndicator() as _:
                     chunk_iterator = operations.process_request(
-                        self.model_pair.large,
+                        self.model_tuple.large,
                         local_messages,
                         prompts.get_prompt(self.mode)
                     )
@@ -270,7 +281,7 @@ class EggChat:
             paths = set(paths_input.split())
 
         for filepath in paths:
-            meld.meld_changes(self.model_pair.small, filepath, last_assistant_message)
+            meld.meld_changes(self.model_tuple.small, filepath, last_assistant_message)
 
         return True
 
@@ -279,7 +290,7 @@ class EggChat:
 
         def print_supported_models():
             print("Supported models:")
-            supported_models = list(MODEL_CONFIGS.keys())
+            supported_models = list(PROVIDER_CONFIGS.keys())
             for m in supported_models:
                 print(f" - {m}")
 
@@ -291,7 +302,7 @@ class EggChat:
         else:
             # Argument provided; attempt to switch model
             new_model = args[0].strip()
-            if new_model in MODEL_CONFIGS:
+            if new_model in PROVIDER_CONFIGS:
                 self.config.model = new_model
                 print(f"Model switched to: {new_model}")
             else:

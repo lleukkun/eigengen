@@ -10,8 +10,8 @@ import argparse
 import os
 from pathlib import Path
 
-from eigengen.providers import MODEL_CONFIGS
-from eigengen import operations, log, chat, utils
+from eigengen.providers import PROVIDER_CONFIGS
+from eigengen import operations, log, chat, utils, providers
 from eigengen.config import EggConfig
 from eigengen.eggrag import EggRag
 from eigengen.embeddings import CodeEmbeddings
@@ -26,7 +26,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("--config", "-C", default=None,
                         help="Path to the configuration file (default: ~/.eigengen/config.json)")
-    parser.add_argument("--model", "-m", choices=list(MODEL_CONFIGS.keys()),
+    parser.add_argument("--model", "-m", choices=list(PROVIDER_CONFIGS.keys()),
                         help="Choose Model")
     parser.add_argument("--editor", "-e", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=['github-dark', 'monokai', 'solarized'],
@@ -105,6 +105,7 @@ def _handle_git_rag_mode(config: EggConfig) -> None:
     # Initialize RAG components
     embedding_dim = 1024
     rag = EggRag(
+        model=providers.create_model_tuple(config.model).summary,
         db_path=rag_db_path,
         embedding_dim=embedding_dim,
         embeddings_provider=CodeEmbeddings()

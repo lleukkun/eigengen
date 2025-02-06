@@ -17,23 +17,25 @@ from mistralai import Mistral
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 
-class ModelConfig:
-    def __init__(self, provider: str, model: str, mini_model: str, max_tokens: int, temperature: float):
+class ProviderConfig:
+    def __init__(self, provider: str, model: str, mini_model: str, summary_model: str,
+                 max_tokens: int, temperature: float):
         self.provider = provider
         self.model = model
         self.mini_model = mini_model
+        self.summary_model = summary_model
         self.max_tokens = max_tokens
         self.temperature = temperature
 
-MODEL_CONFIGS: Dict[str, ModelConfig] = {
-    "claude": ModelConfig("anthropic", "claude-3-5-sonnet-20241022", "claude-3-5-sonnet-20241022", 8192, 0.7),
-    "deepseek-r1:32b": ModelConfig("ollama", "deepseek-r1:32b", "deepseek-r1:32b", 8192, 0.7),
-    "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", "deepseek-chat", 8192, 0.7),
-    "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", "deepseek-r1-distill-llama-70b", 32768, 0.5),
-    "o1": ModelConfig("openai", "o1", "gpt-4o-mini", 100000, 0.7),
-    "o3-mini": ModelConfig("openai", "o3-mini", "gpt-4o-mini", 100000, 0.7),
-    "gemini": ModelConfig("google", "gemini-2.0-flash-thinking-exp", "gemini-2.0-flash-exp", 8192, 0.7),
-    "mistral": ModelConfig("mistral", "mistral-large-latest", "mistral-large-latest", 32768, 0.7)
+PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
+    "claude": ProviderConfig("anthropic", "claude-3-5-sonnet-latest", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest", 8192, 0.7),
+    "deepseek-r1:32b": ProviderConfig("ollama", "deepseek-r1:32b", "deepseek-r1:32b", "deepseek-r1:1.5b", 8192, 0.7),
+    "deepseek-r1": ProviderConfig("deepseek", "deepseek-reasoner", "deepseek-chat", "deepseek-chat", 8192, 0.7),
+    "groq": ProviderConfig("groq", "deepseek-r1-distill-llama-70b", "deepseek-r1-distill-llama-70b", "llama-3.1-8b-instant", 32768, 0.5),
+    "o1": ProviderConfig("openai", "o1", "gpt-4o-mini", "gpt-4o-mini", 100000, 0.7),
+    "o3-mini": ProviderConfig("openai", "o3-mini", "gpt-4o-mini", "gpt-4o-mini", 100000, 0.7),
+    "gemini": ProviderConfig("google", "gemini-2.0-flash-thinking-exp", "gemini-2.0-flash-exp", "gemini-2.0-flash-exp", 8192, 0.7),
+    "mistral": ProviderConfig("mistral", "mistral-large-latest", "mistral-large-latest","codestral-latest", 32768, 0.7)
 }
 
 class Provider(ABC):
@@ -56,9 +58,10 @@ class Model:
 
 
 @dataclasses.dataclass
-class ModelPair:
+class ModelTuple:
     large: Model
     small: Model
+    summary: Model
 
 
 class OllamaProvider(Provider):
@@ -317,11 +320,11 @@ def get_api_key(provider: str) -> str:
     return api_key
 
 
-def create_model_pair(nickname: str) -> ModelPair:
-    if nickname not in MODEL_CONFIGS:
+def create_model_tuple(nickname: str) -> ModelTuple:
+    if nickname not in PROVIDER_CONFIGS:
         raise ValueError(f"Invalid model nickname: {nickname}")
 
-    config = MODEL_CONFIGS[nickname]
+    config = PROVIDER_CONFIGS[nickname]
     provider = None
     if config.provider == "ollama":
         provider = OllamaProvider()
@@ -351,16 +354,20 @@ def create_model_pair(nickname: str) -> ModelPair:
         provider = OpenAIProvider(client)
     else:
         raise ValueError(f"Invalid provider specified: {config.provider}")
-    return ModelPair(large=Model(provider=provider,
+    return ModelTuple(large=Model(provider=provider,
                                  model_name=config.model,
                                  temperature=config.temperature,
                                  max_tokens=config.max_tokens),
-                     small=Model(provider=provider,
+                      small=Model(provider=provider,
                                  model_name=config.mini_model,
                                  temperature=config.temperature,
-                                 max_tokens=config.max_tokens))
+                                 max_tokens=config.max_tokens),
+                      summary=Model(provider=provider,
+                                    model_name=config.summary_model,
+                                    temperature=config.temperature,
+                                    max_tokens=config.max_tokens))
 
-def get_model_config(nickname: str) -> ModelConfig:
-    if nickname not in MODEL_CONFIGS:
+def get_model_config(nickname: str) -> ProviderConfig:
+    if nickname not in PROVIDER_CONFIGS:
         raise ValueError(f"Invalid model nickname: {nickname}")
-    return MODEL_CONFIGS[nickname]
+    return PROVIDER_CONFIGS[nickname]

@@ -4,6 +4,7 @@ import struct
 import hashlib # Import hashlib for checksum calculation
 from typing import List, Tuple
 
+from eigengen import providers, operations, prompts
 from eigengen.embeddings import CodeEmbeddings
 
 
@@ -11,8 +12,25 @@ def serialize_f32(vector: List[float]) -> bytes:
     """Serializes a list of floats into a compact binary format."""
     return struct.pack(f"{len(vector)}f", *vector)
 
+
+def get_summary(model: providers.Model, content: str) -> str:
+    """
+    Generates a summary of the content using the specified model.
+
+    Args:
+        model (providers.Model): The model to use for summarization.
+        content (str): The content to summarize.
+
+    Returns:
+        str: The summary of the content.
+    """
+    messages = [{"role": "user", "content": content}]
+    chunks = operations.process_request(model, messages, prompts.get_prompt("summarize"))
+    return "".join(chunks)
+
+
 class EggRag:
-    def __init__(self, db_path: str, embedding_dim: int, embeddings_provider: CodeEmbeddings):
+    def __init__(self, model: providers.Model, db_path: str, embedding_dim: int, embeddings_provider: CodeEmbeddings):
         """
         Initializes the EggRag semantic storage.
 
@@ -30,6 +48,7 @@ class EggRag:
         sqlite_vec.load(self.db)
         self.db.enable_load_extension(False)
         self._initialize_tables()
+        self.model = model
 
     def _initialize_tables(self):
         """
@@ -85,8 +104,8 @@ class EggRag:
 
 
         # Compute embedding
-        preamble = f"filename: {file_path}\n"
-        embedding_tensors = self.embeddings_provider.generate_embeddings(preamble + content, kind="passage")
+        summary = get_summary(self.model, content)
+        embedding_tensors = self.embeddings_provider.generate_embeddings(summary, kind="passage")
         # we have now a tensor of shape (chunks, embedding_dim)
         # we will use each chunk embedding to reference the same file in the metadata table
         # and store the embedding in the virtual table
@@ -141,7 +160,7 @@ class EggRag:
         """
         active_prefix = path_prefix if path_prefix else ""
         cur = self.db.execute(
-            vector_query_sql, (serialized_query, f"{active_prefix}%", top_n * 5)
+            vector_query_sql, (serialized_query, f"{active_prefix}%", top_n)
         )
 
         metaids = cur.fetchall()

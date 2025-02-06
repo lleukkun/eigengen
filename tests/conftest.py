@@ -1,13 +1,13 @@
 import pytest
-from eigengen.providers import ModelConfig, MODEL_CONFIGS
+from eigengen.providers import ModelConfig, PROVIDER_CONFIGS
 
 
 @pytest.fixture(autouse=True)
 def mock_model_config(monkeypatch):
     mock_config = ModelConfig("mock", "mock-model", "mock-model", 1000, 0.5)
-    monkeypatch.setitem(MODEL_CONFIGS, "mock-model", mock_config)
+    monkeypatch.setitem(PROVIDER_CONFIGS, "mock-model", mock_config)
     yield mock_config
-    monkeypatch.delitem(MODEL_CONFIGS, "mock-model")
+    monkeypatch.delitem(PROVIDER_CONFIGS, "mock-model")
 
 
 def pytest_addoption(parser):

@@ -58,4 +58,24 @@ You must start your answer like this:
 ```programming_language;dirpath/filename
 
 """,
+    "summarize": """
+Your task is to write a summary for the provided source code file.
+
+Write two paragraphs describing the code. Focus on describing what the input
+data is and what the code does to the input data. Also mention if the code
+declares classes or functions or if it mainly uses functionality provided
+by other modules. If it is a user interface, mention what the user can do
+with it. Always focus on what can be done with the code, not how it does it.
+Use plain language and avoid technical jargon and code details.
+
+The summary should be short and concise. If the file is empty or contains no code,
+you should indicate that in the summary.
+""",
+    "summarize_query": """
+Your task is to write a summary for the provided user query.
+
+Write two paragraphs describing the query. Focus on describing what the user
+is asking for and what information is needed to answer them. You should use
+plain language and avoid technical jargon or code details.
+"""
 }
