@@ -1,5 +1,4 @@
 from typing import List, Tuple, Optional
-import traceback
 import re
 import tempfile
 import subprocess
@@ -13,9 +12,9 @@ from pygments.lexers.special import TextLexer
 from pygments.styles import get_style_by_name
 
 from eigengen.config import EggConfig
-from eigengen.eggrag import EggRag
 
-def encode_code_block(code_content, file_path=''):
+
+def encode_code_block(code_content: str, file_path: str='') -> str:
     """
     Encapsulates the code content in a Markdown code block,
     using a variable-length fence to avoid conflicts with backticks in the code content.
@@ -253,42 +252,3 @@ def find_git_root() -> Optional[str]:
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return None
-
-def process_file_for_rag(
-    file_path: str, egg_rag: EggRag, for_chat: bool = False, print_error: bool = False
-) -> Optional[str]:
-    """
-    Reads the file, obtains its modification time, and adds it to EggRag.
-    If for_chat is True, returns the file content as an encoded code block (using utils.encode_code_block);
-    otherwise, returns None.
-
-    Args:
-        file_path (str): Absolute path to the file.
-        egg_rag (EggRag): The EggRag instance to add the file to.
-        for_chat (bool, optional): Whether the file content should be returned (for chat display). Defaults to False.
-        print_error (bool, optional): Whether to print errors when reading the file. Defaults to False.
-
-    Returns:
-        Optional[str]: The encoded code block if for_chat is True, otherwise None.
-    """
-    if not os.path.exists(file_path):
-        if print_error:
-            print(f"File not found: {file_path}")
-        return None
-
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-        modification_time = int(os.path.getmtime(file_path))
-        egg_rag.add_file(file_path, modification_time, content)
-        if for_chat:
-            # Use the existing utility to encode the content as a code block.
-            from eigengen import utils  # avoid circular import if necessary
-
-            return utils.encode_code_block(content, file_path)
-    except Exception as e:
-        if print_error:
-            print(f"Error reading file: {file_path}: {str(e)}")
-            print(traceback.format_exc())
-
-    return None

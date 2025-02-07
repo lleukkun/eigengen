@@ -20,7 +20,6 @@ from eigengen.providers import PROVIDER_CONFIGS
 
 # New imports for EggRag support
 from eigengen.eggrag import EggRag, NoOpEggRag
-from eigengen.embeddings import CodeEmbeddings
 
 class CustomStyle(pygments.style.Style):
     default_style = ""
@@ -73,27 +72,26 @@ class EggChat:
 
         # NEW: Use RAG only if enabled; otherwise, use a no-op object.
         if config.args.rag:
-            rag_db_path = os.path.expanduser("~/.eigengen/rag.db")
-            os.makedirs(os.path.dirname(rag_db_path), exist_ok=True)
-            embedding_dim = 1024  # Adjust the embedding dimension if needed.
-            embeddings_provider = CodeEmbeddings()
-            self.egg_rag = EggRag(self.model_tuple.summary, rag_db_path, embedding_dim, embeddings_provider)
+            self.egg_rag = EggRag()
         else:
             self.egg_rag = NoOpEggRag()
 
-        # Process user provided files: if RAG is enabled, index them; otherwise, simply include for chat.
-        self.file_content = ""
+        # NEW: Process user provided files as target files for context-construction.
+        self.target_files = []
+        self.initial_file_content = ""
         if user_files:
             for fname in user_files:
-                if fname in self.files_history:
-                    continue
-                self.files_history.add(fname)
                 abs_path = os.path.abspath(fname)
+                if abs_path in self.files_history:
+                    continue
+                self.files_history.add(abs_path)
                 print(f"Processing file: {abs_path}")
-                # process_file_for_rag will call egg_rag.add_file on our instance.
-                result = utils.process_file_for_rag(abs_path, self.egg_rag, for_chat=True)
-                if result:
-                    self.file_content += "\n" + result
+                # read the file content
+                with open(abs_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                    print("adding to prefill")
+                    self.initial_file_content += "\n" + utils.encode_code_block(content, fname)
+                self.target_files.append(abs_path)
 
         self.kbm = keybindings.ChatKeyBindingsManager(self.quoting_state, self.messages)
 
@@ -103,9 +101,6 @@ class EggChat:
     ) -> None:
         """
         Initiates the chat mode, handling user inputs and interactions with the LLM.
-
-        Args:
-            initial_prompt (Optional[str], optional): Pre-filled prompt content. Defaults to None.
         """
         session = PromptSession(key_bindings=self.kbm.get_kb(), clipboard=PyperclipClipboard())
         print(
@@ -136,53 +131,37 @@ class EggChat:
                 self.pre_fill = ""  # Reset pre_fill after use
 
                 if prompt_input.startswith("/"):
-                    # Input is a command
                     if (self.handle_command(prompt_input)):
                         continue
 
                 if prompt_input.strip() == '':
                     continue
 
-                # Prepare the original user message. If file content is present,
-                # append it and then clear for one-time use.
                 original_message = prompt_input
-                if self.file_content and self.file_content.strip() != "":
-                    original_message += "\n" + self.file_content
-                    self.file_content = ""
+                # If any pre-filled content exists from target files, append it
+                if self.initial_file_content and self.initial_file_content.strip() != "":
+                    original_message += "\n" + self.initial_file_content
+                    self.initial_file_content = ""
 
-                # Build a retrieval query from the conversation including the new message.
-                query_messages = [{"role": "user", "content": original_message}]
-                retrieval_chunks = operations.process_request(self.model_tuple.summary, query_messages, prompts.get_prompt("summarize_query"))
-                retrieval_query = "".join(retrieval_chunks)
-
-                # Retrieve additional context from EggRag (using top 5 matches).
-
-                retrieved_results = self.egg_rag.retrieve(retrieval_query, top_n=10, path_prefix=self.git_root)
+                # Retrieve additional context.
+                # NEW: If target files are provided, pass them into egg_rag.retrieve so it will use the new token-based context system.
+                retrieved_results = self.egg_rag.retrieve(
+                    target_files=self.target_files if self.target_files else None
+                )
                 rag_context = ""
                 if retrieved_results:
-                    context_blocks = []
-                    for file_path, _, content in retrieved_results:
-                        # rebase the file path to the current working directory
-                        file_path = os.path.relpath(file_path, start=self.git_root)
-                        if file_path in self.files_history:
-                            continue
-                        self.files_history.add(file_path)
-                        print(f"Retrieved file: {file_path}")
-                        block = f"In file: {file_path}\nContent:\n{content}\n---"
-                        context_blocks.append(block)
-                    rag_context = "\n".join(context_blocks)
+                    rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
 
-                # Create an extended message for the provider by appending the retrieved context.
+                # Append retrieved (aggregated) context if available.
+                extended_message = ""
                 if rag_context:
                     extended_message = original_message + "\n\nRetrieved Context:\n" + rag_context
                 else:
                     extended_message = original_message
-
-                # Create a temporary message list that includes the extended user message.
+                print(f"Extended: {extended_message}")
                 local_messages = self.messages + [{"role": "user", "content": extended_message}]
 
                 answer = ""
-                # Use a progress indicator when processing the request.
                 with ProgressIndicator() as _:
                     chunk_iterator = operations.process_request(
                         self.model_tuple.large,
@@ -192,7 +171,6 @@ class EggChat:
                     for chunk in chunk_iterator:
                         answer += chunk
 
-                # Print assistant response header with timestamp.
                 timestamp = datetime.now().strftime('%I:%M:%S %p')
                 print_formatted_text(
                     FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]),
@@ -203,20 +181,16 @@ class EggChat:
                     self.config.color_scheme, answer
                 )
 
-                # Output via pager.
                 utils.pipe_output_via_pager(formatted_response)
-                print("")  # Add an empty line for separation
+                print("")
 
-                # Store the original message (without the retrieved context) in the conversation history.
                 self.messages.append({"role": "user", "content": original_message})
                 self.messages.append({"role": "assistant", "content": answer})
 
             except KeyboardInterrupt:
-                # Handle Ctrl+C to cancel the current input
                 self.pre_fill = ""
                 continue
             except EOFError:
-                # Handle Ctrl+D to exit
                 break
 
     def handle_command(self, prompt_input: str) -> bool:

@@ -7,14 +7,11 @@ such as indexing files, entering chat mode, listing history, and processing prom
 
 from typing import Optional
 import argparse
-import os
-from pathlib import Path
 
 from eigengen.providers import PROVIDER_CONFIGS
-from eigengen import operations, log, chat, utils, providers
+from eigengen import operations, log, chat, utils
 from eigengen.config import EggConfig
-from eigengen.eggrag import EggRag, NoOpEggRag
-from eigengen.embeddings import CodeEmbeddings
+
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -40,11 +37,6 @@ def parse_arguments() -> argparse.Namespace:
                         help="Enter chat mode")
     parser.add_argument("--chat-mode", "-M", default="programmer", choices=["general", "architect", "programmer"],
                         help="Choose operating mode")
-    parser.add_argument("--add-git", action="store_true",
-                        help="Add all Git-tracked files to RAG database")
-    # New argument for Git file pattern filtering (e.g., "*.py")
-    parser.add_argument("--git-pattern", help="Pattern to filter Git-tracked files (e.g., '*.py')")
-    # NEW: RAG functionality control
     parser.add_argument("--rag", action="store_true",
                         help="Enable Retrieval Augmented Generation functionality")
     args = parser.parse_args()
@@ -57,12 +49,6 @@ def handle_modes(config: EggConfig) -> None:
     Args:
         config (EggConfig): Loaded configuration object with applied command-line arguments.
     """
-    if config.args.add_git:
-        if config.args.rag:
-            _handle_git_rag_mode(config)
-        else:
-            log.print("RAG is disabled. Ignoring '--add-git' option.")
-        return
 
     if config.args.list_history is not None:
         # List the last N prompts from the history
@@ -94,39 +80,6 @@ def handle_modes(config: EggConfig) -> None:
     # Execute the default mode operation
     operations.default_mode(config.model, list(user_files or []), prompt)
 
-def _handle_git_rag_mode(config: EggConfig) -> None:
-    """
-    Handle Git-to-RAG ingestion mode.
-    """
-    # Pass the git pattern (if any) to get_git_files.
-    git_pattern = getattr(config.args, "git_pattern", None)
-    git_files = utils.get_git_files(git_pattern)
-    if not git_files:
-        log.print("No Git-tracked files found")
-        return
-
-    # Configure RAG database path
-    config_dir = os.path.expanduser("~/.eigengen")
-    rag_db_path = os.path.join(config_dir, "rag.db")
-
-    # Initialize RAG components
-    embedding_dim = 1024
-    rag = EggRag(
-        model=providers.create_model_tuple(config.model).summary,
-        db_path=rag_db_path,
-        embedding_dim=embedding_dim,
-        embeddings_provider=CodeEmbeddings()
-    )
-
-    # Process files using the common helper function.
-    count = 0
-    for file_path in git_files:
-        full_path = str(Path(file_path).resolve())
-        result = utils.process_file_for_rag(full_path, rag, for_chat=False, print_error=True)
-        if result is not None or result is None:  # if no exception, count the file
-            print(f"Added to RAG: {file_path}")
-            count += 1
-    print(f"Indexed {count} files to RAG database")
 
 def prepare_prompt(config: EggConfig) -> Optional[str]:
     """
@@ -144,6 +97,7 @@ def prepare_prompt(config: EggConfig) -> Optional[str]:
 
     # Open an editor for the user to input the prompt
     return utils.get_prompt_from_editor_with_prefill(config, "")
+
 
 def main() -> None:
     """
