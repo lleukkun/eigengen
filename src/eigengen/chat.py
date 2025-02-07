@@ -158,7 +158,7 @@ class EggChat:
                     extended_message = original_message + "\n\nRetrieved Context:\n" + rag_context
                 else:
                     extended_message = original_message
-                print(f"Extended: {extended_message}")
+
                 local_messages = self.messages + [{"role": "user", "content": extended_message}]
 
                 answer = ""
