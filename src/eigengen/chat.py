@@ -19,7 +19,7 @@ from eigengen.config import EggConfig
 from eigengen.providers import PROVIDER_CONFIGS
 
 # New imports for EggRag support
-from eigengen.eggrag import EggRag
+from eigengen.eggrag import EggRag, NoOpEggRag
 from eigengen.embeddings import CodeEmbeddings
 
 class CustomStyle(pygments.style.Style):
@@ -69,20 +69,19 @@ class EggChat:
 
         # find current git root if any
         self.git_root = utils.find_git_root()
-
-        # keep a set of file paths that have been introduced to the chat history
-        # to avoid spamming the chat with the same file content
         self.files_history: set[str] = set()
 
-        # Initialize EggRag instance to store file embeddings.
-        # The EggRag database will be located at ~/.eigengen/rag.db.
-        rag_db_path = os.path.expanduser("~/.eigengen/rag.db")
-        os.makedirs(os.path.dirname(rag_db_path), exist_ok=True)
-        embedding_dim = 1024  # Adjust the embedding dimension if needed.
-        embeddings_provider = CodeEmbeddings()
-        self.egg_rag = EggRag(self.model_tuple.summary, rag_db_path, embedding_dim, embeddings_provider)
+        # NEW: Use RAG only if enabled; otherwise, use a no-op object.
+        if config.args.rag:
+            rag_db_path = os.path.expanduser("~/.eigengen/rag.db")
+            os.makedirs(os.path.dirname(rag_db_path), exist_ok=True)
+            embedding_dim = 1024  # Adjust the embedding dimension if needed.
+            embeddings_provider = CodeEmbeddings()
+            self.egg_rag = EggRag(self.model_tuple.summary, rag_db_path, embedding_dim, embeddings_provider)
+        else:
+            self.egg_rag = NoOpEggRag()
 
-        # Process user provided files: concatenate them for chat display and add each to EggRag.
+        # Process user provided files: if RAG is enabled, index them; otherwise, simply include for chat.
         self.file_content = ""
         if user_files:
             for fname in user_files:
@@ -90,7 +89,8 @@ class EggChat:
                     continue
                 self.files_history.add(fname)
                 abs_path = os.path.abspath(fname)
-                print(f"Processing file: {abs_path}")  # <-- New print statement
+                print(f"Processing file: {abs_path}")
+                # process_file_for_rag will call egg_rag.add_file on our instance.
                 result = utils.process_file_for_rag(abs_path, self.egg_rag, for_chat=True)
                 if result:
                     self.file_content += "\n" + result

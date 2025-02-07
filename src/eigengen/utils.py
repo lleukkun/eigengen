@@ -218,19 +218,26 @@ def pipe_output_via_pager(output_str: str) -> None:
             pager.stdin.close()
         pager.wait()
 
-def get_git_files() -> list[str]:
+def get_git_files(pattern: Optional[str] = None) -> list[str]:
     """
-    Returns list of Git-tracked files in current repository.
+    Returns list of Git-tracked files in the current repository.
+    If a pattern is provided, it will be used to limit the files. For example, passing "*.py"
+    will return only Python files.
     """
     try:
-        result = subprocess.run(
-            ["git", "ls-files", "-z"], capture_output=True, check=True
-        )
+        # If a pattern is specified, add '--' then the pattern to the command so that it is interpreted correctly.
+        if pattern:
+            result = subprocess.run(
+                ["git", "ls-files", "-z", "--", pattern], capture_output=True, check=True
+            )
+        else:
+            result = subprocess.run(
+                ["git", "ls-files", "-z"], capture_output=True, check=True
+            )
         return result.stdout.decode("utf-8").split("\x00")[:-1]
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"Git error: {str(e)}")
         return []
-
 
 def find_git_root() -> Optional[str]:
     """

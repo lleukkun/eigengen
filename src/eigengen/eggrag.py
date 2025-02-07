@@ -232,3 +232,11 @@ class EggRag:
         meta_cur = self.db.execute(meta_query_sql, final_ids)
         results = meta_cur.fetchall()
         return results
+
+# NEW: No-Operation implementation when RAG is disabled.
+class NoOpEggRag:
+    def add_file(self, file_path: str, modification_time: int, content: str) -> None:
+        print(f"RAG is disabled. Skipping indexing for '{file_path}'.")
+
+    def retrieve(self, query_content: str, top_n: int, path_prefix: str | None = None) -> list[tuple[str, int, str]]:
+        return []

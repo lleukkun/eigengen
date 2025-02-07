@@ -13,7 +13,7 @@ from pathlib import Path
 from eigengen.providers import PROVIDER_CONFIGS
 from eigengen import operations, log, chat, utils, providers
 from eigengen.config import EggConfig
-from eigengen.eggrag import EggRag
+from eigengen.eggrag import EggRag, NoOpEggRag
 from eigengen.embeddings import CodeEmbeddings
 
 def parse_arguments() -> argparse.Namespace:
@@ -42,9 +42,12 @@ def parse_arguments() -> argparse.Namespace:
                         help="Choose operating mode")
     parser.add_argument("--add-git", action="store_true",
                         help="Add all Git-tracked files to RAG database")
-
+    # New argument for Git file pattern filtering (e.g., "*.py")
+    parser.add_argument("--git-pattern", help="Pattern to filter Git-tracked files (e.g., '*.py')")
+    # NEW: RAG functionality control
+    parser.add_argument("--rag", action="store_true",
+                        help="Enable Retrieval Augmented Generation functionality")
     args = parser.parse_args()
-
     return args
 
 def handle_modes(config: EggConfig) -> None:
@@ -55,7 +58,10 @@ def handle_modes(config: EggConfig) -> None:
         config (EggConfig): Loaded configuration object with applied command-line arguments.
     """
     if config.args.add_git:
-        _handle_git_rag_mode(config)
+        if config.args.rag:
+            _handle_git_rag_mode(config)
+        else:
+            log.print("RAG is disabled. Ignoring '--add-git' option.")
         return
 
     if config.args.list_history is not None:
@@ -92,8 +98,9 @@ def _handle_git_rag_mode(config: EggConfig) -> None:
     """
     Handle Git-to-RAG ingestion mode.
     """
-    # Get Git files
-    git_files = utils.get_git_files()
+    # Pass the git pattern (if any) to get_git_files.
+    git_pattern = getattr(config.args, "git_pattern", None)
+    git_files = utils.get_git_files(git_pattern)
     if not git_files:
         log.print("No Git-tracked files found")
         return
