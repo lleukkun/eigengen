@@ -219,8 +219,6 @@ class EggChat:
                 # Handle Ctrl+D to exit
                 break
 
-
-
     def handle_command(self, prompt_input: str) -> bool:
         command, *args = prompt_input.strip().split(maxsplit=1)
 
@@ -239,7 +237,6 @@ class EggChat:
         }.get(command, _unknown_command)
 
         return handler(*args) if args else handler()
-
 
     def handle_help(self) -> bool:
         """Handle the /help command."""
@@ -281,12 +278,22 @@ class EggChat:
         else:
             paths = set(paths_input.split())
 
-        for filepath in paths:
-            meld.meld_changes(self.model_tuple.small, filepath, last_assistant_message)
-            # Reindex the affected file after melding changes.
-            abs_filepath = os.path.abspath(filepath)
+        for f in paths:
+            # If we have a git root and the file is not an absolute path, assume that
+            # the assistant message provided a path relative to the git root.
+            if self.git_root and not os.path.isabs(f):
+                full_path = os.path.normpath(os.path.join(self.git_root, f))
+                # Convert full path into a path relative to the current working directory.
+                adjusted = os.path.relpath(full_path, os.getcwd())
+            else:
+                adjusted = f
+            # Pass the git_root into meld_changes so that the code block matching
+            # in meld.py can compute absolute paths consistently.
+            meld.meld_changes(self.model_tuple.small, adjusted, last_assistant_message, git_root=self.git_root)
+            # Reindex using the adjusted file path.
+            abs_filepath = os.path.abspath(adjusted)
             utils.process_file_for_rag(abs_filepath, self.egg_rag, for_chat=False)
-            print(f"Reindexed file: {filepath}")  # <-- New print statement
+            print(f"Reindexed file: {adjusted}")
 
         return True
 
