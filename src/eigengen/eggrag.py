@@ -55,10 +55,9 @@ class EggRag:
         return contexts
 
 
-# NEW: Also update NoOpEggRag to accept the extra parameter.
 class NoOpEggRag:
     def add_file(self, file_path: str, modification_time: int, content: str) -> None:
         print(f"RAG is disabled. Skipping indexing for '{file_path}'.")
 
-    def retrieve(self, query_content: str, top_n: int, path_prefix: str, *, target_files: list[str] | None = None) -> list[tuple[str, int, str]]:
+    def retrieve(self, target_files: list[str]) -> list[tuple[str, int, str]]:
         return []

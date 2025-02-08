@@ -85,11 +85,10 @@ class EggChat:
                 if abs_path in self.files_history:
                     continue
                 self.files_history.add(abs_path)
-                print(f"Processing file: {abs_path}")
+
                 # read the file content
                 with open(abs_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    print("adding to prefill")
                     # if we have a git root, we want to use a git root relative path for
                     # the code block
                     if self.git_root:
