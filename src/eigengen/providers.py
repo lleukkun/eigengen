@@ -14,6 +14,8 @@ from google import genai
 from google.genai import types
 from mistralai import Mistral
 
+from eigengen import config
+
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 
@@ -346,60 +348,67 @@ class MistralProvider(Provider):
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
 
-def get_api_key(provider: str) -> str:
+def get_api_key(provider: str, config: config.EggConfig) -> str:
     env_var_name = f"{provider.upper()}_API_KEY"
-    api_key = os.environ.get(env_var_name)
-    if not api_key:
+    api_key = os.environ.get(env_var_name, None)
+    if api_key:
+        # we use environment variable if it is set
+        return api_key
+
+    config_file_key = getattr(config, f"{provider.lower()}_api_key")
+
+    if not config_file_key:
         raise ValueError(f"{env_var_name} environment variable is not set")
-    return api_key
+
+    return config_file_key
 
 
-def create_model_tuple(nickname: str) -> ModelTuple:
+def create_model_tuple(nickname: str, config: config.EggConfig) -> ModelTuple:
     if nickname not in PROVIDER_CONFIGS:
         raise ValueError(f"Invalid model nickname: {nickname}")
 
-    config = PROVIDER_CONFIGS[nickname]
+    model_config = PROVIDER_CONFIGS[nickname]
     provider = None
-    if config.provider == "ollama":
+    if model_config.provider == "ollama":
         provider = OllamaProvider()
-    elif config.provider == "anthropic":
-        api_key = get_api_key("anthropic")
+    elif model_config.provider == "anthropic":
+        api_key = get_api_key("anthropic", config)
         client = anthropic.Anthropic(api_key=api_key)
         provider =  AnthropicProvider(client)
-    elif config.provider == "groq":
-        api_key = get_api_key("groq")
+    elif model_config.provider == "groq":
+        api_key = get_api_key("groq", config)
         client = groq.Groq(api_key=api_key)
         provider = GroqProvider(client)
-    elif config.provider == "openai":
-        api_key = get_api_key("openai")
+    elif model_config.provider == "openai":
+        api_key = get_api_key("openai", config)
         client = openai.OpenAI(api_key=api_key)
         provider = OpenAIProvider(client)
-    elif config.provider == "google":
-        api_key = get_api_key("google")
+    elif model_config.provider == "google":
+        api_key = get_api_key("google", config)
         client = genai.Client(api_key=api_key)
         provider = GoogleProvider(client)
-    elif config.provider == "mistral":
-        api_key = get_api_key("mistral")
+    elif model_config.provider == "mistral":
+        api_key = get_api_key("mistral", config)
         client = Mistral(api_key=api_key)
         provider = MistralProvider(client)
-    elif config.provider == "deepseek":
-        api_key = get_api_key("deepseek")
+    elif model_config.provider == "deepseek":
+        api_key = get_api_key("deepseek", config)
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         provider = OpenAIProvider(client)
     else:
-        raise ValueError(f"Invalid provider specified: {config.provider}")
+        raise ValueError(f"Invalid provider specified: {model_config.provider}")
     return ModelTuple(large=Model(provider=provider,
-                                 model_name=config.model,
-                                 temperature=config.temperature,
-                                 max_tokens=config.max_tokens),
+                                 model_name=model_config.model,
+                                 temperature=model_config.temperature,
+                                 max_tokens=model_config.max_tokens),
                       small=Model(provider=provider,
-                                 model_name=config.mini_model,
-                                 temperature=config.temperature,
-                                 max_tokens=config.max_tokens),
+                                 model_name=model_config.mini_model,
+                                 temperature=model_config.temperature,
+                                 max_tokens=model_config.max_tokens),
                       summary=Model(provider=provider,
-                                    model_name=config.summary_model,
-                                    temperature=config.temperature,
-                                    max_tokens=config.max_tokens))
+                                    model_name=model_config.summary_model,
+                                    temperature=model_config.temperature,
+                                    max_tokens=model_config.max_tokens))
 
 def get_model_config(nickname: str) -> ProviderConfig:
     if nickname not in PROVIDER_CONFIGS:

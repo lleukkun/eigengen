@@ -206,14 +206,30 @@ def get_formatted_response_with_syntax_highlighting(color_scheme: str, response:
 
     return output.getvalue()
 
+def is_running_in_powershell():
+    """Detects if the script is running inside PowerShell."""
+    return "PSModulePath" in os.environ
+
 def pipe_output_via_pager(output_str: str) -> None:
     """
     Pipes the given string to a pager like 'less', retaining colors.
     """
-    pager_command = os.environ.get('PAGER', 'less -R -E -X')
+    # Get the pager command from the environment, defaulting to 'less' on linux and macos
+    # On Windows, 'more' is used as 'less' is not available by default
+
+    # test if the OS is Windows
+    pager_command = None
+    encoding = "utf-8"
+    if os.name == "nt":
+        pager_command = os.environ.get('PAGER', 'more')
+        if is_running_in_powershell():
+            encoding = "utf-16"
+    else:
+        pager_command = os.environ.get('PAGER', 'less -R -E -X')
+
     with subprocess.Popen(pager_command, shell=True, stdin=subprocess.PIPE) as pager:
         if pager.stdin is not None:
-            pager.stdin.write(output_str.encode('utf-8'))
+            pager.stdin.write(output_str.encode(encoding))
             pager.stdin.close()
         pager.wait()
 

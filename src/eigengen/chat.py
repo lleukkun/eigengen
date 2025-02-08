@@ -56,7 +56,7 @@ class EggChat:
                  config: EggConfig,
                  user_files: Optional[List[str]]):
         self.config = config  # Store the passed config
-        self.model_tuple = providers.create_model_tuple(config.model)
+        self.model_tuple = providers.create_model_tuple(config.model, config)
         self.mode = config.args.chat_mode
         self.quoting_state = {
             "current_index": -1,

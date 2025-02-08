@@ -9,6 +9,11 @@ class EggConfig:
     model: str = "claude"
     editor: str = "nano"
     color_scheme: str = "github-dark"
+    openai_api_key: Optional[str] = None
+    google_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    mistral_api_key: Optional[str] = None
 
     # command line arguments are carried here but not stored in config file
     args: argparse.Namespace = field(default_factory=lambda: argparse.Namespace())
@@ -21,10 +26,10 @@ class EggConfig:
         """
         if config_path is None:
             config_path = os.path.expanduser("~/.eigengen/config.json")
-        
+
         if not os.path.exists(config_path):
             return EggConfig()
-        
+
         try:
             with open(config_path, 'r') as f:
                 data = json.load(f)
@@ -32,6 +37,11 @@ class EggConfig:
                 model=data.get("model", "claude"),
                 editor=data.get("editor", "nano"),
                 color_scheme=data.get("color_scheme", "github-dark"),
+                openai_api_key=data.get("openai_api_key", None),
+                google_api_key=data.get("google_api_key", None),
+                groq_api_key=data.get("groq_api_key", None),
+                anthropic_api_key=data.get("anthropic_api_key", None),
+                mistral_api_key=data.get("mistral_api_key", None),
                 args=argparse.Namespace()
             )
         except Exception as e:
@@ -44,7 +54,7 @@ class EggConfig:
         """
         if config_path is None:
             config_path = os.path.expanduser("~/.eigengen/config.json")
-        
+
         try:
             with open(config_path, 'w') as f:
                 json.dump({
