@@ -1,6 +1,8 @@
 import os
 import re
 import tokenize
+import keyword
+import builtins
 from typing import List, Dict
 
 
@@ -29,13 +31,19 @@ class PythonParser(BaseParser):
     def parse(self) -> List[Dict]:
         tokens = []
         word_re = re.compile(r"\w+")
+        # Prepare sets for filtering: keywords and built-in names.
+        keyword_set = set(keyword.kwlist)
+        builtin_set = set(dir(builtins))
         try:
             with open(self.file_path, "rb") as f:
                 token_generator = tokenize.tokenize(f.readline)
                 for tok in token_generator:
-                    # Always extract names from code.
+                    # Extract actual code names.
                     if tok.type == tokenize.NAME:
                         token_text = tok.string
+                        # Skip if token_text is a Python keyword or built-in.
+                        if token_text in keyword_set or token_text in builtin_set:
+                            continue
                         tokens.append(
                             {
                                 "token": token_text,
@@ -44,9 +52,13 @@ class PythonParser(BaseParser):
                                 "file": self.file_path,
                             }
                         )
-                    # Only extract tokens from strings and comments if option is enabled.
+                    # Optionally extract tokens from strings and comments.
                     elif self.extract_comments_and_strings and tok.type in (tokenize.STRING, tokenize.COMMENT):
+                        # For comment/string tokens, compare in lowercase.
                         for word in word_re.findall(tok.string):
+                            if word.lower() in {w.lower() for w in keyword_set} or \
+                               word.lower() in {w.lower() for w in builtin_set}:
+                                continue
                             tokens.append(
                                 {
                                     "token": word.lower(),  # convert to lowercase for natural language tokens
@@ -156,3 +168,4 @@ if __name__ == "__main__":
         file_tokens = FileParser.parse_file(file)
         all_tokens.extend(file_tokens)
         print(f"Tokens from {file}:", file_tokens)
+

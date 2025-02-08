@@ -90,7 +90,14 @@ class EggChat:
                 with open(abs_path, "r", encoding="utf-8") as f:
                     content = f.read()
                     print("adding to prefill")
-                    self.initial_file_content += "\n" + utils.encode_code_block(content, fname)
+                    # if we have a git root, we want to use a git root relative path for
+                    # the code block
+                    if self.git_root:
+                        rel_path = os.path.relpath(abs_path, self.git_root)
+                        content = utils.encode_code_block(content, rel_path)
+                    else:
+                        content = utils.encode_code_block(content, fname)
+                    self.initial_file_content += "\n" + content
                 self.target_files.append(abs_path)
 
         self.kbm = keybindings.ChatKeyBindingsManager(self.quoting_state, self.messages)
@@ -258,17 +265,12 @@ class EggChat:
             if self.git_root and not os.path.isabs(f):
                 full_path = os.path.normpath(os.path.join(self.git_root, f))
                 # Convert full path into a path relative to the current working directory.
-                adjusted = os.path.relpath(full_path, os.getcwd())
+                adjusted = os.path.relpath(full_path, self.git_root)
             else:
                 adjusted = f
             # Pass the git_root into meld_changes so that the code block matching
             # in meld.py can compute absolute paths consistently.
             meld.meld_changes(self.model_tuple.small, adjusted, last_assistant_message, git_root=self.git_root)
-            # Reindex using the adjusted file path.
-            abs_filepath = os.path.abspath(adjusted)
-            utils.process_file_for_rag(abs_filepath, self.egg_rag, for_chat=False)
-            print(f"Reindexed file: {adjusted}")
-
         return True
 
     def handle_model(self, *args) -> bool:

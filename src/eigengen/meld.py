@@ -19,35 +19,33 @@ def meld_changes(model: providers.Model, filepath: str, response: str, git_root:
 
     code_blocks = utils.extract_code_blocks(response)
     target_block = None
+    target_full_path = None
+    if git_root:
+        target_full_path = os.path.abspath(os.path.join(git_root, filepath))
 
-    # Normalize the target file’s absolute path based on current working directory.
-    target_abs = os.path.abspath(filepath)
-    for _, block_lang, block_path, block_content, _, _ in code_blocks:
+    for _, _, block_path, block_content, _, _ in code_blocks:
         if not block_path:
             continue  # Skip blocks without path information
 
         # If git_root is available and the block path is not absolute, assume it is relative to git_root.
-        if git_root and not os.path.isabs(block_path):
-            block_abs = os.path.abspath(os.path.join(git_root, block_path))
-        else:
-            block_abs = os.path.abspath(block_path)
+        block_full_path = os.path.abspath(block_path) if not git_root else os.path.abspath(os.path.join(git_root, block_path))
 
-        if block_abs == target_abs:
+        if block_full_path == target_full_path:
             target_block = block_content
             break
 
     if not target_block:
-        print(f"No code block found for file: {filepath}")
+        print(f"No code block found for file: {target_full_path}")
         return
 
     try:
-        with open(filepath, "r") as f:
+        with open(target_full_path, "r") as f:
             original_content = f.read()
     except FileNotFoundError:
         # This is perfectly ok, we're expected to create the file if it doesn't exist.
         original_content = ""
 
-    apply_meld(model, filepath, original_content, response)
+    apply_meld(model, target_full_path, original_content, response)
 
 
 def apply_meld(model: providers.Model, filepath: str, original_content: str, change_content: str) -> None:
@@ -97,14 +95,17 @@ def apply_meld(model: providers.Model, filepath: str, original_content: str, cha
     if processed_file_lines and processed_file_lines[0].startswith("```"):
         # We expect the output to be wrapped in fences but some models may not.
         processed_file_lines = processed_file_lines[1:-1]
-
+    # we will apply the diff by running patch in current working directory, so we need to make
+    # the file paths relative to the current working directory
+    current_working_directory = os.getcwd()
+    rel_filepath = os.path.relpath(filepath, current_working_directory)
     # Generate a unified diff between the original content and the updated content
     diff_output = "\n".join(
         difflib.unified_diff(
             original_content.splitlines(),
             processed_file_lines,
-            fromfile=f"a/{filepath}",
-            tofile=f"b/{filepath}",
+            fromfile=f"a/{rel_filepath}",
+            tofile=f"b/{rel_filepath}",
             lineterm=""
         )
     ) + "\n"  # Add final newline
@@ -116,8 +117,8 @@ def apply_meld(model: providers.Model, filepath: str, original_content: str, cha
     apply_changes = input("Do you want to apply these changes? (y/n): ").strip().lower()
     if apply_changes in ('y', 'yes'):
         try:
-            patch_process = subprocess.Popen(["patch", "-u", "-p1", filepath], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            patch_stdout, patch_stderr = patch_process.communicate(input=diff_output.encode())
+            patch_process = subprocess.Popen(["patch", "-u", "-p1", rel_filepath], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            _, patch_stderr = patch_process.communicate(input=diff_output.encode())
             if patch_process.returncode == 0:
                 print("Changes applied successfully.")
             else:
