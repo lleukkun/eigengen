@@ -1,28 +1,27 @@
 EigenGen
 ========
 
-EigenGen is a CLI Large Language Model frontend. It is designed for working with code and incorporates
-a locally running content retrieval system (RAG) based on sqlite-vec for database and
-SFR-Embedding-Code-2B_R for embeddings. EigenGen uses a two-stage process where larger LLM
-is used to solve the task and produce dense output, which is then given to a smaller LLM which
-applies the changes and produces the complete file output. Finally this is then used to produce
-diffs which the user can choose to apply.
+EigenGen is a CLI Large Language Model frontend. It is designed for working with code.
+EigenGen uses a two-stage process where larger LLM is used to solve the task and produce
+dense output, which is then given to a smaller LLM which applies the changes and produces
+the complete file output. Finally this is then used to produce diffs which the user can
+choose to apply.
 
 ### Supported Models
 EigenGen currently works correctly with:
   - DeepSeek deepseek-r1 (/meld by v3)
   - OpenAI o3-mini, o1 (/meld by gpt-4o-mini)
-  - Anthropic claude-3-5-sonnet (uses same model for /meld operation, haiku has too low output token limit)
+  - Anthropic claude-3-5-sonnet (uses same model for /meld operation)
   - deepseek-r1:70b via Groq (/meld by same)
   - Google gemini-2.0-flash-thinking-exp (/meld by gemini-2.0-flash-exp)
   - Mistral Large v2 (/meld uses the same)
 
 ## Features
 
-  - Integrated RAG functionality for context retrieval, powered by locally executed SFR-Embedding-Code-2B_R
-    along with sqlite-vec database. egg --add-git can be used to add git repositories to the database.
   - --chat mode allows discussing the changes and when the assistant answers with code blocks,
     they can be applied with '/meld' command.
+  - -d -p "your prompt" will give you a diff of the changes printed to stdout
+  - -f [files...] allows you to specify the context to use
 
 
 
@@ -42,6 +41,8 @@ or
 export GOOGLE_API_KEY=<your-api-key>
 or
 export MISTRAL_API_KEY=<your-api-key>
+or
+export DEEPSEEK_API_KEY=<your-api-key>
 ```
 
 ## Configuration
@@ -53,8 +54,8 @@ Supported color schemes are everything from [pygments](https://pygments.org/styl
 
   - In addition to `eigengen` executable, we provide `egg` as well. It's shorter.
   - EigenGen can use `EDITOR` environment variable to pick the text editor.
-  - Combining the two, for Sublime Text you can: `alias egg='EDITOR="subl -w" egg -m gpt4'`
-  - Or if you're into VSCode: `alias egg='EDITOR="code -w" egg -m gpt4'`.
+  - Combining the two, for Sublime Text you can: `alias egg='EDITOR="subl -w" egg -m o3-mini'`
+  - Or if you're into VSCode: `alias egg='EDITOR="code -w" egg -m o3-mini'`.
   - Vim/Neovim/Emacs users can probably figure out their own solutions.
   - Paths above are for Linux. MacOS and Windows binaries may not be in PATH, so you need to find them first.
 
@@ -87,4 +88,5 @@ eigengen -m o3-mini -p "your prompt content"
   - testing and cleanups
 
 ## TODO:
-  - Reintroduce diff mode. Should be done so it reuses the logic from chat /meld command.
+  - Fix tests
+  - Context construction requires a lot more work. Goal is to be able to work with linux kernel sized projects.
