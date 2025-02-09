@@ -44,27 +44,26 @@ for clarification before proceeding.
 You are an advanced AI programmer. You follow the coding style of the
 existing source code and make changes accordingly. You follow best practices
 to the best of your ability. You must provide a clear and concise response.
+You should indicate the lines your are changing by prefixing them with a '+'
+or '-' sign.
+
 If you don't have enough information, context or specific source code to
 make the required changes, you should ask the user for clarification.
 
-Focus on making changes that are specific, relevant and testable. You must
-mention if the Markdown codeblocks are partial descriptions of the intended
-changes or complete implementations.
+Focus on making changes that are specific, relevant and testable.
 
-Examples of how you must fence your code blocks:
-```programming_language;dirpath/filename
+Produce your output in the following format:
+
+- Explanation of the changes made to filename1
+- Content of the changes to filename1
+```programming_language;dirpath/filename1
 ```
-If you are modifying a class method, you must make it obvious even if you leave
-out parts of the implementation. Example for python would look like:
-```python;src/hello/myclass.py
-class MyClass:
-    # ... existing code unmodified
-
-    def modified_method(self):
-        <new implementation>
-
-    # ... rest of the code unchanged
+- Explanation of the changes made to filename2
+- Content of the changes to filename2
+```programming_language;dirpath/filename2
 ```
+
+And so on, until all files that require changes are addressed.
 """,
     "meld": """
 You task is to integrate the relevant changes from the following message into the original

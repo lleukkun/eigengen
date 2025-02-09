@@ -48,35 +48,55 @@ CHAT_HELP = (
     "Ctrl + X, E           Open the prompt in your default editor ($EDITOR).\n"
     "Ctrl + X, Y           Copy the entire conversation to the clipboard.\n"
     "Ctrl + X, Up Arrow    Cycle through response code blocks and quote them in the buffer.\n"
-    "\nFeel free to use these commands to manage your chat session effectively!"
 )
 
 class EggChat:
-    def __init__(self,
-                 config: EggConfig,
-                 user_files: Optional[List[str]]):
+    """
+    EggChat encapsulates the interactive and non-interactive chat sessions with the LLM.
+
+    This class handles setting up context from user files and operating modes.
+    It supports interactive mode (chat_mode) with command handling as well as single-prompt mode (auto_chat).
+ 
+    Attributes:
+        config (EggConfig): Configuration settings including model and chat options.
+        model_tuple (ModelTuple): Models used for processing requests.
+        mode (str): The current operational mode (general, architect, programmer).
+        quoting_state (dict): Contains state for cycling and quoting code blocks.
+        messages (List[Dict[str, str]]): Conversation history.
+        pre_fill (str): Prefilled text for the next prompt.
+        git_root (Optional[str]): Root path of the Git repository (if any).
+        files_history (set[str]): Set of file paths already processed.
+        egg_rag: Instance for Retrieval Augmented Generation (or NoOp).
+        target_files (List[str]): List of target file paths for context.
+        initial_file_content (str): Content read from target files.
+        kbm (ChatKeyBindingsManager): Manager for custom keybindings.
+    """
+    def __init__(self, config: EggConfig, user_files: Optional[List[str]]):
+        """
+        Initialize a new EggChat session.
+
+        Args:
+            config (EggConfig): The configuration object with settings.
+            user_files (Optional[List[str]]): List of file paths to include as context.
+        """
         self.config = config  # Store the passed config
         self.model_tuple = providers.create_model_tuple(config.model, config)
         self.mode = config.args.chat_mode
-        self.quoting_state = {
-            "current_index": -1,
-            "code_blocks": None,
-            "cycle_iterator": None
-        }
+        self.quoting_state = {"current_index": -1, "code_blocks": None, "cycle_iterator": None}
         self.messages: List[Dict[str, str]] = []
         self.pre_fill = ""
 
-        # find current git root if any
+        # Find the Git repository root (if available)
         self.git_root = utils.find_git_root()
         self.files_history: set[str] = set()
 
-        # NEW: Use RAG only if enabled; otherwise, use a no-op object.
+        # Initialize retrieval augmentation if enabled
         if config.args.rag:
             self.egg_rag = EggRag()
         else:
             self.egg_rag = NoOpEggRag()
 
-        # NEW: Process user provided files as target files for context-construction.
+        # Process user-provided files for context construction.
         self.target_files = []
         self.initial_file_content = ""
         if user_files:
@@ -86,11 +106,9 @@ class EggChat:
                     continue
                 self.files_history.add(abs_path)
 
-                # read the file content
+                # Read the file content and encode it as a Markdown code block.
                 with open(abs_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    # if we have a git root, we want to use a git root relative path for
-                    # the code block
                     if self.git_root:
                         rel_path = os.path.relpath(abs_path, self.git_root)
                         content = utils.encode_code_block(content, rel_path)
@@ -106,7 +124,16 @@ class EggChat:
         initial_prompt: Optional[str] = None
     ) -> None:
         """
-        Initiates the chat mode, handling user inputs and interactions with the LLM.
+        Initiates interactive chat mode.
+
+        Continuously prompts the user for input via a terminal session, processes commands
+        (starting with '/'), augments context from files and RAG, and displays the LLM response.
+
+        Args:
+            initial_prompt (Optional[str]): An optional prefilled prompt to show in the input.
+
+        Returns:
+            None
         """
         session = PromptSession(key_bindings=self.kbm.get_kb(), clipboard=PyperclipClipboard())
         print(
@@ -144,13 +171,10 @@ class EggChat:
                     continue
 
                 original_message = prompt_input
-                # If any pre-filled content exists from target files, append it
                 if self.initial_file_content and self.initial_file_content.strip() != "":
                     original_message += "\n" + self.initial_file_content
                     self.initial_file_content = ""
 
-                # Retrieve additional context.
-                # NEW: If target files are provided, pass them into egg_rag.retrieve so it will use the new token-based context system.
                 retrieved_results = self.egg_rag.retrieve(
                     target_files=self.target_files if self.target_files else None
                 )
@@ -158,12 +182,9 @@ class EggChat:
                 if retrieved_results:
                     rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
 
-                # Append retrieved (aggregated) context if available.
-                extended_message = ""
+                extended_message = original_message
                 if rag_context:
                     extended_message = original_message + "\n\nRetrieved Context:\n" + rag_context
-                else:
-                    extended_message = original_message
 
                 local_messages = self.messages + [{"role": "user", "content": extended_message}]
 
@@ -182,11 +203,9 @@ class EggChat:
                     FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]),
                     style=style
                 )
-
                 formatted_response = utils.get_formatted_response_with_syntax_highlighting(
                     self.config.color_scheme, answer
                 )
-
                 utils.pipe_output_via_pager(formatted_response)
                 print("")
 
@@ -199,7 +218,106 @@ class EggChat:
             except EOFError:
                 break
 
+    def auto_chat(self, initial_prompt: str, diff_mode: bool = False) -> None:
+        """
+        Executes a single prompt non-interactively and prints the LLM response.
+        When diff_mode is enabled, diff output is generated comparing file content
+        against the code blocks in the assistant's message.
+
+        Args:
+            initial_prompt (str): The prompt text provided by the user.
+            diff_mode (bool): If True, only the diff output is printed to stdout.
+
+        Returns:
+            None
+        """
+        style = Style.from_dict({
+            "assistant": "ansigreen"
+        })
+
+        # Use the provided prompt and append any initial file context
+        original_message = initial_prompt
+        if self.initial_file_content and self.initial_file_content.strip() != "":
+            original_message += "\n" + self.initial_file_content
+            self.initial_file_content = ""
+
+        # Retrieve additional context if available
+        retrieved_results = self.egg_rag.retrieve(
+            target_files=self.target_files if self.target_files else None
+        )
+        rag_context = ""
+        if retrieved_results:
+            rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
+
+        extended_message = original_message
+        if rag_context:
+            extended_message = original_message + "\n\nRetrieved Context:\n" + rag_context
+
+        local_messages = self.messages + [{"role": "user", "content": extended_message}]
+
+        answer = ""
+        with ProgressIndicator() as _:
+            chunk_iterator = operations.process_request(
+                self.model_tuple.large,
+                local_messages,
+                prompts.get_prompt(self.mode)
+            )
+            for chunk in chunk_iterator:
+                answer += chunk
+
+        if diff_mode:
+            code_blocks = utils.extract_code_blocks(answer)
+            diff_found = False
+            for fence, lang, file_path, code, _, _ in code_blocks:
+                if file_path:
+                    # Adjust path based on git_root if available
+                    if self.git_root and not os.path.isabs(file_path):
+                        full_path = os.path.abspath(os.path.join(self.git_root, file_path))
+                    else:
+                        full_path = os.path.abspath(file_path)
+
+                    try:
+                        with open(full_path, "r") as f:
+                            original_content = f.read()
+                    except Exception:
+                        original_content = ""
+
+                    diff_text = utils.generate_unified_diff(
+                        original_content,
+                        code,
+                        fromfile=f"a/{file_path}",
+                        tofile=f"b/{file_path}"
+                    )
+                    print(diff_text)
+                    diff_found = True
+            if not diff_found:
+                print("No code blocks with file paths found in the response. No diff to show.")
+            return
+        else:
+            timestamp = datetime.now().strftime('%I:%M:%S %p')
+            print_formatted_text(
+                FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]),
+                style=style
+            )
+            formatted_response = utils.get_formatted_response_with_syntax_highlighting(
+                self.config.color_scheme, answer
+            )
+            utils.pipe_output_via_pager(formatted_response)
+            print("")
+
+            self.messages.append({"role": "user", "content": original_message})
+            self.messages.append({"role": "assistant", "content": answer})
+
     def handle_command(self, prompt_input: str) -> bool:
+        """
+        Processes a command input starting with '/' and routes it to the appropriate handler.
+
+        Args:
+            prompt_input (str): The full command string entered by the user.
+
+        Returns:
+            bool: True if the command was handled successfully.
+        """
         command, *args = prompt_input.strip().split(maxsplit=1)
 
         def _unknown_command() -> bool:
@@ -219,12 +337,12 @@ class EggChat:
         return handler(*args) if args else handler()
 
     def handle_help(self) -> bool:
-        """Handle the /help command."""
+        """Handle the '/help' command by displaying available commands."""
         print(CHAT_HELP)
         return True
 
     def handle_quote(self, file_to_quote: str) -> bool:
-        """Handle the /quote command."""
+        """Handle the '/quote' command by reading and quoting the specified file."""
         if os.path.exists(file_to_quote):
             with open(file_to_quote, 'r') as f:
                 content = f.read()
@@ -236,14 +354,17 @@ class EggChat:
         return True
 
     def handle_reset(self) -> bool:
-        """Handle the /reset command."""
+        """Handle the '/reset' command by clearing all conversation messages and file history."""
         self.messages = []
         self.files_history = set()
         print("Chat messages cleared.\n")
         return True
 
     def handle_meld(self, paths_input: Optional[str] = None) -> bool:
-        """Handle the /meld command."""
+        """Handle the '/meld' command by merging changes from the last assistant message into files.
+
+        If no file paths are provided, file paths are extracted from the last assistant message code blocks.
+        """
         last_assistant_message = next(
             (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
         )
@@ -273,8 +394,8 @@ class EggChat:
         return True
 
     def handle_model(self, *args) -> bool:
-        """Handle the /model command."""
-
+        """Handle the '/model' command for switching or displaying the current model."""
+        
         def print_supported_models():
             print("Supported models:")
             supported_models = list(PROVIDER_CONFIGS.keys())
@@ -298,7 +419,7 @@ class EggChat:
             return True
 
     def handle_mode(self, *args) -> bool:
-        """Handle the /mode command."""
+        """Handle the '/mode' command for switching or displaying the current operating mode."""
         if not args:
             print(f"Current mode: {self.mode}")
         else:
@@ -312,6 +433,6 @@ class EggChat:
         return True
 
     def handle_exit(self) -> bool:
-        """Handle the /exit command."""
+        """Handle the '/exit' command by terminating the chat session."""
         sys.exit(0)
         return True  # This line will not be reached, but added for consistency

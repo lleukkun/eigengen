@@ -29,7 +29,8 @@ def meld_changes(
         if not block_path:
             continue  # Skip blocks without path information
 
-        # If git_root is available and the block path is not absolute, assume it is relative to git_root.
+        # If git_root is available and the block path is not absolute, assume
+        # it is relative to git_root.
         block_full_path = (
             os.path.abspath(block_path)
             if not git_root
@@ -57,27 +58,19 @@ def meld_changes(
 def apply_meld(
     model: providers.Model, filepath: str, original_content: str, change_content: str
 ) -> None:
-    # Remove <think></think> tags and any intervening text from change_content.
-    change_content = re.sub(r"<think>.*?</think>", "", change_content, flags=re.DOTALL)
+    # Remove first <think></think> tags and any intervening text from change_content for
+    # deepseek models.
+    if model.model_name.startswith("deepseek"):
+        change_content = re.sub(r"<think>.*?</think>", "", change_content)
 
+    payload = (utils.encode_code_block(original_content, filepath)
+               + "\n" + utils.encode_code_block(change_content, "changes"))
     # Prepare the conversation messages to send to the LLM.
     messages = [
-        # Send the original file content to the LLM.
         {
             "role": "user",
-            "content": utils.encode_code_block(original_content, filepath),
-        },
-        {"role": "assistant", "content": "ok"},
-        # Send the change content to the LLM.
-        {"role": "user", "content": utils.encode_code_block(change_content, "changes")},
-        {"role": "assistant", "content": "ok"},
-        # Instruct the LLM to integrate changes into the original file.
-        {
-            "role": "user",
-            "content": f"You must integrate the relevant changes present in the changes file into the original {filepath}.\n"
-            "You must respond with only the full file contents.\n"
-            "You must not write anything else.",
-        },
+            "content": payload
+        }
     ]
 
     result = ""
@@ -114,19 +107,14 @@ def apply_meld(
     # --- Diff Preview ---
     current_working_directory = os.getcwd()
     rel_filepath = os.path.relpath(filepath, current_working_directory)
-    diff_output = (
-        "\n".join(
-            difflib.unified_diff(
-                original_content.splitlines(),
-                processed_file_lines,
-                fromfile=f"a/{rel_filepath}",
-                tofile=f"b/{rel_filepath}",
-                lineterm="",
-            )
-        )
-        + "\n"
-    )  # Ensure a final newline
-
+    new_content = "\n".join(processed_file_lines)
+    diff_output = utils.generate_unified_diff(
+        original_content,
+        new_content,
+        fromfile=f"a/{rel_filepath}",
+        tofile=f"b/{rel_filepath}"
+    )
+    
     # Show the diff to the user.
     utils.pipe_output_via_pager(diff_output)
 

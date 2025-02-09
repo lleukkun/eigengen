@@ -31,6 +31,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--files", "-f", nargs="+",
                         help="List of files to attach to the request (e.g., -f file1.txt file2.txt)")
     parser.add_argument("--prompt", "-p", help="Prompt string to use")
+    parser.add_argument("-d", action="store_true", help="Show diff output (used with -p and without --chat)")
     parser.add_argument("--list-history", nargs="?", const=5, type=int, metavar="N",
                         help="List the last N prompts (default 5)")
     parser.add_argument("--chat", "-c", action="store_true",
@@ -49,37 +50,25 @@ def handle_modes(config: EggConfig) -> None:
     Args:
         config (EggConfig): Loaded configuration object with applied command-line arguments.
     """
-
     if config.args.list_history is not None:
-        # List the last N prompts from the history
         log.list_prompt_history(config.args.list_history)
         return
 
-    # Initialize file lists
     user_files = config.args.files
 
-    # Combine user files and git files
-    combined_files = set()
-    if user_files:
-        combined_files.update(user_files)
-
-    if config.args.chat or config.args.prompt is None:
-        # Enter chat mode if --chat is specified or no prompt is provided
+    # If a prompt is provided on the command line and --chat is not specified,
+    # use the auto mode via chat.py rather than the default mode.
+    if config.args.prompt and not config.args.chat:
         egg_chat = chat.EggChat(config, list(user_files or []))
-        egg_chat.chat_mode(initial_prompt=config.args.prompt)
+        if config.args.d:
+            egg_chat.auto_chat(config.args.prompt, diff_mode=True)
+        else:
+            egg_chat.auto_chat(config.args.prompt)
         return
 
-    # Prepare the prompt
-    prompt = prepare_prompt(config)
-    if not prompt:
-        return
-
-    # Log the prompt for history
-    log.log_prompt(prompt)
-
-    # Execute the default mode operation
-    operations.default_mode(config.model, list(user_files or []), prompt)
-
+    # Otherwise, enter interactive chat mode.
+    egg_chat = chat.EggChat(config, list(user_files or []))
+    egg_chat.chat_mode(initial_prompt=config.args.prompt)
 
 def prepare_prompt(config: EggConfig) -> Optional[str]:
     """

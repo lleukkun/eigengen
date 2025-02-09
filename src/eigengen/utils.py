@@ -5,6 +5,7 @@ import subprocess
 import os
 import io  # Add this import for StringIO
 import pygments.formatters  # Ensure this import is present
+import difflib
 
 import pygments
 from pygments.lexers import get_lexer_by_name, guess_lexer
@@ -100,6 +101,31 @@ def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, in
         code_blocks.append((fence, actual_lang, actual_path, code, start_index, end_index))
 
     return code_blocks
+
+def generate_unified_diff(original_content: str, new_content: str, fromfile: str, tofile: str) -> str:
+    """
+    Generate a unified diff between original and new content.
+
+    Args:
+        original_content (str): The original file contents.
+        new_content (str): The new file contents.
+        fromfile (str): The file label for the original content.
+        tofile (str): The file label for the new content.
+
+    Returns:
+        str: The unified diff as a string with a trailing newline.
+    """
+    original_lines = original_content.splitlines()
+    new_lines = new_content.splitlines()
+    diff_lines = difflib.unified_diff(
+        original_lines,
+        new_lines,
+        fromfile=fromfile,
+        tofile=tofile,
+        lineterm=""
+    )
+    diff_text = "\n".join(diff_lines) + "\n"
+    return diff_text
 
 def get_prompt_from_editor_with_prefill(config: EggConfig, prefill_content: str) -> Optional[str]:
     """
@@ -268,3 +294,4 @@ def find_git_root() -> Optional[str]:
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return None
+
