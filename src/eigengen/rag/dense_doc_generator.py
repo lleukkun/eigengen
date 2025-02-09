@@ -4,7 +4,7 @@ dense_doc_generator.py
 
 This module scans source files to generate a dense text summary that lists
 all public classes and methods/functions along with their input/output signatures.
-Currently supports Python (.py) and TypeScript (.ts) files.
+Currently supports Python (.py), TypeScript (.ts), and C/C++ header files (.h, .hpp).
 """
 
 import os
@@ -13,6 +13,7 @@ import re
 import argparse
 from typing import List, Dict
 import pathspec
+import warnings
 
 ############# Python Parsing using AST #############
 class PythonDocVisitor(ast.NodeVisitor):
@@ -109,7 +110,9 @@ def parse_python_file(file_path: str) -> List[str]:
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
-        tree = ast.parse(source, filename=file_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(source, filename=file_path)
         visitor = PythonDocVisitor()
         visitor.visit(tree)
         return visitor.entries
@@ -173,10 +176,66 @@ def parse_typescript_file(file_path: str) -> List[str]:
             entries.append(f"  Method {method_name}({params.strip()}) -> {ret_type.strip()}")
     return entries
 
+############# C/C++ Header Parsing using Regex and Sanitization #############
+def sanitize_header_content(content: str) -> str:
+    """
+    Sanitize header file content by doubling backslashes that lead to invalid escape sequences.
+    This replaces a single backslash that is not followed by a valid escape character with two backslashes.
+    """
+    # Valid escapes in Python: \\, \', \", \a, \b, \f, \n, \r, \t, \v
+    return re.sub(r'\\(?![\\\'"abfnrtv])', r'\\\\', content)
+
+def parse_header_file(file_path: str) -> List[str]:
+    """
+    Performs a simplified regex parsing for C/C++ header files (.h, .hpp) to extract
+    public classes (and their public method prototypes) as well as free function prototypes.
+    """
+    entries = []
+    content = ""
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Sanitize header content to guard against invalid escape sequences from file content.
+        # content = sanitize_header_content(content)
+    except Exception as ex:
+        return [f"Error reading {file_path}: {ex}"]
+
+    # Remove multiline and single-line comments
+    content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
+    content = re.sub(r'//.*', '', content)
+
+    # Extract class definitions (C++ style only)
+    class_pattern = re.compile(r'\bclass\s+(\w+).*?\{(.*?)\};', re.DOTALL)
+    for class_match in class_pattern.finditer(content):
+        class_name, class_body = class_match.groups()
+        if class_name.startswith('_'):
+            continue
+        entries.append(f"Class {class_name}:")
+        # Attempt to extract the public section within the class body
+        public_match = re.search(r'public:\s*(.*?)(?=\n\s*(private:|protected:|$))', class_body, re.DOTALL)
+        if public_match:
+            public_section = public_match.group(1)
+            # Regex for method prototypes in public section:
+            method_pattern = re.compile(r'([^\s].*?[^\s])\s+(\w+)\s*\((.*?)\)\s*;', re.DOTALL)
+            for m in method_pattern.finditer(public_section):
+                ret_type, method_name, params = m.groups()
+                if method_name.startswith('_'):
+                    continue
+                entries.append(f"  Method {method_name}({params.strip()}) -> {ret_type.strip()}")
+
+    # Extract free function prototypes that are not inside classes
+    free_func_pattern = re.compile(r'^\s*([^\s].*?[^\s])\s+(\w+)\s*\((.*?)\)\s*;\s*$', re.MULTILINE)
+    for f_match in free_func_pattern.finditer(content):
+        ret_type, func_name, params = f_match.groups()
+        if func_name.startswith('_'):
+            continue
+        entries.append(f"Function {func_name}({params.strip()}) -> {ret_type.strip()}")
+    return entries
+
 ############# Generator Function #############
 def generate_dense_docs(target_directory: str, output_file: str) -> None:
     """
-    Scans the target directory (recursively) for source code files (.py and .ts)
+    Scans the target directory (recursively) for source code files (.py, .ts, .h, .hpp)
     and generates a dense text document listing public classes, methods, and functions
     with their signatures.
     """
@@ -194,18 +253,29 @@ def generate_dense_docs(target_directory: str, output_file: str) -> None:
 
     for root, _, files in os.walk(target_directory):
         for file in files:
-            if not (file.endswith(".py") or file.endswith(".ts")):
-                continue
-            file_path = os.path.join(root, file)
-            # Check against .gitignore patterns if available (patterns are relative to target_directory)
-            rel_for_gitignore = os.path.relpath(file_path, target_directory)
-            if spec and spec.match_file(rel_for_gitignore):
+            # Process Python, TypeScript, and now C/C++ header files
+            if file.endswith(".py"):
+                file_path = os.path.join(root, file)
+                # Check against .gitignore patterns if available
+                rel_for_gitignore = os.path.relpath(file_path, target_directory)
+                if spec and spec.match_file(rel_for_gitignore):
+                    continue
+                entries = parse_python_file(file_path)
+            elif file.endswith(".ts"):
+                file_path = os.path.join(root, file)
+                rel_for_gitignore = os.path.relpath(file_path, target_directory)
+                if spec and spec.match_file(rel_for_gitignore):
+                    continue
+                entries = parse_typescript_file(file_path)
+            elif file.endswith(".h") or file.endswith(".hpp"):
+                file_path = os.path.join(root, file)
+                rel_for_gitignore = os.path.relpath(file_path, target_directory)
+                if spec and spec.match_file(rel_for_gitignore):
+                    continue
+                entries = parse_header_file(file_path)
+            else:
                 continue
 
-            if file.endswith(".py"):
-                entries = parse_python_file(file_path)
-            else:
-                entries = parse_typescript_file(file_path)
             if entries:
                 # Produce file paths relative to the current working directory
                 rel_path = os.path.relpath(file_path, os.getcwd())
@@ -245,3 +315,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
