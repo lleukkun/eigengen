@@ -120,6 +120,20 @@ def main() -> None:
     # Store the remaining arguments
     config.args = args
 
+    # Glob wildcard file patterns on Windows only
+    import sys
+    if sys.platform == "win32" and config.args.files:
+        import glob
+        expanded_files = []
+        for pattern in config.args.files:
+            matches = glob.glob(pattern)
+            # If globbing yielded any files, use them; otherwise keep original pattern.
+            if matches:
+                expanded_files.extend(matches)
+            else:
+                expanded_files.append(pattern)
+        config.args.files = expanded_files
+
     # Handle the operational mode based on updated config
     handle_modes(config)
 
@@ -127,4 +141,3 @@ def main() -> None:
 if __name__ == "__main__":
     # Entry point of the script
     main()
-
