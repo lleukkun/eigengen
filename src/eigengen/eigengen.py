@@ -5,11 +5,12 @@ This script handles command-line arguments and initiates different modes of oper
 such as indexing files, entering chat mode, listing history, and processing prompts.
 """
 
-from typing import Optional
 import argparse
+from typing import Optional
+import sys
 
 from eigengen.providers import PROVIDER_CONFIGS
-from eigengen import operations, log, chat, utils
+from eigengen import log, chat, utils
 from eigengen.config import EggConfig
 
 
@@ -40,6 +41,8 @@ def parse_arguments() -> argparse.Namespace:
                         help="Choose operating mode")
     parser.add_argument("--rag", action="store_true",
                         help="Enable Retrieval Augmented Generation functionality")
+    parser.add_argument("--run-api", nargs="?", const="127.0.0.1:8000", metavar="ip:port",
+                        help="Start API server at ip:port address (default: 127.0.0.1:8000)")
     args = parser.parse_args()
     return args
 
@@ -109,8 +112,21 @@ def main() -> None:
     # Store the remaining arguments
     config.args = args
 
+    # If --run-api is specified, start the API server using FastHTML's serve() and exit.
+    if args.run_api is not None:
+        try:
+            ip, port = args.run_api.split(":")
+            port = int(port)
+        except Exception as e:
+            print(f"Error parsing --run-api value '{args.run_api}': {e}")
+            sys.exit(1)
+        from eigengen.chat_api import create_app
+        import uvicorn
+        uvicorn.run(create_app(config=config), host=ip, port=port)
+        return
+
     # Glob wildcard file patterns on Windows only
-    import sys
+
     if sys.platform == "win32" and config.args.files:
         import glob
         expanded_files = []
@@ -130,3 +146,5 @@ def main() -> None:
 if __name__ == "__main__":
     # Entry point of the script
     main()
+
+

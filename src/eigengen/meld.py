@@ -1,4 +1,3 @@
-import difflib
 import re
 import os
 
@@ -7,7 +6,7 @@ from eigengen.progress import ProgressIndicator  # Added import
 
 
 def meld_changes(
-    model: providers.Model, filepath: str, response: str, git_root: str = None
+    model: providers.Model, filepath: str, changes: str, git_root: str = None
 ) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
@@ -17,33 +16,14 @@ def meld_changes(
         response: The LLM response containing suggested changes within code blocks.
         git_root: If provided, used to interpret file paths that are relative to the Git root.
     """
-    code_blocks = utils.extract_code_blocks(response)
-    target_block = None
+
     target_full_path = (
         os.path.abspath(os.path.join(git_root, filepath))
         if git_root
         else os.path.abspath(filepath)
     )
-
-    for _, _, block_path, block_content, _, _ in code_blocks:
-        if not block_path:
-            continue  # Skip blocks without path information
-
-        # If git_root is available and the block path is not absolute, assume
-        # it is relative to git_root.
-        block_full_path = (
-            os.path.abspath(block_path)
-            if not git_root
-            else os.path.abspath(os.path.join(git_root, block_path))
-        )
-
-        if block_full_path == target_full_path:
-            target_block = block_content
-            break
-
-    if not target_block:
-        print(f"No code block found for file: {target_full_path}")
-        return
+    # If git_root is available and the block path is not absolute, assume
+    # it is relative to git_root.
 
     try:
         with open(target_full_path, "r") as f:
@@ -52,17 +32,12 @@ def meld_changes(
         # It's acceptable if the file does not exist; it will be created.
         original_content = ""
 
-    apply_meld(model, target_full_path, original_content, response)
+    apply_meld(model, target_full_path, original_content, changes)
 
 
 def apply_meld(
     model: providers.Model, filepath: str, original_content: str, change_content: str
 ) -> None:
-    # Remove first <think></think> tags and any intervening text from change_content for
-    # deepseek models.
-    if model.model_name.startswith("deepseek"):
-        change_content = re.sub(r"<think>.*?</think>", "", change_content)
-
     payload = (utils.encode_code_block(original_content, filepath)
                + "\n" + utils.encode_code_block(change_content, "changes"))
     # Prepare the conversation messages to send to the LLM.
@@ -114,7 +89,7 @@ def apply_meld(
         fromfile=f"a/{rel_filepath}",
         tofile=f"b/{rel_filepath}"
     )
-    
+
     # Show the diff to the user.
     utils.pipe_output_via_pager(diff_output)
 
@@ -123,6 +98,8 @@ def apply_meld(
     if apply_changes in ("y", "yes"):
         # Instead of applying a patch, we simply write the new file content directly.
         new_content = "\n".join(processed_file_lines) + "\n"
+        # create the directory if it doesn't exist
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, "w") as f:
             f.write(new_content)
         print("Changes applied successfully.")

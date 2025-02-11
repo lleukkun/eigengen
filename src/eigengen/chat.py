@@ -56,7 +56,7 @@ class EggChat:
 
     This class handles setting up context from user files and operating modes.
     It supports interactive mode (chat_mode) with command handling as well as single-prompt mode (auto_chat).
- 
+
     Attributes:
         config (EggConfig): Configuration settings including model and chat options.
         model_tuple (ModelTuple): Models used for processing requests.
@@ -360,42 +360,28 @@ class EggChat:
         print("Chat messages cleared.\n")
         return True
 
-    def handle_meld(self, paths_input: Optional[str] = None) -> bool:
+    def handle_meld(self) -> bool:
         """Handle the '/meld' command by merging changes from the last assistant message into files.
-
-        If no file paths are provided, file paths are extracted from the last assistant message code blocks.
         """
         last_assistant_message = next(
             (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
         )
 
-        if not paths_input:
-            # No paths provided, extract file paths from the last assistant message's code blocks
-            code_blocks = utils.extract_code_blocks(last_assistant_message)
-            paths = {path for _, _, path, _, _, _ in code_blocks if path}
-            if not paths:
-                print("No file paths found in the latest assistant message.\n")
-                return True
-        else:
-            paths = set(paths_input.split())
+        code_blocks = utils.extract_code_blocks(last_assistant_message)
 
-        for f in paths:
-            # If we have a git root and the file is not an absolute path, assume that
-            # the assistant message provided a path relative to the git root.
-            if self.git_root and not os.path.isabs(f):
-                full_path = os.path.normpath(os.path.join(self.git_root, f))
-                # Convert full path into a path relative to the current working directory.
-                adjusted = os.path.relpath(full_path, self.git_root)
-            else:
-                adjusted = f
-            # Pass the git_root into meld_changes so that the code block matching
-            # in meld.py can compute absolute paths consistently.
-            meld.meld_changes(self.model_tuple.small, adjusted, last_assistant_message, git_root=self.git_root)
+        if not code_blocks:
+            print("No code blocks found in the last assistant message.")
+            return True
+        for block in code_blocks:
+            _, _, block_path, block_content, _, _ = block
+            if block_path:
+                meld.meld_changes(self.model_tuple.small, block_path, block_content, self.git_root)
+
         return True
 
     def handle_model(self, *args) -> bool:
         """Handle the '/model' command for switching or displaying the current model."""
-        
+
         def print_supported_models():
             print("Supported models:")
             supported_models = list(PROVIDER_CONFIGS.keys())
