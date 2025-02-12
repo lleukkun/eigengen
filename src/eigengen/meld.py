@@ -105,3 +105,79 @@ def apply_meld(
         print("Changes applied successfully.")
     else:
         print("Changes not applied.")
+
+def generate_meld_diff(
+    model: providers.Model, filepath: str, changes: str, git_root: str = None
+) -> tuple[str, str]:
+    """
+    Given a changes string and filepath, generate a unified diff without applying the changes.
+
+    Returns:
+        A tuple containing the diff output string and the new file content.
+    """
+    target_full_path = (
+        os.path.abspath(os.path.join(git_root, filepath))
+        if git_root
+        else os.path.abspath(filepath)
+    )
+
+    try:
+        with open(target_full_path, "r") as f:
+            original_content = f.read()
+    except FileNotFoundError:
+        original_content = ""
+
+    payload = (utils.encode_code_block(original_content, filepath) +
+               "\n" + utils.encode_code_block(changes, "changes"))
+    messages = [{"role": "user", "content": payload}]
+
+    result = ""
+    try:
+        chunk_iterator = operations.process_request(
+            model,
+            messages,
+            prompts.get_prompt("meld"),
+            utils.encode_code_block(original_content, filepath),
+        )
+        for chunk in chunk_iterator:
+            result += chunk
+    except Exception as e:
+        print(f"An error occurred during LLM processing in generate_meld_diff: {e}")
+        return ("", "")
+
+    if not result:
+        return ("", "")
+
+    if model.model_name.startswith("deepseek"):
+        result = re.sub(r"<think>.*?</think>", "", result)
+
+    result = result.strip()
+    processed_file_lines = result.splitlines()
+    if processed_file_lines and processed_file_lines[0].startswith("```"):
+        processed_file_lines = processed_file_lines[1:-1]
+
+    new_content = "\n".join(processed_file_lines)
+
+    current_working_directory = os.getcwd()
+    rel_filepath = os.path.relpath(filepath, current_working_directory)
+    diff_output = utils.generate_unified_diff(
+        original_content,
+        new_content,
+        fromfile=f"a/{rel_filepath}",
+        tofile=f"b/{rel_filepath}"
+    )
+
+    return diff_output, new_content
+
+
+def apply_meld_diff(filepath: str, new_content: str) -> None:
+    """
+    Apply the new content to the file at filepath by writing it.
+    """
+    final_content = new_content.rstrip() + "\n"
+    # check if filepath has a directory part
+    if os.path.dirname(filepath):
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, "w") as f:
+        f.write(final_content)
+    print("Changes applied successfully.")

@@ -9,18 +9,22 @@
     <div id="container">
       <div id="left-pane">
         <h2>Project Context</h2>
-        <!-- Placeholder for file browser. In the future this could be dynamically loaded. -->
-        <ul id="file-browser">
-          <li>File 1</li>
-          <li>File 2</li>
-          <li>File 3</li>
-        </ul>
+        <div id="selected-files-container">
+          <h3>Selected Files</h3>
+          <ul id="selected-files"></ul>
+        </div>
+        <div id="file-browser-container">
+          <h3>Project Files</h3>
+          <ul id="file-browser"></ul>
+        </div>
       </div>
       <div id="right-pane">
         <div id="content-area">
           <div id="chat-history"></div>
-          <textarea id="message-input" placeholder="Type your message here..."></textarea>
-          <button id="send-button">Send</button>
+          <div id="input-container">
+            <textarea id="message-input" rows="5" placeholder="Type your message here..."></textarea>
+            <button id="send-button">Send</button>
+          </div>
         </div>
       </div>
     </div>
