@@ -59,7 +59,7 @@ class EggChat:
 
     Attributes:
         config (EggConfig): Configuration settings including model and chat options.
-        model_tuple (ModelTuple): Models used for processing requests.
+        model (Model): Model used for processing requests.
         mode (str): The current operational mode (general, architect, programmer).
         quoting_state (dict): Contains state for cycling and quoting code blocks.
         messages (List[Dict[str, str]]): Conversation history.
@@ -80,7 +80,7 @@ class EggChat:
             user_files (Optional[List[str]]): List of file paths to include as context.
         """
         self.config = config  # Store the passed config
-        self.model_tuple = providers.create_model_tuple(config.model, config)
+        self.model = providers.create_model(config.model, config)
         self.mode = config.args.chat_mode
         self.quoting_state = {"current_index": -1, "code_blocks": None, "cycle_iterator": None}
         self.messages: List[Dict[str, str]] = []
@@ -191,7 +191,7 @@ class EggChat:
                 answer = ""
                 with ProgressIndicator() as _:
                     chunk_iterator = operations.process_request(
-                        self.model_tuple.large,
+                        self.model,
                         local_messages,
                         prompts.get_prompt(self.mode)
                     )
@@ -258,7 +258,7 @@ class EggChat:
         answer = ""
         with ProgressIndicator() as _:
             chunk_iterator = operations.process_request(
-                self.model_tuple.large,
+                self.model,
                 local_messages,
                 prompts.get_prompt(self.mode)
             )
@@ -375,7 +375,7 @@ class EggChat:
         for block in code_blocks:
             _, _, block_path, block_content, _, _ = block
             if block_path:
-                meld.meld_changes(self.model_tuple.small, block_path, block_content, self.git_root)
+                meld.meld_changes(block_path, block_content, self.git_root)
 
         return True
 

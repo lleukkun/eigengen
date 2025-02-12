@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -36,7 +38,7 @@ def create_app(config: EggConfig) -> FastAPI:
         answer = ""
 
         chunk_iterator = operations.process_request(
-            chat_instance.model_tuple.large,
+            chat_instance.model,
             local_messages,
             prompts.get_prompt(chat_instance.mode)
         )
@@ -70,11 +72,19 @@ def create_app(config: EggConfig) -> FastAPI:
             return JSONResponse(status_code=400, content={"error": "Both 'code_block' and 'code_filepath' are required fields."})
 
         # Generate the diff preview using the small model.
-        diff_output, new_file_content = meld.generate_meld_diff(chat_instance.model_tuple.small, code_filepath, code_block, chat_instance.git_root)
+        original_content = ""
+        # check if the file exists using os.path.exists
+        if os.path.exists(code_filepath):
+            with open(code_filepath) as f:
+                original_content = f.read()
+
+        new_content = meld.apply_custom_diff(original_content, code_block)
+        diff_output = meld.produce_diff(code_filepath, original_content, new_content)
+
         if not diff_output:
             return JSONResponse(status_code=500, content={"error": "Diff generation failed."})
 
-        return JSONResponse(content={"diff": diff_output, "file_content": new_file_content})
+        return JSONResponse(content={"diff": diff_output, "file_content": new_content})
 
     @app.post("/api/apply")
     async def apply_endpoint(request: Request):
@@ -90,7 +100,8 @@ def create_app(config: EggConfig) -> FastAPI:
 
         # Apply the changes to the file.
         try:
-            meld.apply_meld_diff(file_path, file_content)
+            with open(file_path, "w") as f:
+                f.write(file_content)
         except Exception as e:
             return JSONResponse(status_code=500, content={"error": f"Failed to apply changes: {e}"})
 

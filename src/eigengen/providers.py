@@ -20,12 +20,10 @@ OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 
 class ProviderConfig:
-    def __init__(self, provider: str, model: str, mini_model: str, summary_model: str,
+    def __init__(self, provider: str, model: str,
                  max_tokens: int, temperature: float):
         self.provider = provider
         self.model = model
-        self.mini_model = mini_model
-        self.summary_model = summary_model
         self.max_tokens = max_tokens
         self.temperature = temperature
 
@@ -33,42 +31,34 @@ PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
     "claude": ProviderConfig(
         "anthropic",
         "claude-3-5-sonnet-latest",
-        "claude-3-5-sonnet-latest",
-        "claude-3-5-haiku-latest",
         8192,
         0.7,
     ),
     "deepseek-r1:32b": ProviderConfig(
-        "ollama", "deepseek-r1:32b", "deepseek-r1:32b", "llama3.2:3b", 8192, 0.7
+        "ollama", "deepseek-r1:32b", 8192, 0.7
     ),
     "deepseek-r1": ProviderConfig(
-        "deepseek", "deepseek-reasoner", "deepseek-chat", "deepseek-chat", 8192, 0.7
+        "deepseek", "deepseek-reasoner", 8192, 0.7
     ),
     "groq": ProviderConfig(
         "groq",
         "deepseek-r1-distill-llama-70b",
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
         32768,
         0.5,
     ),
-    "o1": ProviderConfig("openai", "o1", "gpt-4o-mini", "gpt-4o-mini", 100000, 0.7),
+    "o1": ProviderConfig("openai", "o1", 100000, 0.7),
     "o3-mini": ProviderConfig(
-        "openai", "o3-mini", "gpt-4o-mini", "gpt-4o-mini", 100000, 0.7
+        "openai", "o3-mini",  100000, 0.7
     ),
     "gemini": ProviderConfig(
         "google",
         "gemini-2.0-flash-thinking-exp",
-        "gemini-2.0-flash-exp",
-        "gemini-2.0-flash-exp",
         8192,
         0.7,
     ),
     "mistral": ProviderConfig(
         "mistral",
         "mistral-large-latest",
-        "mistral-large-latest",
-        "codestral-latest",
         32768,
         0.7,
     ),
@@ -91,13 +81,6 @@ class Model:
     model_name: str
     temperature: float
     max_tokens: int
-
-
-@dataclasses.dataclass
-class ModelTuple:
-    large: Model
-    small: Model
-    summary: Model
 
 
 class OllamaProvider(Provider):
@@ -363,7 +346,7 @@ def get_api_key(provider: str, config: config.EggConfig) -> str:
     return config_file_key
 
 
-def create_model_tuple(nickname: str, config: config.EggConfig) -> ModelTuple:
+def create_model(nickname: str, config: config.EggConfig) -> Model:
     if nickname not in PROVIDER_CONFIGS:
         raise ValueError(f"Invalid model nickname: {nickname}")
 
@@ -397,18 +380,11 @@ def create_model_tuple(nickname: str, config: config.EggConfig) -> ModelTuple:
         provider = OpenAIProvider(client)
     else:
         raise ValueError(f"Invalid provider specified: {model_config.provider}")
-    return ModelTuple(large=Model(provider=provider,
-                                 model_name=model_config.model,
-                                 temperature=model_config.temperature,
-                                 max_tokens=model_config.max_tokens),
-                      small=Model(provider=provider,
-                                 model_name=model_config.mini_model,
-                                 temperature=model_config.temperature,
-                                 max_tokens=model_config.max_tokens),
-                      summary=Model(provider=provider,
-                                    model_name=model_config.summary_model,
-                                    temperature=model_config.temperature,
-                                    max_tokens=model_config.max_tokens))
+    return Model(provider=provider,
+                 model_name=model_config.model,
+                 temperature=model_config.temperature,
+                 max_tokens=model_config.max_tokens)
+
 
 def get_model_config(nickname: str) -> ProviderConfig:
     if nickname not in PROVIDER_CONFIGS:

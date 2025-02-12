@@ -1,11 +1,9 @@
 import os
 
-from eigengen import utils, providers
+from eigengen import utils
 
 
-def meld_changes(
-    model: providers.Model, filepath: str, changes: str, git_root: str = None
-) -> None:
+def meld_changes(filepath: str, changes: str, git_root: str = None) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
 
@@ -37,14 +35,7 @@ def meld_changes(
     # Use the new apply_custom_diff() method to merge the custom diff with the original content.
     new_content = apply_custom_diff(original_content, changes)
 
-    current_working_directory = os.getcwd()
-    rel_filepath = os.path.relpath(target_full_path, current_working_directory)
-    diff_output = utils.generate_unified_diff(
-        original_content,
-        new_content,
-        fromfile=f"a/{rel_filepath}",
-        tofile=f"b/{rel_filepath}"
-    )
+    diff_output = produce_diff(target_full_path, original_content, new_content)
 
     # Show the diff preview to the user.
     utils.pipe_output_via_pager(diff_output)
@@ -61,29 +52,27 @@ def meld_changes(
     else:
         print("Changes not applied.")
 
-def apply_meld_diff(filepath: str, patch_content: str) -> None:
+def produce_diff(filename: str, original_content: str, new_content: str) -> str:
     """
-    Applies the custom diff patch to the specified file by merging it with the original content.
+    Produces a unified diff between the original content and the new content.
 
     Args:
-        filepath (str): The path to the file where changes should be applied.
-        patch_content (str): The custom diff patch content as a string.
+        filename (str): The name of the file being diffed.
+        original_content (str): The original content of the file.
+        new_content (str): The new content of the file.
 
     Returns:
-        None
+        str: The unified diff as a string.
     """
-    try:
-        with open(filepath, "r") as f:
-            original_content = f.read()
-    except FileNotFoundError:
-        original_content = ""
-    new_content = apply_custom_diff(original_content, patch_content)
-    new_content = new_content.rstrip() + "\n"
-    if os.path.dirname(filepath):
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, "w") as f:
-        f.write(new_content)
-    print("Changes applied successfully.")
+    current_working_directory = os.getcwd()
+    rel_filepath = os.path.relpath(filename, current_working_directory)
+    diff_output = utils.generate_unified_diff(
+        original_content,
+        new_content,
+        fromfile=f"a/{rel_filepath}",
+        tofile=f"b/{rel_filepath}",
+    )
+    return diff_output
 
 def apply_custom_diff(original_content: str, patch_content: str) -> str:
     """
@@ -98,7 +87,7 @@ def apply_custom_diff(original_content: str, patch_content: str) -> str:
 
     For each block, if the original_content is non-empty, the function searches (using stripped comparisons)
     for the sequence of lines in the original content matching the removal block; if a match is found, it is
-    replaced with the insertion block. However, if the original_content is an empty string, we interpret that as a signal that 
+    replaced with the insertion block. However, if the original_content is an empty string, we interpret that as a signal that
     all codeblocks should be applied sequentially (ignoring any removal lines). This is useful when creating a new file.
     """
     patch_lines = patch_content.splitlines()
