@@ -153,3 +153,17 @@ pre.hljs {
 #file-browser li {
   margin: 4px 0;
 }
+
+/* Dark themed buttons for Project Context area */
+#selected-files-container button {
+  background-color: #2d2d2d;
+  border: 1px solid #333;
+  color: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+#selected-files-container button:hover {
+  background-color: #505050;
+}

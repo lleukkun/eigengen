@@ -356,11 +356,22 @@ function createTreeElement(tree: any, basePath: string = ""): HTMLElement {
       li.appendChild(checkbox);
       li.appendChild(label);
     } else {
-      // Folder: show the folder name and recursively build child list.
+      // Folder: add a toggleable folder label and child list (collapsed by default)
       const span = document.createElement("span");
-      span.innerText = key;
-      li.appendChild(span);
+      span.innerText = "[+] " + key;
+      span.style.cursor = "pointer";
       const childUl = createTreeElement(tree[key], basePath + key + "/");
+      childUl.style.display = "none";
+      span.addEventListener("click", () => {
+        if (childUl.style.display === "none") {
+          childUl.style.display = "block";
+          span.innerText = "[-] " + key;
+        } else {
+          childUl.style.display = "none";
+          span.innerText = "[+] " + key;
+        }
+      });
+      li.appendChild(span);
       li.appendChild(childUl);
     }
     ul.appendChild(li);
