@@ -1,8 +1,7 @@
 import "./style.css";
-import { md } from "./markdownEngine";
-import { createMeldPlaceholderOverlay, updateMeldOverlayContent } from "./meldOverlay";
-import { renderChatHistory, fetchChatHistory } from "./chat";
-import { fetchProjectContext } from "./fileTree";
+import { createMeldPlaceholderOverlay, updateMeldOverlayContent } from "./meldOverlay.js";
+import { renderChatHistory, fetchChatHistory } from "./chat.js";
+import { fetchProjectContext } from "./fileTree.js";
 
 // A simple auto-resize function retained here
 function autoResize(textarea: HTMLTextAreaElement): void {
@@ -17,7 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const messageInput = document.getElementById("message-input") as HTMLTextAreaElement;
   const sendButton = document.getElementById("send-button") as HTMLButtonElement;
-  
+
   messageInput.addEventListener("input", () => {
     autoResize(messageInput);
   });

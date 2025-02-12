@@ -9,7 +9,7 @@ from eigengen.config import EggConfig
 def create_app(config: EggConfig) -> FastAPI:
     # Instantiate a global EggChat instance using the active configuration.
     chat_instance = EggChat(config, user_files=None)
-    app = FastAPI(debug=True)
+    app = FastAPI(debug=True, max_body_size=256*1024*1024)
 
     @app.post("/api/send")
     async def send_endpoint(request: Request):
@@ -99,7 +99,7 @@ def create_app(config: EggConfig) -> FastAPI:
     @app.get("/api/project_context")
     async def project_context():
         """
-        Checks if the server is running in a Git repository. 
+        Checks if the server is running in a Git repository.
         If yes, performs 'git ls-files' and returns a JSON object with field "file_paths" containing a list of files.
         Otherwise, returns an error message.
         """
