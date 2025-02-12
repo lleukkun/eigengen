@@ -12,7 +12,7 @@ export function renderChatHistory(messages: ChatMessage[]): void {
       const msgDiv = document.createElement("div");
       msgDiv.className = `chat-message ${msg.role}`;
       // md is imported from markdownEngine; assume it is available globally or passed via DI if preferred.
-      import("./markdownEngine").then(({ md }) => {
+      import("./markdownEngine.js").then(({ md }) => {
         msgDiv.innerHTML = `<strong>${msg.role}:</strong> ` + md.render(msg.content);
       });
       chatHistory.appendChild(msgDiv);
