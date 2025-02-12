@@ -14,6 +14,7 @@ class EggConfig:
     groq_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
     mistral_api_key: Optional[str] = None
+    deepseek_api_key: Optional[str] = None
 
     # command line arguments are carried here but not stored in config file
     args: argparse.Namespace = field(default_factory=lambda: argparse.Namespace())
@@ -42,6 +43,7 @@ class EggConfig:
                 groq_api_key=data.get("groq_api_key", None),
                 anthropic_api_key=data.get("anthropic_api_key", None),
                 mistral_api_key=data.get("mistral_api_key", None),
+                deepseek_api_key=data.get("deepseek_api_key", None),
                 args=argparse.Namespace()
             )
         except Exception as e:

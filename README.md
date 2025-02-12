@@ -2,10 +2,7 @@ EigenGen
 ========
 
 EigenGen is a CLI Large Language Model frontend. It is designed for working with code.
-EigenGen uses a two-stage process where larger LLM is used to solve the task and produce
-dense output, which is then given to a smaller LLM which applies the changes and produces
-the complete file output. Finally this is then used to produce diffs which the user can
-choose to apply.
+Changes are presented to user as unified diffs for review before applying.
 
 ### Supported Models
 EigenGen currently works correctly with:

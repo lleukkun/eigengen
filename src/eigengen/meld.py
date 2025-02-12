@@ -1,8 +1,6 @@
-import re
 import os
 
-from eigengen import utils, operations, providers, prompts
-from eigengen.progress import ProgressIndicator  # Added import
+from eigengen import utils, providers
 
 
 def meld_changes(
@@ -12,9 +10,13 @@ def meld_changes(
     Melds the changes proposed by the LLM into the specified file.
 
     Args:
-        filepath: The path to the file to meld changes into.
-        response: The LLM response containing suggested changes within code blocks.
-        git_root: If provided, used to interpret file paths that are relative to the Git root.
+        model (providers.Model): The model instance used for processing.
+        filepath (str): The path to the file to meld changes into.
+        changes (str): A string containing the proposed changes in custom diff format.
+        git_root (str, optional): If provided, used to interpret file paths that are relative to the Git root.
+
+    Returns:
+        None
     """
 
     target_full_path = (
@@ -32,57 +34,11 @@ def meld_changes(
         # It's acceptable if the file does not exist; it will be created.
         original_content = ""
 
-    apply_meld(model, target_full_path, original_content, changes)
+    # Use the new apply_custom_diff() method to merge the custom diff with the original content.
+    new_content = apply_custom_diff(original_content, changes)
 
-
-def apply_meld(
-    model: providers.Model, filepath: str, original_content: str, change_content: str
-) -> None:
-    payload = (utils.encode_code_block(original_content, filepath)
-               + "\n" + utils.encode_code_block(change_content, "changes"))
-    # Prepare the conversation messages to send to the LLM.
-    messages = [
-        {
-            "role": "user",
-            "content": payload
-        }
-    ]
-
-    result = ""
-    # Initialize and start the progress indicator.
-    with ProgressIndicator() as _:
-        try:
-            chunk_iterator = operations.process_request(
-                model,
-                messages,
-                prompts.get_prompt("meld"),
-                utils.encode_code_block(original_content, filepath),
-            )
-            for chunk in chunk_iterator:
-                result += chunk
-        except Exception as e:
-            print(f"An error occurred during LLM processing: {e}")
-
-    if not result:
-        print("No response received from the LLM.")
-        return
-
-    # For deepseek models, remove the first <think></think> block.
-    if model.model_name.startswith("deepseek"):
-        result = re.sub(r"<think>.*?</think>", "", result)
-
-    # Strip any leading or trailing whitespace.
-    result = result.strip()
-    processed_file_lines = result.splitlines()
-
-    # If the file is wrapped in code fences (e.g. ```), remove them.
-    if processed_file_lines and processed_file_lines[0].startswith("```"):
-        processed_file_lines = processed_file_lines[1:-1]
-
-    # --- Diff Preview ---
     current_working_directory = os.getcwd()
-    rel_filepath = os.path.relpath(filepath, current_working_directory)
-    new_content = "\n".join(processed_file_lines)
+    rel_filepath = os.path.relpath(target_full_path, current_working_directory)
     diff_output = utils.generate_unified_diff(
         original_content,
         new_content,
@@ -90,94 +46,140 @@ def apply_meld(
         tofile=f"b/{rel_filepath}"
     )
 
-    # Show the diff to the user.
+    # Show the diff preview to the user.
     utils.pipe_output_via_pager(diff_output)
 
     # Ask the user if they want to apply the changes.
     apply_changes = input("Do you want to apply these changes? (y/n): ").strip().lower()
     if apply_changes in ("y", "yes"):
-        # Instead of applying a patch, we simply write the new file content directly.
-        new_content = "\n".join(processed_file_lines) + "\n"
-        # create the directory if it doesn't exist
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, "w") as f:
+        # Write the new content directly to the file.
+        new_content = new_content.rstrip() + "\n"
+        os.makedirs(os.path.dirname(target_full_path), exist_ok=True)
+        with open(target_full_path, "w") as f:
             f.write(new_content)
         print("Changes applied successfully.")
     else:
         print("Changes not applied.")
 
-def generate_meld_diff(
-    model: providers.Model, filepath: str, changes: str, git_root: str = None
-) -> tuple[str, str]:
+def apply_meld_diff(filepath: str, patch_content: str) -> None:
     """
-    Given a changes string and filepath, generate a unified diff without applying the changes.
+    Applies the custom diff patch to the specified file by merging it with the original content.
+
+    Args:
+        filepath (str): The path to the file where changes should be applied.
+        patch_content (str): The custom diff patch content as a string.
 
     Returns:
-        A tuple containing the diff output string and the new file content.
+        None
     """
-    target_full_path = (
-        os.path.abspath(os.path.join(git_root, filepath))
-        if git_root
-        else os.path.abspath(filepath)
-    )
-
     try:
-        with open(target_full_path, "r") as f:
+        with open(filepath, "r") as f:
             original_content = f.read()
     except FileNotFoundError:
         original_content = ""
-
-    payload = (utils.encode_code_block(original_content, filepath) +
-               "\n" + utils.encode_code_block(changes, "changes"))
-    messages = [{"role": "user", "content": payload}]
-
-    result = ""
-    try:
-        chunk_iterator = operations.process_request(
-            model,
-            messages,
-            prompts.get_prompt("meld"),
-            utils.encode_code_block(original_content, filepath),
-        )
-        for chunk in chunk_iterator:
-            result += chunk
-    except Exception as e:
-        print(f"An error occurred during LLM processing in generate_meld_diff: {e}")
-        return ("", "")
-
-    if not result:
-        return ("", "")
-
-    if model.model_name.startswith("deepseek"):
-        result = re.sub(r"<think>.*?</think>", "", result)
-
-    result = result.strip()
-    processed_file_lines = result.splitlines()
-    if processed_file_lines and processed_file_lines[0].startswith("```"):
-        processed_file_lines = processed_file_lines[1:-1]
-
-    new_content = "\n".join(processed_file_lines)
-
-    current_working_directory = os.getcwd()
-    rel_filepath = os.path.relpath(filepath, current_working_directory)
-    diff_output = utils.generate_unified_diff(
-        original_content,
-        new_content,
-        fromfile=f"a/{rel_filepath}",
-        tofile=f"b/{rel_filepath}"
-    )
-
-    return diff_output, new_content
-
-
-def apply_meld_diff(filepath: str, new_content: str) -> None:
-    """
-    Apply the new content to the file at filepath by writing it.
-    """
-    final_content = new_content.rstrip() + "\n"
-    # check if filepath has a directory part
+    new_content = apply_custom_diff(original_content, patch_content)
+    new_content = new_content.rstrip() + "\n"
     if os.path.dirname(filepath):
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, "w") as f:
-        f.write(final_content)
+        f.write(new_content)
     print("Changes applied successfully.")
+
+def apply_custom_diff(original_content: str, patch_content: str) -> str:
+    """
+    Applies a custom diff patch to the original content and returns the updated content.
+
+    The custom diff should contain one or more blocks structured as follows:
+        |<<<<<<<
+        |lines to be removed
+        |=======
+        |lines that will replace the removed lines
+        |>>>>>>>
+
+    For each block, if the original_content is non-empty, the function searches (using stripped comparisons)
+    for the sequence of lines in the original content matching the removal block; if a match is found, it is
+    replaced with the insertion block. However, if the original_content is an empty string, we interpret that as a signal that 
+    all codeblocks should be applied sequentially (ignoring any removal lines). This is useful when creating a new file.
+    """
+    patch_lines = patch_content.splitlines()
+
+    # Special handling if the original content is empty:
+    if original_content == "":
+        new_lines = []
+        i = 0  # pointer in patch_lines
+        while i < len(patch_lines):
+            if patch_lines[i].strip() == "<<<<<<<":
+                i += 1
+                # Skip removal block (if any)
+                while i < len(patch_lines) and patch_lines[i].strip() != "=======":
+                    i += 1
+
+                # If the separator is found, skip it.
+                if i < len(patch_lines) and patch_lines[i].strip() == "=======":
+                    i += 1
+
+                insertion_block = []
+                # Collect insertion lines
+                while i < len(patch_lines) and patch_lines[i].strip() != ">>>>>>>":
+                    insertion_block.append(patch_lines[i])
+                    i += 1
+
+                # Skip the closing marker if present.
+                if i < len(patch_lines) and patch_lines[i].strip() == ">>>>>>>":
+                    i += 1
+
+                new_lines.extend(insertion_block)
+            else:
+                i += 1
+        return "\n".join(new_lines) + "\n"
+
+    # Standard processing if original_content is not empty
+    original_lines = original_content.splitlines()
+    new_lines = []
+    pos = 0  # pointer in original_lines
+
+    i = 0  # pointer in patch_lines
+    while i < len(patch_lines):
+        if patch_lines[i].strip() == "<<<<<<<":
+            i += 1
+            removal_block = []
+            # Collect removal lines
+            while i < len(patch_lines) and patch_lines[i].strip() != "=======":
+                removal_block.append(patch_lines[i])
+                i += 1
+
+            # If we did not find the separator, break out (or skip block)
+            if i >= len(patch_lines) or patch_lines[i].strip() != "=======":
+                break  # Incomplete block; stop processing.
+            i += 1  # Skip the "=======" line
+
+            insertion_block = []
+            # Collect insertion lines
+            while i < len(patch_lines) and patch_lines[i].strip() != ">>>>>>>":
+                insertion_block.append(patch_lines[i])
+                i += 1
+
+            # Skip the closing marker if present.
+            if i < len(patch_lines) and patch_lines[i].strip() == ">>>>>>>":
+                i += 1
+
+            # Search for the removal_block in original_lines starting from pos.
+            found = False
+            for j in range(pos, len(original_lines) - len(removal_block) + 1):
+                match = True
+                for k, rem_line in enumerate(removal_block):
+                    if original_lines[j + k].strip() != rem_line.strip():
+                        match = False
+                        break
+                if match:
+                    new_lines.extend(original_lines[pos:j])
+                    new_lines.extend(insertion_block)
+                    pos = j + len(removal_block)
+                    found = True
+                    break
+            # If not found, skip this patch block.
+        else:
+            i += 1
+
+    new_lines.extend(original_lines[pos:])
+    return "\n".join(new_lines) + "\n"

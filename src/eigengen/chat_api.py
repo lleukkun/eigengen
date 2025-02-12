@@ -79,14 +79,14 @@ def create_app(config: EggConfig) -> FastAPI:
     @app.post("/api/apply")
     async def apply_endpoint(request: Request):
         """
-        Accept a JSON payload with "code_block" and "code_filepath" fields.
-        Apply the changes to the file.
+        Accept a JSON payload with "file_content" and "file_path" fields.
+        Apply the changes to the file using the custom diff patch.
         """
         data = await request.json()
         file_content = data.get("file_content")
         file_path = data.get("file_path")
         if not file_content or not file_path:
-            return JSONResponse(status_code=400, content={"error": "Both 'code_block' and 'code_filepath' are required fields."})
+            return JSONResponse(status_code=400, content={"error": "Both 'file_content' and 'file_path' are required fields."})
 
         # Apply the changes to the file.
         try:
