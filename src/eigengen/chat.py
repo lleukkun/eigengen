@@ -361,21 +361,34 @@ class EggChat:
         return True
 
     def handle_meld(self) -> bool:
-        """Handle the '/meld' command by merging changes from the last assistant message into files.
-        """
+        """Handle the '/meld' command by merging aggregated changes from the last assistant message into files."""
         last_assistant_message = next(
             (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
         )
 
         code_blocks = utils.extract_code_blocks(last_assistant_message)
-
         if not code_blocks:
             print("No code blocks found in the last assistant message.")
             return True
+
+        patches_by_file = {}
         for block in code_blocks:
             _, _, block_path, block_content, _, _ = block
             if block_path:
-                meld.meld_changes(block_path, block_content, self.git_root)
+                patches_by_file.setdefault(block_path, []).append(block_content)
+
+        if not patches_by_file:
+            print("No code blocks with valid file paths found.")
+            return True
+
+        for file_path, patches in patches_by_file.items():
+            aggregated_patch = "\n".join(patches)
+            meld.meld_changes(
+                file_path,
+                aggregated_patch,
+                self.git_root,
+                unified_diff=True if self.model.model_name.lower().startswith("gemini") else False
+            )
 
         return True
 

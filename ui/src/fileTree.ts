@@ -1,4 +1,4 @@
-let selectedFiles: Set<string> = new Set();
+export const selectedFiles: Set<string> = new Set();
 
 export function updateSelectedFilesUI(): void {
   const selectedFilesList = document.getElementById("selected-files");

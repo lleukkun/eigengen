@@ -94,6 +94,7 @@ class AnthropicProvider(Provider):
                     model=model,
                     temperature=temperature,
                     messages=cast(Iterable[anthropic.types.MessageParam], messages),
+                    max_tokens=8192,
                     system=system_message
                 ) as stream:
                     for text in stream.text_stream:
@@ -293,7 +294,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
     "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", 0.25),
     "o1": ModelConfig("openai", "o1", 0.7),
     "o3-mini": ModelConfig("openai", "o3-mini", 0.7),
-    "gemini": ModelConfig("google", "gemini-2.0-flash-thinking-exp", 0.7),
+    "gemini": ModelConfig("google", "gemini-2.0-pro-exp-02-05", 0.7),
     "mistral": ModelConfig("mistral", "mistral-large-latest", 0.7),
 }
 

@@ -1,7 +1,7 @@
 import "./style.css";
 import { createMeldPlaceholderOverlay, updateMeldOverlayContent } from "./meldOverlay.js";
 import { renderChatHistory, fetchChatHistory } from "./chat.js";
-import { fetchProjectContext } from "./fileTree.js";
+import { fetchProjectContext, selectedFiles } from "./fileTree.js";
 
 // A simple auto-resize function retained here
 function autoResize(textarea: HTMLTextAreaElement): void {
@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const response = await fetch("/api/send", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: message, diff_mode: false })
+          body: JSON.stringify({ prompt: message, diff_mode: false, filepaths: Array.from(selectedFiles) })
         });
 
         if (!response.ok) {

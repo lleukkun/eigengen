@@ -3,7 +3,7 @@ import os
 from eigengen import utils
 
 
-def meld_changes(filepath: str, changes: str, git_root: str = None) -> None:
+def meld_changes(filepath: str, changes: str, git_root: str = None, unified_diff: bool = False) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
 
@@ -32,8 +32,8 @@ def meld_changes(filepath: str, changes: str, git_root: str = None) -> None:
         # It's acceptable if the file does not exist; it will be created.
         original_content = ""
 
-    # Use the new apply_custom_diff() method to merge the custom diff with the original content.
-    new_content = apply_custom_diff(original_content, changes)
+    # Use the appropriate diff application method based on the unified_diff flag.
+    new_content = apply_gemini_diff(original_content, changes) if unified_diff else apply_custom_diff(original_content, changes)
 
     diff_output = produce_diff(target_full_path, original_content, new_content)
 
@@ -75,100 +75,138 @@ def produce_diff(filename: str, original_content: str, new_content: str) -> str:
     return diff_output
 
 def apply_custom_diff(original_content: str, patch_content: str) -> str:
-    """
-    Applies a custom diff patch to the original content and returns the updated content.
-
-    The custom diff should contain one or more blocks structured as follows:
-        |<<<<<<<
-        |lines to be removed
-        |=======
-        |lines that will replace the removed lines
-        |>>>>>>>
-
-    For each block, if the original_content is non-empty, the function searches (using stripped comparisons)
-    for the sequence of lines in the original content matching the removal block; if a match is found, it is
-    replaced with the insertion block. However, if the original_content is an empty string, we interpret that as a signal that
-    all codeblocks should be applied sequentially (ignoring any removal lines). This is useful when creating a new file.
-    """
+    orig_lines = original_content.splitlines()
     patch_lines = patch_content.splitlines()
-
-    # Special handling if the original content is empty:
-    if original_content == "":
-        new_lines = []
-        i = 0  # pointer in patch_lines
-        while i < len(patch_lines):
-            if patch_lines[i].strip() == "<<<<<<<":
+    new_lines = []
+    orig_pos = 0
+    i = 0
+    while i < len(patch_lines):
+        line = patch_lines[i]
+        if line.startswith("@@"):
+            # Extract anchor (rest of the line after "@@") and strip whitespace.
+            anchor = line[2:].strip()
+            found = False
+            if not orig_lines:
+                # For empty original content, consider the context marker a match.
+                found = True
+            else:
+                # Find the anchor in orig_lines (ignoring surrounding whitespace)
+                for j in range(orig_pos, len(orig_lines)):
+                    if orig_lines[j].strip() == anchor:
+                        new_lines.extend(orig_lines[orig_pos:j])
+                        # Append the anchor line as context.
+                        new_lines.append(orig_lines[j])
+                        orig_pos = j + 1
+                        found = True
+                        break
+            if not found:
+                print(f"Anchor not found: {anchor}")
+                # If anchor not found, skip this diff block.
                 i += 1
-                # Skip removal block (if any)
-                while i < len(patch_lines) and patch_lines[i].strip() != "=======":
-                    i += 1
+                continue
+            i += 1
+            # Parse the diff block lines.
+            removal_lines = []
+            addition_lines = []
+            while i < len(patch_lines) and not patch_lines[i].startswith("@@"):
+                current = patch_lines[i]
+                if current.startswith("-"):
+                    removal_lines.append(current[1:])
+                elif current.startswith("+"):
+                    addition_lines.append(current[1:])
+                # Ignore any context lines or other content.
+                i += 1
 
-                # If the separator is found, skip it.
-                if i < len(patch_lines) and patch_lines[i].strip() == "=======":
-                    i += 1
+            if removal_lines:
+                # If there are removal lines, search and remove them from orig_lines.
+                for rem in removal_lines:
+                    found_rem = False
+                    if orig_lines:
+                        for k in range(orig_pos, len(orig_lines)):
+                            if orig_lines[k].strip() == rem.strip():
+                                # Append unchanged lines before the removal.
+                                new_lines.extend(orig_lines[orig_pos:k])
+                                # Skip the matched removal line.
+                                orig_pos = k + 1
+                                found_rem = True
+                                break
+                    if not found_rem:
+                        pass
+                # After removals, insert addition lines.
+                new_lines.extend(addition_lines)
+            else:
+                # If there are no removal lines, insert addition lines immediately after the context.
+                new_lines.extend(addition_lines)
+        else:
+            # Ignore any lines outside diff segments.
+            i += 1
 
-                insertion_block = []
-                # Collect insertion lines
-                while i < len(patch_lines) and patch_lines[i].strip() != ">>>>>>>":
-                    insertion_block.append(patch_lines[i])
-                    i += 1
+    # Append all remaining original lines.
+    new_lines.extend(orig_lines[orig_pos:])
+    return "\n".join(new_lines) + "\n"
 
-                # Skip the closing marker if present.
-                if i < len(patch_lines) and patch_lines[i].strip() == ">>>>>>>":
-                    i += 1
+def apply_gemini_diff(original_content: str, diff_content: str) -> str:
+    """
+    Applies a unified diff (in Gemini's format) to the original content.
 
-                new_lines.extend(insertion_block)
+    Args:
+        original_content (str): The original content of the file.
+        diff_content (str): The unified diff content produced by Gemini.
+
+    Returns:
+        str: The new content after applying the diff.
+    """
+    import re
+
+    old_lines = original_content.splitlines()
+    diff_lines = diff_content.splitlines()
+    new_lines = []
+    old_index = 0
+
+    hunk_header_pattern = re.compile(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+    i = 0
+    while i < len(diff_lines):
+        line = diff_lines[i]
+        if line.startswith('---') or line.startswith('+++'):
+            i += 1
+            continue
+        if line.startswith('@@'):
+            m = hunk_header_pattern.match(line)
+            if m:
+                old_start = int(m.group(1)) - 1
+                # old_count = int(m.group(2)) if m.group(2) else 1  # not used directly here
             else:
                 i += 1
-        return "\n".join(new_lines) + "\n"
+                continue
 
-    # Standard processing if original_content is not empty
-    original_lines = original_content.splitlines()
-    new_lines = []
-    pos = 0  # pointer in original_lines
+            # Append unchanged lines before this hunk.
+            while old_index < old_start and old_index < len(old_lines):
+                new_lines.append(old_lines[old_index])
+                old_index += 1
 
-    i = 0  # pointer in patch_lines
-    while i < len(patch_lines):
-        if patch_lines[i].strip() == "<<<<<<<":
             i += 1
-            removal_block = []
-            # Collect removal lines
-            while i < len(patch_lines) and patch_lines[i].strip() != "=======":
-                removal_block.append(patch_lines[i])
+            # Process hunk lines until the next hunk header or end of diff.
+            while i < len(diff_lines) and not diff_lines[i].startswith('@@'):
+                diff_line = diff_lines[i]
+                if diff_line.startswith(' '):
+                    new_lines.append(diff_line[1:])
+                    old_index += 1
+                elif diff_line.startswith('-'):
+                    # Removed line; skip it in the original content.
+                    old_index += 1
+                elif diff_line.startswith('+'):
+                    new_lines.append(diff_line[1:])
+                else:
+                    # Fallback: treat unexpected lines as context.
+                    new_lines.append(diff_line)
+                    old_index += 1
                 i += 1
-
-            # If we did not find the separator, break out (or skip block)
-            if i >= len(patch_lines) or patch_lines[i].strip() != "=======":
-                break  # Incomplete block; stop processing.
-            i += 1  # Skip the "=======" line
-
-            insertion_block = []
-            # Collect insertion lines
-            while i < len(patch_lines) and patch_lines[i].strip() != ">>>>>>>":
-                insertion_block.append(patch_lines[i])
-                i += 1
-
-            # Skip the closing marker if present.
-            if i < len(patch_lines) and patch_lines[i].strip() == ">>>>>>>":
-                i += 1
-
-            # Search for the removal_block in original_lines starting from pos.
-            found = False
-            for j in range(pos, len(original_lines) - len(removal_block) + 1):
-                match = True
-                for k, rem_line in enumerate(removal_block):
-                    if original_lines[j + k].strip() != rem_line.strip():
-                        match = False
-                        break
-                if match:
-                    new_lines.extend(original_lines[pos:j])
-                    new_lines.extend(insertion_block)
-                    pos = j + len(removal_block)
-                    found = True
-                    break
-            # If not found, skip this patch block.
         else:
             i += 1
 
-    new_lines.extend(original_lines[pos:])
+    # Append any remaining unmodified lines.
+    while old_index < len(old_lines):
+        new_lines.append(old_lines[old_index])
+        old_index += 1
+
     return "\n".join(new_lines) + "\n"

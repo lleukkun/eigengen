@@ -16,10 +16,27 @@ def create_app(config: EggConfig) -> FastAPI:
     @app.post("/api/send")
     async def send_endpoint(request: Request):
         """
-        Process a chat prompt and return a JSON object.
+        Processes an incoming chat prompt from the request. This endpoint:
+        - Combines the user's prompt with optional file contents.
+        - Appends any initial file content if available.
+        - Retrieves additional context for enhancing the response.
+        - Generates an answer via the chat model.
+        Returns a JSON response containing the generated answer.
         """
         data = await request.json()
         original_message = data.get("prompt", "")
+        filepaths = data.get("filepaths", [])
+        if isinstance(filepaths, list):
+            for fp in filepaths:
+                try:
+                    with open(fp, "r", encoding="utf-8") as file:
+                        file_content = file.read()
+                    # Wrap the file content in a markdown code block
+                    code_block = utils.encode_code_block(file_content)
+                    original_message += "\n" + code_block
+                except Exception as e:
+                    # Optionally log the error or handle missing file gracefully
+                    pass
 
         if chat_instance.initial_file_content and chat_instance.initial_file_content.strip() != "":
             original_message += "\n" + chat_instance.initial_file_content
@@ -55,15 +72,19 @@ def create_app(config: EggConfig) -> FastAPI:
     @app.get("/api/history")
     async def history_endpoint():
         """
-        Return the chat history as a JSON array with objects { "role": ..., "content": ... }.
+        Retrieves the complete chat conversation history.
+        Returns a JSON array where each element is an object with "role" and "content" keys.
         """
         return JSONResponse(content=chat_instance.messages)
 
     @app.post("/api/meld")
     async def meld_endpoint(request: Request):
         """
-        Accept a JSON payload with "code_block" and "code_filepath" fields.
-        Returns a unified diff preview of the changes.
+        Receives a JSON payload with the fields:
+        - "code_block": The diff instructions to be applied.
+        - "code_filepath": The path to the file whose content will be modified.
+        Applies the diff to the existing file content (or an empty string if absent) and produces
+        a unified diff preview. Returns a JSON response containing both the diff preview and the new file content.
         """
         data = await request.json()
         code_block = data.get("code_block")
@@ -89,8 +110,11 @@ def create_app(config: EggConfig) -> FastAPI:
     @app.post("/api/apply")
     async def apply_endpoint(request: Request):
         """
-        Accept a JSON payload with "file_content" and "file_path" fields.
-        Apply the changes to the file using the custom diff patch.
+        Receives a JSON payload with the following keys:
+        - "file_content": The new content to be saved.
+        - "file_path": The target file path.
+        Attempts to update the specified file with the provided content.
+        Returns a JSON response indicating whether the changes were successfully applied or detailing any error encountered.
         """
         data = await request.json()
         file_content = data.get("file_content")
@@ -110,9 +134,10 @@ def create_app(config: EggConfig) -> FastAPI:
     @app.get("/api/project_context")
     async def project_context():
         """
-        Checks if the server is running in a Git repository.
-        If yes, performs 'git ls-files' and returns a JSON object with field "file_paths" containing a list of files.
-        Otherwise, returns an error message.
+        Verifies whether the server is running within a Git repository.
+        If a Git repository is detected, retrieves the list of tracked files using 'git ls-files'
+        and returns them within a JSON object under the key "file_paths".
+        If not, returns a JSON error message indicating that the server is not operating inside a Git repository.
         """
         if chat_instance.git_root:
             file_paths = utils.get_git_files()
