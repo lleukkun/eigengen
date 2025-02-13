@@ -16,7 +16,7 @@ import pygments.style
 from eigengen import operations, utils, keybindings, meld, providers, prompts
 from eigengen.progress import ProgressIndicator
 from eigengen.config import EggConfig
-from eigengen.providers import PROVIDER_CONFIGS
+from eigengen.providers import MODEL_CONFIGS
 
 # New imports for EggRag support
 from eigengen.eggrag import EggRag, NoOpEggRag
@@ -384,7 +384,7 @@ class EggChat:
 
         def print_supported_models():
             print("Supported models:")
-            supported_models = list(PROVIDER_CONFIGS.keys())
+            supported_models = list(MODEL_CONFIGS.keys())
             for m in supported_models:
                 print(f" - {m}")
 
@@ -396,7 +396,7 @@ class EggChat:
         else:
             # Argument provided; attempt to switch model
             new_model = args[0].strip()
-            if new_model in PROVIDER_CONFIGS:
+            if new_model in MODEL_CONFIGS:
                 self.config.model = new_model
                 print(f"Model switched to: {new_model}")
             else:

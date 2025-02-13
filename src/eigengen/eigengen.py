@@ -9,7 +9,7 @@ import argparse
 from typing import Optional
 import sys
 
-from eigengen.providers import PROVIDER_CONFIGS
+from eigengen.providers import MODEL_CONFIGS
 from eigengen import log, chat, utils
 from eigengen.config import EggConfig
 
@@ -24,7 +24,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument("--config", "-C", default=None,
                         help="Path to the configuration file (default: ~/.eigengen/config.json)")
-    parser.add_argument("--model", "-m", choices=list(PROVIDER_CONFIGS.keys()),
+    parser.add_argument("--model", "-m", choices=list(MODEL_CONFIGS.keys()),
                         help="Choose Model")
     parser.add_argument("--editor", "-e", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=['github-dark', 'monokai', 'solarized'],

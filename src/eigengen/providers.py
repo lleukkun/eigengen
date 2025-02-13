@@ -1,11 +1,11 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import dataclasses
 import requests
 import json
 import time
 import random
 import os
-from typing import Any, Dict, Iterable, List, Generator, Optional, cast
+from typing import Protocol, Any, Dict, Iterable, List, Generator, cast
 
 import anthropic
 import groq
@@ -18,61 +18,21 @@ from eigengen import config
 
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
-
-class ProviderConfig:
-    def __init__(self, provider: str, model: str,
-                 max_tokens: int, temperature: float):
-        self.provider = provider
-        self.model = model
-        self.max_tokens = max_tokens
-        self.temperature = temperature
-
-PROVIDER_CONFIGS: Dict[str, ProviderConfig] = {
-    "claude": ProviderConfig(
-        "anthropic",
-        "claude-3-5-sonnet-latest",
-        8192,
-        0.7,
-    ),
-    "deepseek-r1:32b": ProviderConfig(
-        "ollama", "deepseek-r1:32b", 8192, 0.7
-    ),
-    "deepseek-r1": ProviderConfig(
-        "deepseek", "deepseek-reasoner", 8192, 0.7
-    ),
-    "groq": ProviderConfig(
-        "groq",
-        "deepseek-r1-distill-llama-70b",
-        32768,
-        0.5,
-    ),
-    "o1": ProviderConfig("openai", "o1", 100000, 0.7),
-    "o3-mini": ProviderConfig(
-        "openai", "o3-mini",  100000, 0.7
-    ),
-    "gemini": ProviderConfig(
-        "google",
-        "gemini-2.0-flash-thinking-exp",
-        8192,
-        0.7,
-    ),
-    "mistral": ProviderConfig(
-        "mistral",
-        "mistral-large-latest",
-        32768,
-        0.7,
-    ),
-}
-
-class Provider(ABC):
+class Provider(Protocol):
     @abstractmethod
-    def make_request(self,
-                     model: str,
-                     messages: List[Dict[str, str]],
-                     max_tokens: int,
-                     temperature: float,
-                     prediction: str|None) -> Generator[str, None, None]:
-        pass
+    def make_request(
+        self,
+        model_name: str,
+        messages: list[dict[str, str]],
+        prediction: str | None,
+        reasoning_effort: str | None,
+    ) -> Generator[str, None, None]: ...
+
+@dataclasses.dataclass
+class ModelConfig:
+    provider: str
+    model_name: str
+    temperature: float
 
 
 @dataclasses.dataclass
@@ -80,7 +40,6 @@ class Model:
     provider: Provider
     model_name: str
     temperature: float
-    max_tokens: int
 
 
 class OllamaProvider(Provider):
@@ -90,17 +49,15 @@ class OllamaProvider(Provider):
     def make_request(self,
                      model: str,
                      messages: List[Dict[str, str]],
-                     max_tokens: int,
                      temperature: float,
-                     _=None) -> Generator[str, None, None]:
+                     reasoning_effort=None) -> Generator[str, None, None]:
         headers: Dict[str, str] = {'Content-Type': 'application/json'}
         data: Dict[str, Any] = {
             "model": model,
             "messages": messages,
             "stream": True,
             "options": {
-                "temperature": temperature,
-                "max_tokens": max_tokens
+                "temperature": temperature
             }
         }
         response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data), stream=True)
@@ -111,6 +68,7 @@ class OllamaProvider(Provider):
                 content = json.loads(line)["message"]["content"]
                 yield content
 
+
 class AnthropicProvider(Provider):
     def __init__(self, client: anthropic.Anthropic):
         super().__init__()
@@ -119,9 +77,8 @@ class AnthropicProvider(Provider):
     def make_request(self,
                      model: str,
                      messages: List[Dict[str, str]],
-                     max_tokens: int,
                      temperature: float,
-                     _=None) -> Generator[str, None, None]:
+                     reasoning_effort=None) -> Generator[str, None, None]:
 
         if len(messages) < 1:
             return
@@ -135,7 +92,6 @@ class AnthropicProvider(Provider):
             try:
                 with self.client.messages.stream(
                     model=model,
-                    max_tokens=max_tokens,
                     temperature=temperature,
                     messages=cast(Iterable[anthropic.types.MessageParam], messages),
                     system=system_message
@@ -151,6 +107,7 @@ class AnthropicProvider(Provider):
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
+
 class GroqProvider(Provider):
     def __init__(self, client: groq.Groq):
         super().__init__()
@@ -159,14 +116,13 @@ class GroqProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
+                     temperature: float, reasoning_effort=None) -> Generator[str, None, None]:
 
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.completions.create(
                     messages=cast(List, messages),
                     model=model,
-                    max_tokens=max_tokens,
                     temperature=temperature,
                     stream=True
                 )
@@ -192,9 +148,10 @@ class OpenAIProvider(Provider):
         self.max_retries = 5
         self.base_delay = 1
 
-    def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, max_retries: int = 5,
-                     base_delay: int = 1, prediction: Optional[str] = None) -> Generator[str, None, None]:
+    def make_request(self, model: str,
+                     messages: list[dict[str, str]],
+                     temperature: float,
+                     reasoning_effort: str = "medium") -> Generator[str, None, None]:
 
         # map to openai specifics
         openai_messages: List[openai.types.chat.ChatCompletionMessageParam] = []
@@ -210,16 +167,16 @@ class OpenAIProvider(Provider):
             else:
                 openai_messages.append({ "role": role, "content": message["content"] })
 
-        for attempt in range(max_retries):
+        for attempt in range(self.max_retries):
             try:
                 params = { }
 
                 use_stream = True if model not in ["o1", "o1-mini"] else False
 
+                if model in ["o3-mini"]:
+                    params["reasoning_effort"] = reasoning_effort
                 if model not in ["o1", "o3-mini"]:
                     params["temperature"] = temperature
-                    if prediction:
-                        params["prediction"] = prediction
 
                 response = self.client.chat.completions.create(
                     model=model,
@@ -253,7 +210,7 @@ class GoogleProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
+                     temperature: float, reasoning_effort=None) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
 
@@ -266,7 +223,6 @@ class GoogleProvider(Provider):
                     config=types.GenerateContentConfig(
                         system_instruction=system_message,
                         candidate_count=1,
-                        max_output_tokens=max_tokens,
                         temperature=temperature,
                     ),
                     history=cast(
@@ -305,13 +261,12 @@ class MistralProvider(Provider):
         self.base_delay = 1
 
     def make_request(self, model: str, messages: List[Dict[str, str]],
-                     max_tokens: int, temperature: float, _=None) -> Generator[str, None, None]:
+                     temperature: float, reasoning_effort=None) -> Generator[str, None, None]:
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.stream(
                     model=model,
                     messages=cast(List, messages),
-                    max_tokens=max_tokens,
                     temperature=temperature
                 )
                 if response is None:
@@ -331,6 +286,18 @@ class MistralProvider(Provider):
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
 
+MODEL_CONFIGS: dict[str, ModelConfig] = {
+    "claude": ModelConfig("anthropic", "claude-3-5-sonnet-latest", 0.7),
+    "deepseek-r1:32b": ModelConfig("ollama", "deepseek-r1:32b", 0.5),
+    "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", 0.5),
+    "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", 0.25),
+    "o1": ModelConfig("openai", "o1", 0.7),
+    "o3-mini": ModelConfig("openai", "o3-mini", 0.7),
+    "gemini": ModelConfig("google", "gemini-2.0-flash-thinking-exp", 0.7),
+    "mistral": ModelConfig("mistral", "mistral-large-latest", 0.7),
+}
+
+
 def get_api_key(provider: str, config: config.EggConfig) -> str:
     env_var_name = f"{provider.upper()}_API_KEY"
     api_key = os.environ.get(env_var_name, None)
@@ -347,10 +314,10 @@ def get_api_key(provider: str, config: config.EggConfig) -> str:
 
 
 def create_model(nickname: str, config: config.EggConfig) -> Model:
-    if nickname not in PROVIDER_CONFIGS:
+    if nickname not in MODEL_CONFIGS:
         raise ValueError(f"Invalid model nickname: {nickname}")
 
-    model_config = PROVIDER_CONFIGS[nickname]
+    model_config = MODEL_CONFIGS[nickname]
     provider = None
     if model_config.provider == "ollama":
         provider = OllamaProvider()
@@ -381,12 +348,11 @@ def create_model(nickname: str, config: config.EggConfig) -> Model:
     else:
         raise ValueError(f"Invalid provider specified: {model_config.provider}")
     return Model(provider=provider,
-                 model_name=model_config.model,
-                 temperature=model_config.temperature,
-                 max_tokens=model_config.max_tokens)
+                 model_name=model_config.model_name,
+                 temperature=model_config.temperature)
 
 
-def get_model_config(nickname: str) -> ProviderConfig:
-    if nickname not in PROVIDER_CONFIGS:
+def get_model_config(nickname: str) -> ModelConfig:
+    if nickname not in MODEL_CONFIGS:
         raise ValueError(f"Invalid model nickname: {nickname}")
-    return PROVIDER_CONFIGS[nickname]
+    return MODEL_CONFIGS[nickname]
