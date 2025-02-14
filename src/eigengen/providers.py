@@ -283,7 +283,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
     "o1": ModelConfig("openai", "o1", 0.7),
     "o3-mini": ModelConfig("openai", "o3-mini", 0.7),
     "gemini": ModelConfig("google", "gemini-2.0-pro-exp-02-05", 0.7),
-    "mistral": ModelConfig("mistral", "mistral-large-latest", 0.7),
+    "mistral": ModelConfig("mistral", "mistral-large-latest", 0.5),
 }
 
 
