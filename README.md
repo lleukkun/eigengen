@@ -6,12 +6,12 @@ Changes are presented to user as unified diffs for review before applying.
 
 ### Supported Models
 EigenGen currently works correctly with:
-  - DeepSeek deepseek-r1 (/meld by v3)
-  - OpenAI o3-mini, o1 (/meld by gpt-4o-mini)
-  - Anthropic claude-3-5-sonnet (uses same model for /meld operation)
-  - deepseek-r1:70b via Groq (/meld by same)
-  - Google gemini-2.0-flash-thinking-exp (/meld by gemini-2.0-flash-exp)
-  - Mistral Large v2 (/meld uses the same)
+  - DeepSeek deepseek-r1
+  - OpenAI o3-mini, o1
+  - Anthropic claude-3-5-sonnet
+  - deepseek-r1:70b via Groq
+  - Google gemini-2.0-flash-thinking-exp
+  - Mistral Large v2
 
 ## Features
 

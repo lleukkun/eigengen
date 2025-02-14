@@ -168,7 +168,7 @@ class OpenAIProvider(Provider):
                 use_stream = True if model not in ["o1", "o1-mini"] else False
 
                 if model in ["o3-mini"]:
-                    params["reasoning_effort"] = reasoning_effort
+                    params["reasoning_effort"] = "high"
                 if model not in ["o1", "o3-mini"]:
                     params["temperature"] = temperature
 
