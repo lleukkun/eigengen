@@ -149,15 +149,16 @@ class OpenAIProvider(Provider):
     ) -> Generator[str, None, None]:
         # map to openai specifics
         openai_messages: List[openai.types.chat.ChatCompletionMessageParam] = []
+        if model.startswith("deepseek-") or model in ["o1-preview", "o1-mini"]:
+            # deepseek models prefer no system messages, so we integrate the
+            # system message into the user message
+            system_instruction = messages[0]["content"]
 
-        for message in messages:
-            role = message["role"]
-            if role == "system" and model in ["o1-preview", "o1-mini"]:
-                # need to pass the system message as a user message for these models
-                openai_messages.extend(
-                    [{"role": "user", "content": message["content"]}, {"role": "assistant", "content": "Acknowledge."}]
-                )
-            else:
+            openai_messages.extend(messages[1:])
+            openai_messages[-1]["content"] += f"\n{system_instruction}"
+        else:
+            for message in messages:
+                role = message["role"]
                 openai_messages.append({"role": role, "content": message["content"]})
 
         for attempt in range(self.max_retries):
@@ -276,9 +277,9 @@ class MistralProvider(Provider):
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {
     "claude": ModelConfig("anthropic", "claude-3-5-sonnet-latest", 0.7),
-    "deepseek-r1:14b": ModelConfig("ollama", "deepseek-r1:14b", 0.5),
-    "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", 0.5),
-    "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", 0.25),
+    "deepseek-r1:14b": ModelConfig("ollama", "deepseek-r1:14b", 0.6),
+    "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", 0.6),
+    "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", 0.6),
     "o1": ModelConfig("openai", "o1", 0.7),
     "o3-mini": ModelConfig("openai", "o3-mini", 0.7),
     "gemini": ModelConfig("google", "gemini-2.0-pro-exp-02-05", 0.7),
