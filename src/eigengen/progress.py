@@ -1,10 +1,13 @@
 import threading
 import time
-from typing import Optional, Generator
+from typing import Generator, Optional
 
-from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.styles import Style
+
+# ignore T201 for this file
+# ruff: noqa: T201
 
 
 class ProgressIndicator:
@@ -25,9 +28,11 @@ class ProgressIndicator:
         self.animation_frames = self._generate_animation_frames()
 
         # Define the style for the progress word
-        self.style = Style.from_dict({
-            "progress": "ansicyan"  # You can customize the color as desired
-        })
+        self.style = Style.from_dict(
+            {
+                "progress": "ansicyan"  # You can customize the color as desired
+            }
+        )
 
     def _generate_animation_frames(self) -> Generator[FormattedText, None, None]:
         """
@@ -50,28 +55,24 @@ class ProgressIndicator:
             spaces_right = " " * (self.space_avail - len(self.word) - position)
 
             # Create FormattedText directly without assembling a string
-            formatted_frame = FormattedText([
-                ("", ".oO("),
-                ("", spaces_left),
-                ("class:progress", self.word),
-                ("", spaces_right),
-                ("", ")Oo.")
-            ])
+            formatted_frame = FormattedText(
+                [("", ".oO("), ("", spaces_left), ("class:progress", self.word), ("", spaces_right), ("", ")Oo.")]
+            )
 
             yield formatted_frame
 
     def _animate(self):
         try:
-            print("\033[?25l", end='')  # Hide the cursor
+            print("\033[?25l", end="")  # Hide the cursor
             while self._running:
                 frame = next(self.animation_frames)
-                print("\r", end='', flush=False)
-                print_formatted_text(frame, end='', style=self.style, flush=True)
+                print("\r", end="", flush=False)
+                print_formatted_text(frame, end="", style=self.style, flush=True)
                 time.sleep(self.interval)
         finally:
             # Clear the line after stopping
-            print(" " * self.total_size + "\r", end='', flush=True)
-            print("\033[?25h", end='')  # Show the cursor
+            print(" " * self.total_size + "\r", end="", flush=True)
+            print("\033[?25h", end="")  # Show the cursor
 
     def start(self):
         if not self._running:

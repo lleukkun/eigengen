@@ -1,9 +1,13 @@
-from typing import Generator
-import os
 import contextlib
+import logging
+import os
+from typing import Generator
 
 from eigengen import log, providers
 from eigengen.prompts import PROMPTS as PROMPTS
+
+logger = logging.getLogger(__name__)
+
 
 @contextlib.contextmanager
 def open_fd(path, flags):
@@ -22,10 +26,9 @@ def open_fd(path, flags):
         os.close(fd)  # Ensure fd is closed after the block
 
 
-def process_request(model: providers.Model,
-                    messages: list[dict[str, str]],
-                    system_message: str,
-                    reasoning_effort: str|None = None) -> Generator[str, None, None]:
+def process_request(
+    model: providers.Model, messages: list[dict[str, str]], system_message: str, reasoning_effort: str | None = None
+) -> Generator[str, None, None]:
     """
     Processes a request by interfacing with the specified model and handling the conversation flow.
     Args:
@@ -36,20 +39,14 @@ def process_request(model: providers.Model,
         str: Chunks of the final answer as they are generated.
     """
 
-
     steering_messages = []
     steering_role = "system"
-    steering_messages = [
-        {"role": steering_role, "content": system_message}
-    ]
+    steering_messages = [{"role": steering_role, "content": system_message}]
 
     combined_messages = steering_messages + messages
 
     final_answer: str = ""
-    for chunk in model.provider.make_request(model.model_name,
-                                             combined_messages,
-                                             model.temperature,
-                                             reasoning_effort):
+    for chunk in model.provider.make_request(model.model_name, combined_messages, model.temperature, reasoning_effort):
         final_answer += chunk
         yield chunk
 

@@ -1,8 +1,12 @@
-from typing import List, Dict
-from datetime import datetime
-import os
 import json
+import os
 import sys
+from datetime import datetime
+from logging import getLogger
+from typing import Dict, List
+
+logger = getLogger(__name__)
+
 
 def log_request_response(model: str, messages: List[Dict[str, str]], final_answer: str) -> None:
     """
@@ -25,13 +29,8 @@ def log_request_response(model: str, messages: List[Dict[str, str]], final_answe
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "current_dir": os.getcwd(),
-        "request": {
-            "model": model,
-            "messages": messages
-        },
-        "response": {
-            "final_answer": final_answer
-        }
+        "request": {"model": model, "messages": messages},
+        "response": {"final_answer": final_answer},
     }
 
     try:
@@ -40,7 +39,8 @@ def log_request_response(model: str, messages: List[Dict[str, str]], final_answe
             f.write(json.dumps(log_entry) + "\n")
     except Exception as e:
         # Print a warning message to stderr if logging fails
-        print(f"Warning: Failed to log request/response: {str(e)}", file=sys.stderr)
+        logger.warning(f"Failed to log request/response: {str(e)}", file=sys.stderr)
+
 
 def log_prompt(prompt: str) -> None:
     """
@@ -57,10 +57,7 @@ def log_prompt(prompt: str) -> None:
     log_file = os.path.join(log_dir, "prompt_history.jsonl")
 
     # Create a log entry with the timestamp and prompt
-    log_entry = {
-        "timestamp": datetime.now().isoformat(),
-        "prompt": prompt
-    }
+    log_entry = {"timestamp": datetime.now().isoformat(), "prompt": prompt}
 
     try:
         # Append the log entry to the prompt history file in JSON lines format
@@ -68,7 +65,8 @@ def log_prompt(prompt: str) -> None:
             f.write(json.dumps(log_entry) + "\n")
     except Exception as e:
         # Print a warning message to stderr if logging fails
-        print(f"Warning: Failed to log prompt: {str(e)}", file=sys.stderr)
+        logger.warning(f"Failed to log prompt: {str(e)}", file=sys.stderr)
+
 
 def list_prompt_history(n: int) -> None:
     """
@@ -81,7 +79,7 @@ def list_prompt_history(n: int) -> None:
     log_file = os.path.expanduser("~/.eigengen/prompt_history.jsonl")
     # Check if the prompt history file exists
     if not os.path.exists(log_file):
-        print("No prompt history found.")
+        logger.info("No prompt history found.")
         return
 
     # Read all lines from the prompt history file
@@ -95,4 +93,4 @@ def list_prompt_history(n: int) -> None:
         # Format the timestamp for readability
         timestamp = datetime.fromisoformat(entry["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
         # Print the prompt with its timestamp and index
-        print(f"{i}. [{timestamp}] {entry['prompt']}")
+        print(f"{i}. [{timestamp}] {entry['prompt']}")  # noqa: T201

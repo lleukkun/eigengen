@@ -1,9 +1,10 @@
+import builtins
+import keyword
+import logging
 import os
 import re
 import tokenize
-import keyword
-import builtins
-from typing import List, Dict
+from typing import Dict, List
 
 
 class BaseParser:
@@ -56,8 +57,9 @@ class PythonParser(BaseParser):
                     elif self.extract_comments_and_strings and tok.type in (tokenize.STRING, tokenize.COMMENT):
                         # For comment/string tokens, compare in lowercase.
                         for word in word_re.findall(tok.string):
-                            if word.lower() in {w.lower() for w in keyword_set} or \
-                               word.lower() in {w.lower() for w in builtin_set}:
+                            if word.lower() in {w.lower() for w in keyword_set} or word.lower() in {
+                                w.lower() for w in builtin_set
+                            }:
                                 continue
                             tokens.append(
                                 {
@@ -68,17 +70,17 @@ class PythonParser(BaseParser):
                                 }
                             )
         except Exception as ex:
-            print(f"Error tokenizing Python file {self.file_path}: {ex}")
+            logging.error(f"Error tokenizing Python file {self.file_path}: {ex}")
         return tokens
 
 
 class TypeScriptParser(BaseParser):
     # Regular expressions to extract tokens.
-    IDENTIFIER_RE = re.compile(r'\b[A-Za-z_]\w*\b')
+    IDENTIFIER_RE = re.compile(r"\b[A-Za-z_]\w*\b")
     STRING_RE = re.compile(r'"(.*?)"|\'(.*?)\'|`(.*?)`')
-    SINGLE_LINE_COMMENT_RE = re.compile(r'//(.*)')
-    MULTI_LINE_COMMENT_RE = re.compile(r'/\*([\s\S]*?)\*/')
-    WORD_RE = re.compile(r'\w+')
+    SINGLE_LINE_COMMENT_RE = re.compile(r"//(.*)")
+    MULTI_LINE_COMMENT_RE = re.compile(r"/\*([\s\S]*?)\*/")
+    WORD_RE = re.compile(r"\w+")
 
     def __init__(self, file_path: str, extract_comments_and_strings: bool = False):
         super().__init__(file_path, extract_comments_and_strings)
@@ -92,48 +94,56 @@ class TypeScriptParser(BaseParser):
             # Always process code identifiers (case preserved)
             for match in self.IDENTIFIER_RE.finditer(content):
                 token_text = match.group(0)
-                tokens.append({
-                    "token": token_text,
-                    "line": content.count("\n", 0, match.start()) + 1,
-                    "column": match.start() - content.rfind("\n", 0, match.start()),
-                    "file": self.file_path
-                })
+                tokens.append(
+                    {
+                        "token": token_text,
+                        "line": content.count("\n", 0, match.start()) + 1,
+                        "column": match.start() - content.rfind("\n", 0, match.start()),
+                        "file": self.file_path,
+                    }
+                )
 
             # Process string literals if enabled (convert extracted text to lowercase)
             if self.extract_comments_and_strings:
                 for match in self.STRING_RE.finditer(content):
                     raw_text = match.group(1) or match.group(2) or match.group(3) or ""
                     for word in self.WORD_RE.findall(raw_text):
-                        tokens.append({
-                            "token": word.lower(),
-                            "line": content.count("\n", 0, match.start()) + 1,
-                            "column": match.start() - content.rfind("\n", 0, match.start()),
-                            "file": self.file_path
-                        })
+                        tokens.append(
+                            {
+                                "token": word.lower(),
+                                "line": content.count("\n", 0, match.start()) + 1,
+                                "column": match.start() - content.rfind("\n", 0, match.start()),
+                                "file": self.file_path,
+                            }
+                        )
 
                 # Process single-line comments (convert tokens to lowercase)
                 for match in self.SINGLE_LINE_COMMENT_RE.finditer(content):
                     comment_text = match.group(1).strip()
                     for word in self.WORD_RE.findall(comment_text):
-                        tokens.append({
-                            "token": word.lower(),
-                            "line": content.count("\n", 0, match.start()) + 1,
-                            "column": match.start() - content.rfind("\n", 0, match.start()),
-                            "file": self.file_path
-                        })
+                        tokens.append(
+                            {
+                                "token": word.lower(),
+                                "line": content.count("\n", 0, match.start()) + 1,
+                                "column": match.start() - content.rfind("\n", 0, match.start()),
+                                "file": self.file_path,
+                            }
+                        )
 
                 # Process multi-line comments (convert tokens to lowercase)
                 for match in self.MULTI_LINE_COMMENT_RE.finditer(content):
                     comment_text = match.group(1).strip()
                     for word in self.WORD_RE.findall(comment_text):
-                        tokens.append({
-                            "token": word.lower(),
-                            "line": content.count("\n", 0, match.start()) + 1,
-                            "column": match.start() - content.rfind("\n", 0, match.start()),
-                            "file": self.file_path,
-                        })
+                        tokens.append(
+                            {
+                                "token": word.lower(),
+                                "line": content.count("\n", 0, match.start()) + 1,
+                                "column": match.start() - content.rfind("\n", 0, match.start()),
+                                "file": self.file_path,
+                            }
+                        )
         except Exception as ex:
-            print(f"Error tokenizing TypeScript file {self.file_path}: {ex}")
+            logging.error(f"Error tokenizing TypeScript file {self.file_path}: {ex}")
         return tokens
 
 
@@ -143,29 +153,14 @@ class FileParser:
     Currently supports Python (.py) and TypeScript (.ts) files.
     """
 
-    PARSER_MAP = {
-        ".py": PythonParser,
-        ".ts": TypeScriptParser
-    }
+    PARSER_MAP = {".py": PythonParser, ".ts": TypeScriptParser}
 
     @staticmethod
     def parse_file(file_path: str, extract_comments_and_strings: bool = False) -> List[Dict]:
         _, ext = os.path.splitext(file_path)
         parser_cls = FileParser.PARSER_MAP.get(ext.lower())
         if not parser_cls:
-            print(f"No parser implemented for extension: {ext} in file: {file_path}")
+            logging.error(f"No parser implemented for extension: {ext} in file: {file_path}")
             return []
         parser = parser_cls(file_path, extract_comments_and_strings)
         return parser.parse()
-
-
-# Example usage:
-if __name__ == "__main__":
-    # For demonstration, adjust the file paths as needed.
-    sample_files = ["example.py", "example.ts"]
-    all_tokens = []
-    for file in sample_files:
-        file_tokens = FileParser.parse_file(file)
-        all_tokens.extend(file_tokens)
-        print(f"Tokens from {file}:", file_tokens)
-

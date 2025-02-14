@@ -1,21 +1,24 @@
-from typing import List, Tuple, Optional
-import re
-import tempfile
-import subprocess
-import os
-import io  # Add this import for StringIO
-import pygments.formatters  # Ensure this import is present
 import difflib
+import io  # Add this import for StringIO
+import logging
+import os
+import re
+import subprocess
+import tempfile
+from typing import List, Optional, Tuple
 
 import pygments
+import pygments.formatters  # Ensure this import is present
 from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.lexers.special import TextLexer
 from pygments.styles import get_style_by_name
 
 from eigengen.config import EggConfig
 
+logger = logging.getLogger(__name__)
 
-def encode_code_block(code_content: str, file_path: str='') -> str:
+
+def encode_code_block(code_content: str, file_path: str = "") -> str:
     """
     Encapsulates the code content in a Markdown code block,
     using a variable-length fence to avoid conflicts with backticks in the code content.
@@ -29,7 +32,7 @@ def encode_code_block(code_content: str, file_path: str='') -> str:
         str: The code content encapsulated within a Markdown code block.
     """
     # Find all sequences of backticks in the code content
-    backtick_sequences = re.findall(r'`+', code_content)
+    backtick_sequences = re.findall(r"`+", code_content)
     if backtick_sequences:
         # Determine the maximum length of backtick sequences found
         max_backticks = max(len(seq) for seq in backtick_sequences)
@@ -40,12 +43,13 @@ def encode_code_block(code_content: str, file_path: str='') -> str:
         fence_length = 3
 
     # Create the fence using the calculated fence length
-    fence = '`' * fence_length
+    fence = "`" * fence_length
     opening_fence = f"{fence}{file_path}"
     closing_fence = fence
 
     # Return the code content encapsulated within the fences
     return f"{opening_fence}\n{code_content}\n{closing_fence}"
+
 
 def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, int]]:
     """
@@ -68,23 +72,23 @@ def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, in
 
     # Regular expression pattern to match code blocks with variable-length fences and indentation
     code_block_pattern = re.compile(
-        r'^(?P<indent>[ \t]*)'          # Leading indentation (spaces or tabs)
-        r'(?P<fence>`{3,}|~{3,})'       # Opening code fence (at least 3 backticks or tildes)
-        r'[ \t]*(?P<lang_path>\S+)?'    # Optional language identifier and/or file path
-        r'[ \t]*\n'                     # Optional trailing spaces and a newline
-        r'(?P<code>.*?)'                # Code content (non-greedy)
-        r'\n'                           # Newline before the closing fence
-        r'(?P=indent)'                  # Matching leading indentation
-        r'(?P=fence)'                   # Closing code fence matching the opening fence
-        r'[ \t]*\n?',                   # Optional trailing spaces and an optional newline
-        re.DOTALL | re.MULTILINE
+        r"^(?P<indent>[ \t]*)"  # Leading indentation (spaces or tabs)
+        r"(?P<fence>`{3,}|~{3,})"  # Opening code fence (at least 3 backticks or tildes)
+        r"[ \t]*(?P<lang_path>\S+)?"  # Optional language identifier and/or file path
+        r"[ \t]*\n"  # Optional trailing spaces and a newline
+        r"(?P<code>.*?)"  # Code content (non-greedy)
+        r"\n"  # Newline before the closing fence
+        r"(?P=indent)"  # Matching leading indentation
+        r"(?P=fence)"  # Closing code fence matching the opening fence
+        r"[ \t]*\n?",  # Optional trailing spaces and an optional newline
+        re.DOTALL | re.MULTILINE,
     )
 
     # Find all code blocks in the response string
     for match in code_block_pattern.finditer(response):
-        fence = match.group('fence')
-        lang_path = match.group('lang_path') or ""
-        code = match.group('code')
+        fence = match.group("fence")
+        lang_path = match.group("lang_path") or ""
+        code = match.group("code")
         start_index = match.start()
         end_index = match.end()
 
@@ -102,6 +106,7 @@ def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, in
 
     return code_blocks
 
+
 def generate_unified_diff(original_content: str, new_content: str, fromfile: str, tofile: str) -> str:
     """
     Generate a unified diff between original and new content.
@@ -117,15 +122,10 @@ def generate_unified_diff(original_content: str, new_content: str, fromfile: str
     """
     original_lines = original_content.splitlines()
     new_lines = new_content.splitlines()
-    diff_lines = difflib.unified_diff(
-        original_lines,
-        new_lines,
-        fromfile=fromfile,
-        tofile=tofile,
-        lineterm=""
-    )
+    diff_lines = difflib.unified_diff(original_lines, new_lines, fromfile=fromfile, tofile=tofile, lineterm="")
     diff_text = "\n".join(diff_lines) + "\n"
     return diff_text
+
 
 def get_prompt_from_editor_with_prefill(config: EggConfig, prefill_content: str) -> Optional[str]:
     """
@@ -139,7 +139,7 @@ def get_prompt_from_editor_with_prefill(config: EggConfig, prefill_content: str)
     """
     prompt_content = ""
     # Create a temporary file with the prefill content
-    with tempfile.NamedTemporaryFile(mode='w+', suffix=".txt", delete=False) as temp_file:
+    with tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False) as temp_file:
         temp_file_path = temp_file.name
         temp_file.write(prefill_content)
 
@@ -151,13 +151,14 @@ def get_prompt_from_editor_with_prefill(config: EggConfig, prefill_content: str)
         subprocess.run(command, shell=True, check=True)
 
         # Read the content after editing
-        with open(temp_file_path, 'r') as file:
+        with open(temp_file_path, "r") as file:
             prompt_content = file.read()
 
         return prompt_content
     finally:
         # Remove the temporary file to clean up
         os.remove(temp_file_path)
+
 
 def get_editor_command(config: EggConfig) -> str:
     """
@@ -176,6 +177,7 @@ def get_editor_command(config: EggConfig) -> str:
     else:
         return "nano"
 
+
 def get_formatted_response_with_syntax_highlighting(color_scheme: str, response: str) -> str:
     """
     Returns the response with syntax-highlighted code blocks as a formatted string,
@@ -191,7 +193,7 @@ def get_formatted_response_with_syntax_highlighting(color_scheme: str, response:
     try:
         pygments_style = get_style_by_name(color_scheme)
     except Exception:
-        print(f"Unknown color scheme '{color_scheme}'. Falling back to 'github-dark'.")
+        logger.warning(f"Unknown color scheme '{color_scheme}'. Falling back to 'github-dark'.")
         pygments_style = get_style_by_name("monokai")
 
     # Create a formatter with the specified style
@@ -202,7 +204,7 @@ def get_formatted_response_with_syntax_highlighting(color_scheme: str, response:
         output.write(response[last_end:start])
 
         # Reconstruct the opening fence with optional language and path
-        lang_path = ';'.join(filter(None, [actual_lang, actual_path]))
+        lang_path = ";".join(filter(None, [actual_lang, actual_path]))
         output.write(f"{fence}{lang_path}\n")
 
         # Determine the lexer to use for syntax highlighting
@@ -232,9 +234,11 @@ def get_formatted_response_with_syntax_highlighting(color_scheme: str, response:
 
     return output.getvalue()
 
+
 def is_running_in_powershell():
     """Detects if the script is running inside PowerShell."""
     return "PSModulePath" in os.environ
+
 
 def pipe_output_via_pager(output_str: str) -> None:
     """
@@ -247,17 +251,18 @@ def pipe_output_via_pager(output_str: str) -> None:
     pager_command = None
     encoding = "utf-8"
     if os.name == "nt":
-        pager_command = os.environ.get('PAGER', 'more')
+        pager_command = os.environ.get("PAGER", "more")
         if is_running_in_powershell():
             encoding = "utf-16"
     else:
-        pager_command = os.environ.get('PAGER', 'less -R -E -X')
+        pager_command = os.environ.get("PAGER", "less -R -E -X")
 
     with subprocess.Popen(pager_command, shell=True, stdin=subprocess.PIPE) as pager:
         if pager.stdin is not None:
             pager.stdin.write(output_str.encode(encoding))
             pager.stdin.close()
         pager.wait()
+
 
 def get_git_files(pattern: Optional[str] = None) -> list[str]:
     """
@@ -268,17 +273,14 @@ def get_git_files(pattern: Optional[str] = None) -> list[str]:
     try:
         # If a pattern is specified, add '--' then the pattern to the command so that it is interpreted correctly.
         if pattern:
-            result = subprocess.run(
-                ["git", "ls-files", "-z", "--", pattern], capture_output=True, check=True
-            )
+            result = subprocess.run(["git", "ls-files", "-z", "--", pattern], capture_output=True, check=True)
         else:
-            result = subprocess.run(
-                ["git", "ls-files", "-z"], capture_output=True, check=True
-            )
+            result = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True)
         return result.stdout.decode("utf-8").split("\x00")[:-1]
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"Git error: {str(e)}")
+        logger.error(f"Git error: {str(e)}")
         return []
+
 
 def find_git_root() -> Optional[str]:
     """
@@ -294,4 +296,3 @@ def find_git_root() -> Optional[str]:
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return None
-

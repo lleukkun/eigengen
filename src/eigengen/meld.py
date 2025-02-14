@@ -1,6 +1,9 @@
+import logging
 import os
 
 from eigengen import utils
+
+logger = logging.getLogger(__name__)
 
 
 def meld_changes(filepath: str, changes: str, git_root: str = None, unified_diff: bool = False) -> None:
@@ -17,11 +20,7 @@ def meld_changes(filepath: str, changes: str, git_root: str = None, unified_diff
         None
     """
 
-    target_full_path = (
-        os.path.abspath(os.path.join(git_root, filepath))
-        if git_root
-        else os.path.abspath(filepath)
-    )
+    target_full_path = os.path.abspath(os.path.join(git_root, filepath)) if git_root else os.path.abspath(filepath)
     # If git_root is available and the block path is not absolute, assume
     # it is relative to git_root.
 
@@ -33,7 +32,11 @@ def meld_changes(filepath: str, changes: str, git_root: str = None, unified_diff
         original_content = ""
 
     # Use the appropriate diff application method based on the unified_diff flag.
-    new_content = apply_gemini_diff(original_content, changes) if unified_diff else apply_custom_diff(original_content, changes)
+    new_content = (
+        apply_gemini_diff(original_content, changes)
+        if unified_diff
+        else apply_contextual_diff(original_content, changes)
+    )
 
     diff_output = produce_diff(target_full_path, original_content, new_content)
 
@@ -48,9 +51,10 @@ def meld_changes(filepath: str, changes: str, git_root: str = None, unified_diff
         os.makedirs(os.path.dirname(target_full_path), exist_ok=True)
         with open(target_full_path, "w") as f:
             f.write(new_content)
-        print("Changes applied successfully.")
     else:
-        print("Changes not applied.")
+        logger.info("Changes applied successfully.")
+        logger.info("Changes not applied.")
+
 
 def produce_diff(filename: str, original_content: str, new_content: str) -> str:
     """
@@ -74,36 +78,33 @@ def produce_diff(filename: str, original_content: str, new_content: str) -> str:
     )
     return diff_output
 
-def apply_custom_diff(original_content: str, patch_content: str) -> str:
+
+def apply_contextual_diff(original_content: str, patch_content: str) -> str:
     orig_lines = original_content.splitlines()
     patch_lines = patch_content.splitlines()
     new_lines = []
+    # Handle the case where the original file is empty:
+    if not orig_lines:
+        i = 0
+        while i < len(patch_lines):
+            if patch_lines[i].startswith("@@"):
+                i += 1
+                while i < len(patch_lines) and not patch_lines[i].startswith("@@"):
+                    current = patch_lines[i]
+                    if current.startswith("+"):
+                        new_lines.append(current[1:])
+                    # Ignore any removal lines if the file is empty
+                    i += 1
+            else:
+                i += 1
+        return "\n".join(new_lines) + "\n"
     orig_pos = 0
     i = 0
     while i < len(patch_lines):
         line = patch_lines[i]
         if line.startswith("@@"):
-            # Extract anchor (rest of the line after "@@") and strip whitespace.
+            # Extract the anchor text from the diff header.
             anchor = line[2:].strip()
-            found = False
-            if not orig_lines:
-                # For empty original content, consider the context marker a match.
-                found = True
-            else:
-                # Find the anchor in orig_lines (ignoring surrounding whitespace)
-                for j in range(orig_pos, len(orig_lines)):
-                    if orig_lines[j].strip() == anchor:
-                        new_lines.extend(orig_lines[orig_pos:j])
-                        # Append the anchor line as context.
-                        new_lines.append(orig_lines[j])
-                        orig_pos = j + 1
-                        found = True
-                        break
-            if not found:
-                print(f"Anchor not found: {anchor}")
-                # If anchor not found, skip this diff block.
-                i += 1
-                continue
             i += 1
             # Parse the diff block lines.
             removal_lines = []
@@ -114,36 +115,53 @@ def apply_custom_diff(original_content: str, patch_content: str) -> str:
                     removal_lines.append(current[1:])
                 elif current.startswith("+"):
                     addition_lines.append(current[1:])
-                # Ignore any context lines or other content.
                 i += 1
 
+            # Determine if the anchor itself is scheduled for removal.
+            anchor_removed = removal_lines and (removal_lines[0].strip() == anchor)
+
+            # Locate the anchor in the original content.
+            found = False
+            for j in range(orig_pos, len(orig_lines)):
+                if orig_lines[j].strip() == anchor:
+                    new_lines.extend(orig_lines[orig_pos:j])
+                    # If the anchor is being replaced, do not retain it.
+                    if not anchor_removed:
+                        new_lines.append(orig_lines[j])
+                    orig_pos = j + 1
+                    found = True
+                    break
+            if not found:
+                # Skip this diff block if anchor not found.
+                logger.error(f"Anchor not found: {anchor}")
+                continue
+
+            # Process removal lines.
             if removal_lines:
-                # If there are removal lines, search and remove them from orig_lines.
-                for rem in removal_lines:
+                # If the anchor was removed, skip the first removal line as it corresponds to the anchor.
+                start_idx = 1 if anchor_removed else 0
+                for rem in removal_lines[start_idx:]:
                     found_rem = False
-                    if orig_lines:
-                        for k in range(orig_pos, len(orig_lines)):
-                            if orig_lines[k].strip() == rem.strip():
-                                # Append unchanged lines before the removal.
-                                new_lines.extend(orig_lines[orig_pos:k])
-                                # Skip the matched removal line.
-                                orig_pos = k + 1
-                                found_rem = True
-                                break
+                    for k in range(orig_pos, len(orig_lines)):
+                        if orig_lines[k].strip() == rem.strip():
+                            new_lines.extend(orig_lines[orig_pos:k])
+                            orig_pos = k + 1
+                            found_rem = True
+                            break
                     if not found_rem:
+                        # Removals not found are silently ignored.
                         pass
-                # After removals, insert addition lines.
-                new_lines.extend(addition_lines)
-            else:
-                # If there are no removal lines, insert addition lines immediately after the context.
-                new_lines.extend(addition_lines)
+
+            # Insert addition lines.
+            new_lines.extend(addition_lines)
         else:
-            # Ignore any lines outside diff segments.
+            # Ignore lines outside diff segments.
             i += 1
 
-    # Append all remaining original lines.
+    # Append any remaining original lines.
     new_lines.extend(orig_lines[orig_pos:])
     return "\n".join(new_lines) + "\n"
+
 
 def apply_gemini_diff(original_content: str, diff_content: str) -> str:
     """
@@ -167,10 +185,10 @@ def apply_gemini_diff(original_content: str, diff_content: str) -> str:
     i = 0
     while i < len(diff_lines):
         line = diff_lines[i]
-        if line.startswith('---') or line.startswith('+++'):
+        if line.startswith("---") or line.startswith("+++"):
             i += 1
             continue
-        if line.startswith('@@'):
+        if line.startswith("@@"):
             m = hunk_header_pattern.match(line)
             if m:
                 old_start = int(m.group(1)) - 1
@@ -186,15 +204,15 @@ def apply_gemini_diff(original_content: str, diff_content: str) -> str:
 
             i += 1
             # Process hunk lines until the next hunk header or end of diff.
-            while i < len(diff_lines) and not diff_lines[i].startswith('@@'):
+            while i < len(diff_lines) and not diff_lines[i].startswith("@@"):
                 diff_line = diff_lines[i]
-                if diff_line.startswith(' '):
+                if diff_line.startswith(" "):
                     new_lines.append(diff_line[1:])
                     old_index += 1
-                elif diff_line.startswith('-'):
+                elif diff_line.startswith("-"):
                     # Removed line; skip it in the original content.
                     old_index += 1
-                elif diff_line.startswith('+'):
+                elif diff_line.startswith("+"):
                     new_lines.append(diff_line[1:])
                 else:
                     # Fallback: treat unexpected lines as context.

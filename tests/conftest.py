@@ -1,5 +1,6 @@
 import pytest
-from eigengen.providers import ModelConfig, PROVIDER_CONFIGS
+
+from eigengen.providers import PROVIDER_CONFIGS, ModelConfig
 
 
 @pytest.fixture(autouse=True)
@@ -12,9 +13,8 @@ def mock_model_config(monkeypatch):
 
 def pytest_addoption(parser):
     # Add a command-line option for enabling slow tests
-    parser.addoption(
-        "--enable-slow", action="store_true", default=False, help="Run slow tests"
-    )
+    parser.addoption("--enable-slow", action="store_true", default=False, help="Run slow tests")
+
 
 def pytest_collection_modifyitems(config, items):
     # Check if the --enable-slow option was given

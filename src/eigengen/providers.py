@@ -1,22 +1,26 @@
-from abc import abstractmethod
 import dataclasses
-import requests
 import json
-import time
-import random
+import logging
 import os
-from typing import Protocol, Any, Dict, Iterable, List, Generator, cast
+import random
+import time
+from abc import abstractmethod
+from typing import Any, Dict, Generator, Iterable, List, Protocol, cast
 
 import anthropic
 import groq
 import openai
+import requests
 from google import genai
 from google.genai import types
 from mistralai import Mistral
 
 from eigengen import config
 
+logger = logging.getLogger(__name__)
+
 OLLAMA_BASE_URL: str = "http://localhost:11434"
+
 
 class Provider(Protocol):
     @abstractmethod
@@ -27,6 +31,7 @@ class Provider(Protocol):
         prediction: str | None,
         reasoning_effort: str | None,
     ) -> Generator[str, None, None]: ...
+
 
 @dataclasses.dataclass
 class ModelConfig:
@@ -46,19 +51,15 @@ class OllamaProvider(Provider):
     def __init__(self):
         super().__init__()
 
-    def make_request(self,
-                     model: str,
-                     messages: List[Dict[str, str]],
-                     temperature: float,
-                     reasoning_effort=None) -> Generator[str, None, None]:
-        headers: Dict[str, str] = {'Content-Type': 'application/json'}
+    def make_request(
+        self, model: str, messages: List[Dict[str, str]], temperature: float, reasoning_effort=None
+    ) -> Generator[str, None, None]:
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
         data: Dict[str, Any] = {
             "model": model,
             "messages": messages,
             "stream": True,
-            "options": {
-                "temperature": temperature
-            }
+            "options": {"temperature": temperature},
         }
         response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data), stream=True)
         response.raise_for_status()
@@ -74,12 +75,9 @@ class AnthropicProvider(Provider):
         super().__init__()
         self.client: anthropic.Anthropic = client
 
-    def make_request(self,
-                     model: str,
-                     messages: List[Dict[str, str]],
-                     temperature: float,
-                     reasoning_effort=None) -> Generator[str, None, None]:
-
+    def make_request(
+        self, model: str, messages: List[Dict[str, str]], temperature: float, reasoning_effort=None
+    ) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
 
@@ -95,7 +93,7 @@ class AnthropicProvider(Provider):
                     temperature=temperature,
                     messages=cast(Iterable[anthropic.types.MessageParam], messages),
                     max_tokens=8192,
-                    system=system_message
+                    system=system_message,
                 ) as stream:
                     for text in stream.text_stream:
                         yield text
@@ -103,8 +101,8 @@ class AnthropicProvider(Provider):
             except anthropic.RateLimitError as e:
                 if attempt == max_retries - 1:
                     raise e
-                delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
-                print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
+                delay = base_delay * (2**attempt) + random.uniform(0, 1)
+                logger.warning(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
@@ -116,16 +114,13 @@ class GroqProvider(Provider):
         self.max_retries = 5
         self.base_delay = 1
 
-    def make_request(self, model: str, messages: List[Dict[str, str]],
-                     temperature: float, reasoning_effort=None) -> Generator[str, None, None]:
-
+    def make_request(
+        self, model: str, messages: List[Dict[str, str]], temperature: float, reasoning_effort=None
+    ) -> Generator[str, None, None]:
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.completions.create(
-                    messages=cast(List, messages),
-                    model=model,
-                    temperature=temperature,
-                    stream=True
+                    messages=cast(List, messages), model=model, temperature=temperature, stream=True
                 )
 
                 for chunk in response:
@@ -136,8 +131,8 @@ class GroqProvider(Provider):
             except groq.RateLimitError as e:
                 if attempt == self.max_retries - 1:
                     raise e
-                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
-                print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
+                delay = self.base_delay * (2**attempt) + random.uniform(0, 1)
+                logger.warning(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
@@ -149,11 +144,9 @@ class OpenAIProvider(Provider):
         self.max_retries = 5
         self.base_delay = 1
 
-    def make_request(self, model: str,
-                     messages: list[dict[str, str]],
-                     temperature: float,
-                     reasoning_effort: str = "medium") -> Generator[str, None, None]:
-
+    def make_request(
+        self, model: str, messages: list[dict[str, str]], temperature: float, reasoning_effort: str = "medium"
+    ) -> Generator[str, None, None]:
         # map to openai specifics
         openai_messages: List[openai.types.chat.ChatCompletionMessageParam] = []
 
@@ -161,16 +154,15 @@ class OpenAIProvider(Provider):
             role = message["role"]
             if role == "system" and model in ["o1-preview", "o1-mini"]:
                 # need to pass the system message as a user message for these models
-                openai_messages.extend([
-                    { "role": "user", "content": message["content"] },
-                    { "role": "assistant", "content": "Acknowledge." }
-                ])
+                openai_messages.extend(
+                    [{"role": "user", "content": message["content"]}, {"role": "assistant", "content": "Acknowledge."}]
+                )
             else:
-                openai_messages.append({ "role": role, "content": message["content"] })
+                openai_messages.append({"role": role, "content": message["content"]})
 
         for attempt in range(self.max_retries):
             try:
-                params = { }
+                params = {}
 
                 use_stream = True if model not in ["o1", "o1-mini"] else False
 
@@ -180,10 +172,7 @@ class OpenAIProvider(Provider):
                     params["temperature"] = temperature
 
                 response = self.client.chat.completions.create(
-                    model=model,
-                    messages=cast(List, openai_messages),
-                    stream=use_stream,
-                    **params
+                    model=model, messages=cast(List, openai_messages), stream=use_stream, **params
                 )
                 if isinstance(response, openai.Stream):
                     for chunk in response:
@@ -197,8 +186,8 @@ class OpenAIProvider(Provider):
             except openai.RateLimitError as e:
                 if attempt == self.max_retries - 1:
                     raise e
-                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
-                print(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
+                delay = self.base_delay * (2**attempt) + random.uniform(0, 1)
+                logger.warning(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
@@ -210,8 +199,9 @@ class GoogleProvider(Provider):
         self.max_retries = 5
         self.base_delay = 1
 
-    def make_request(self, model: str, messages: List[Dict[str, str]],
-                     temperature: float, reasoning_effort=None) -> Generator[str, None, None]:
+    def make_request(
+        self, model: str, messages: List[Dict[str, str]], temperature: float, reasoning_effort=None
+    ) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
 
@@ -245,13 +235,13 @@ class GoogleProvider(Provider):
                     yield ""
                 return
             except Exception as e:
+                delay = self.base_delay * (2**attempt) + random.uniform(0, 1)
+                logger.warning(f"Error occurred. Retrying in {delay:.2f} seconds...")
                 if attempt == self.max_retries - 1:
                     raise e
-                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
-                print(f"Error occurred. Retrying in {delay:.2f} seconds...")
+                logger.warning(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
-
 
 
 class MistralProvider(Provider):
@@ -261,15 +251,12 @@ class MistralProvider(Provider):
         self.max_retries = 5
         self.base_delay = 1
 
-    def make_request(self, model: str, messages: List[Dict[str, str]],
-                     temperature: float, reasoning_effort=None) -> Generator[str, None, None]:
+    def make_request(
+        self, model: str, messages: List[Dict[str, str]], temperature: float, reasoning_effort=None
+    ) -> Generator[str, None, None]:
         for attempt in range(self.max_retries):
             try:
-                response = self.client.chat.stream(
-                    model=model,
-                    messages=cast(List, messages),
-                    temperature=temperature
-                )
+                response = self.client.chat.stream(model=model, messages=cast(List, messages), temperature=temperature)
                 if response is None:
                     return
 
@@ -281,8 +268,8 @@ class MistralProvider(Provider):
             except Exception as e:
                 if attempt == self.max_retries - 1:
                     raise e
-                delay = self.base_delay * (2 ** attempt) + random.uniform(0, 1)
-                print(f"Error occurred. Retrying in {delay:.2f} seconds...")
+                delay = self.base_delay * (2**attempt) + random.uniform(0, 1)
+                logger.warning(f"Error occurred. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
@@ -325,7 +312,7 @@ def create_model(nickname: str, config: config.EggConfig) -> Model:
     elif model_config.provider == "anthropic":
         api_key = get_api_key("anthropic", config)
         client = anthropic.Anthropic(api_key=api_key)
-        provider =  AnthropicProvider(client)
+        provider = AnthropicProvider(client)
     elif model_config.provider == "groq":
         api_key = get_api_key("groq", config)
         client = groq.Groq(api_key=api_key)
@@ -348,9 +335,7 @@ def create_model(nickname: str, config: config.EggConfig) -> Model:
         provider = OpenAIProvider(client)
     else:
         raise ValueError(f"Invalid provider specified: {model_config.provider}")
-    return Model(provider=provider,
-                 model_name=model_config.model_name,
-                 temperature=model_config.temperature)
+    return Model(provider=provider, model_name=model_config.model_name, temperature=model_config.temperature)
 
 
 def get_model_config(nickname: str) -> ModelConfig:

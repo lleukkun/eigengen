@@ -1,7 +1,10 @@
+import logging
 import os
 import re
 from typing import Dict, List, Set
+
 from eigengen.rag.file_parser import FileParser
+
 
 class ContextExtractor:
     def __init__(self, filtered_index: Dict[str, Set[str]], context_lines: int = 2):
@@ -26,16 +29,17 @@ class ContextExtractor:
             self._file_content_cache[file_path] = lines
             return lines
         except Exception as ex:
-            print(f"Error reading file {file_path}: {ex}")
+            logging.error(f"Error reading file {file_path}: {ex}")
             return []
 
     def _extract_snippet(self, file_path: str, token: str) -> str:
         """
-        Searches for the token (as a whole word) in the file and extracts a snippet with self.context_lines before and after.
+        Searches for the token (as a whole word) in the file and extracts a
+        snippet with self.context_lines before and after.
         Returns the snippet as a string. If not found, returns an empty string.
         """
         lines = self._get_file_lines(file_path)
-        token_regex = re.compile(r'\b' + re.escape(token) + r'\b')
+        token_regex = re.compile(r"\b" + re.escape(token) + r"\b")
         for i, line in enumerate(lines):
             if token_regex.search(line):
                 start = max(0, i - self.context_lines)
@@ -48,9 +52,10 @@ class ContextExtractor:
         """
         Constructs a context by:
          - Tokenizing the target file via FileParser.
-         - For each token that is in the filtered_index and also appears in other files (ignoring tokens unique in target_file),
-           extracts a code snippet from each related file.
-          
+         - For each token that is in the filtered_index and also appears in other
+           files (ignoring tokens unique in target_file), extracts a code snippet
+           from each related file.
+
         Returns a dictionary mapping each qualifying token to a list of dictionaries:
            {
                "file": related file path,
@@ -77,31 +82,7 @@ class ContextExtractor:
                 # Try to extract a snippet from this file.
                 snippet = self._extract_snippet(file_path, token)
                 if snippet:
-                    token_contexts.append({
-                        "file": file_path,
-                        "snippet": snippet
-                    })
+                    token_contexts.append({"file": file_path, "snippet": snippet})
             if token_contexts:
                 context[token] = token_contexts
         return context
-
-
-# Example usage:
-if __name__ == "__main__":
-    # NOTE: For demonstration purposes, adjust file paths as needed.
-    target_file = "example.py"  # Replace with your target file
-    # For integration, assume the filtered index was built using InvertedIndexBuilder.
-    # Here is an example filtered index.
-    sample_filtered_index = {
-        # token: set of files where the token appears
-        "MyClass": {"example.py", "example_ts.ts"},
-        "uniqueFunc": {"example.py", "helper.py"},
-        "def": {"example.py", "helper.py", "another.py"}  # This token might be filtered out later if needed.
-    }
-
-    extractor = ContextExtractor(filtered_index=sample_filtered_index, context_lines=2)
-    context = extractor.extract_context(target_file)
-    
-    # Print aggregated context as JSON-like output.
-    import json
-    print(json.dumps(context, indent=2))

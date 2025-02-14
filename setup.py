@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 with open("requirements.txt") as f:
     requirements = f.read().splitlines()
@@ -11,7 +11,7 @@ setup(
     entry_points={
         "console_scripts": [
             "eigengen=eigengen.eigengen:main",  # Update if main script location changes
-            "egg=eigengen.eigengen:main"
+            "egg=eigengen.eigengen:main",
         ],
     },
     author="Lauri Leukkunen",
@@ -27,5 +27,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.6",
-    install_requires=requirements
+    install_requires=requirements,
 )

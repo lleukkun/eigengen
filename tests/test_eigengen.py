@@ -1,8 +1,10 @@
-import pytest
-import sys
 import os
+import sys
+
+import pytest
+
 from eigengen.eigengen import main
-import re
+
 
 def test_main_prints_help(capsys):
     # Simulate command-line arguments
@@ -30,11 +32,18 @@ def test_main_prints_help(capsys):
 @pytest.mark.skipif(not os.environ.get("ANTHROPIC_API_KEY"), reason="ANTHROPIC_API_KEY not set")
 def test_claude_sonnet_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
-    monkeypatch.setattr(sys, 'argv', [
-        "eigengen",
-        "--model", "claude",
-        "--prompt", "This is part of a system test. You must write on a separate line as the only content: Hello, world.\nYou must not write anything after that."
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "eigengen",
+            "--model",
+            "claude",
+            "--prompt",
+            "This is part of a system test. You must write on a separate line as"
+            " the only content: Hello, world.\nYou must not write anything after that.",
+        ],
+    )
 
     # Call the main function
     main()
@@ -43,20 +52,28 @@ def test_claude_sonnet_hello_world(capsys, monkeypatch):
     captured = capsys.readouterr()
 
     # Split the output into lines and remove empty lines
-    output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
+    output_lines = [line.strip() for line in captured.out.split("\n") if line.strip()]
 
     # Check if the last non-empty line is exactly 'hello, world.'
-    assert output_lines[-1] == 'Hello, world.'
+    assert output_lines[-1] == "Hello, world."
+
 
 @pytest.mark.slow
 @pytest.mark.skipif(not os.environ.get("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
 def test_gpt4_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
-    monkeypatch.setattr(sys, 'argv', [
-        "eigengen",
-        "--model", "gpt4",
-        "--prompt", "This is part of a system test. You must write on a separate line as the only content: Hello, world.\nYou must not write anything after that."
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "eigengen",
+            "--model",
+            "gpt4",
+            "--prompt",
+            "This is part of a system test. You must write on a separate line as "
+            "the only content: Hello, world.\nYou must not write anything after that.",
+        ],
+    )
 
     # Call the main function
     main()
@@ -65,20 +82,28 @@ def test_gpt4_hello_world(capsys, monkeypatch):
     captured = capsys.readouterr()
 
     # Split the output into lines and remove empty lines
-    output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
+    output_lines = [line.strip() for line in captured.out.split("\n") if line.strip()]
 
     # Check if the last non-empty line is exactly 'hello, world.'
-    assert output_lines[-1] == 'Hello, world.'
+    assert output_lines[-1] == "Hello, world."
+
 
 @pytest.mark.slow
 @pytest.mark.skipif(not os.environ.get("GROQ_API_KEY"), reason="GROQ_API_KEY not set")
 def test_groq_hello_world(capsys, monkeypatch):
     # Simulate command-line arguments
-    monkeypatch.setattr(sys, 'argv', [
-        "eigengen",
-        "--model", "groq",
-        "--prompt", "This is part of a system test. You must write on a separate line as the only content: Hello, world.\nYou must not write anything after that."
-    ])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "eigengen",
+            "--model",
+            "groq",
+            "--prompt",
+            "This is part of a system test. You must write on a separate line as "
+            "the only content: Hello, world.\nYou must not write anything after that.",
+        ],
+    )
 
     # Call the main function
     main()
@@ -87,10 +112,10 @@ def test_groq_hello_world(capsys, monkeypatch):
     captured = capsys.readouterr()
 
     # Split the output into lines and remove empty lines
-    output_lines = [line.strip() for line in captured.out.split('\n') if line.strip()]
+    output_lines = [line.strip() for line in captured.out.split("\n") if line.strip()]
 
     # Check if the last non-empty line is exactly 'hello, world.'
-    assert output_lines[-1] == 'Hello, world.'
+    assert output_lines[-1] == "Hello, world."
 
 
 def test_mock_model(capsys, monkeypatch, mock_model_config):
@@ -104,14 +129,10 @@ def test_mock_model(capsys, monkeypatch, mock_model_config):
     def patch_create_model_pair(name: str):
         return create_mock_model_pair(custom_responses)
 
-    monkeypatch.setattr('eigengen.providers.create_model_pair', patch_create_model_pair)
+    monkeypatch.setattr("eigengen.providers.create_model_pair", patch_create_model_pair)
 
     # Simulate command-line arguments
-    monkeypatch.setattr(sys, 'argv', [
-        "eigengen",
-        "--model", "mock-model",
-        "--prompt", "Hello, world"
-    ])
+    monkeypatch.setattr(sys, "argv", ["eigengen", "--model", "mock-model", "--prompt", "Hello, world"])
 
     # Call the main function
     main()
@@ -121,4 +142,3 @@ def test_mock_model(capsys, monkeypatch, mock_model_config):
 
     # Check if the output matches the expected response from MockProvider
     assert "Hello! I'm a custom mock provider." in captured.out
-

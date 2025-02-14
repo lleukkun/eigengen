@@ -1,8 +1,12 @@
 import argparse
-import os
 import json
+import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class EggConfig:
@@ -20,7 +24,7 @@ class EggConfig:
     args: argparse.Namespace = field(default_factory=lambda: argparse.Namespace())
 
     @staticmethod
-    def load_config(config_path: Optional[str] = None) -> 'EggConfig':
+    def load_config(config_path: Optional[str] = None) -> "EggConfig":
         """
         Load configuration from a specified path or default ~/.eigengen/config.json if it exists.
         Returns an EggConfig instance with loaded or default values.
@@ -32,7 +36,7 @@ class EggConfig:
             return EggConfig()
 
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 data = json.load(f)
             return EggConfig(
                 model=data.get("model", "claude"),
@@ -44,11 +48,11 @@ class EggConfig:
                 anthropic_api_key=data.get("anthropic_api_key", None),
                 mistral_api_key=data.get("mistral_api_key", None),
                 deepseek_api_key=data.get("deepseek_api_key", None),
-                args=argparse.Namespace()
+                args=argparse.Namespace(),
             )
         except Exception as e:
-            print(f"Error loading config file '{config_path}': {e}. Using default configuration.")
-            return EggConfig()
+            logger.error(f"Error loading config file '{config_path}': {e}. Using default configuration.")
+        return EggConfig()
 
     def save_config(self, config_path: Optional[str] = None) -> None:
         """
@@ -58,12 +62,8 @@ class EggConfig:
             config_path = os.path.expanduser("~/.eigengen/config.json")
 
         try:
-            with open(config_path, 'w') as f:
-                json.dump({
-                    "model": self.model,
-                    "editor": self.editor,
-                    "color_scheme": self.color_scheme
-                }, f, indent=4)
-            print(f"Configuration saved to {config_path}.")
+            with open(config_path, "w") as f:
+                json.dump({"model": self.model, "editor": self.editor, "color_scheme": self.color_scheme}, f, indent=4)
+            logger.info("Configuration saved to %s.", config_path)
         except Exception as e:
-            print(f"Error saving config file '{config_path}': {e}.")
+            logger.error(f"Error saving config file '{config_path}': {e}.")

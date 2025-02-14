@@ -1,11 +1,15 @@
-from typing import Dict, List
-from itertools import cycle
-from datetime import datetime
+import logging
 import time
+from datetime import datetime
+from itertools import cycle
+from typing import Dict, List
 
 from prompt_toolkit.key_binding import KeyBindings
 
 from eigengen import utils
+
+logger = logging.getLogger(__name__)
+
 
 class ChatKeyBindingsManager:
     def __init__(self, quoting_state: Dict, messages: List):
@@ -35,9 +39,7 @@ class ChatKeyBindingsManager:
             """
             current_time = time.time()
             if self.last_keypress_time:
-                time_diff = (
-                    current_time - self.last_keypress_time
-                ) * 1000  # Convert to milliseconds
+                time_diff = (current_time - self.last_keypress_time) * 1000  # Convert to milliseconds
                 if time_diff < 10:  # Threshold for paste detection (adjust as needed)
                     self.pasting = True
                 else:
@@ -64,8 +66,7 @@ class ChatKeyBindingsManager:
             """
             # Get the last assistant response to process
             last_assistant_message = next(
-                (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"),
-                ""
+                (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
             )
 
             if self.quoting_state["code_blocks"] is None:
@@ -123,11 +124,14 @@ class ChatKeyBindingsManager:
 
             Opens the current buffer content in an external editor for editing.
             """
-            current_text = event.app.current_buffer.text
-            new_text = utils.get_prompt_from_editor_with_prefill(current_text)
-            if new_text is not None:
-                # Update the buffer with the edited text
-                event.app.current_buffer.text = new_text
+            try:
+                current_text = event.app.current_buffer.text
+                new_text = utils.get_prompt_from_editor_with_prefill(current_text)
+                if new_text is not None:
+                    # Update the buffer with the edited text
+                    event.app.current_buffer.text = new_text
+            except Exception as e:
+                logger.error("Error opening external editor: %s", e)
 
         @self.kb.add("c-x", "y")
         def _(event):
@@ -138,13 +142,17 @@ class ChatKeyBindingsManager:
             """
             # Filter out messages that contain file content
             copy_messages = [
-                msg for msg in self.messages
+                msg
+                for msg in self.messages
                 if not (msg["role"] == "user" and msg["content"].startswith("<eigengen_file"))
             ]
+
             # Format the conversation with timestamps
-            conversation = "\n\n".join([
-                f"[{'User' if msg['role'] == 'user' else 'Assistant'}] [{datetime.now().strftime('%I:%M:%S %p')}]\n{msg['content']}"
-                for msg in copy_messages
-            ])
+            def render_ps(msg: dict[str, str]) -> str:
+                user_ps = "[User]" if msg["role"] == "user" else "[Assistant]"
+                timestamp = datetime.now().strftime("%I:%M:%S %p")
+                return f"{user_ps} [{timestamp}]\n{msg['content']}"
+
+            conversation = "\n\n".join([f"{render_ps(msg)}\n{msg['content']}" for msg in copy_messages])
             # Copy the conversation to the clipboard
             event.app.clipboard.set_text(conversation)

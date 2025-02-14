@@ -1,35 +1,38 @@
 import os
 import sys
-from typing import Dict, List, Optional
 from datetime import datetime
-
-from prompt_toolkit import PromptSession
-from prompt_toolkit.styles import Style
-from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
-
-from prompt_toolkit.formatted_text import FormattedText
-from prompt_toolkit.shortcuts import print_formatted_text
-from pygments.token import Token
+from typing import Dict, List, Optional
 
 import pygments.style
+from prompt_toolkit import PromptSession
+from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
+from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.shortcuts import print_formatted_text
+from prompt_toolkit.styles import Style
+from pygments.token import Token
 
-from eigengen import operations, utils, keybindings, meld, providers, prompts
-from eigengen.progress import ProgressIndicator
+from eigengen import keybindings, meld, operations, prompts, providers, utils
 from eigengen.config import EggConfig
-from eigengen.providers import MODEL_CONFIGS
 
 # New imports for EggRag support
 from eigengen.eggrag import EggRag, NoOpEggRag
+from eigengen.progress import ProgressIndicator
+from eigengen.providers import MODEL_CONFIGS
+
+# disable T201 for this file
+# ruff: noqa: T201
+
 
 class CustomStyle(pygments.style.Style):
     default_style = ""
     styles = {
-        Token.Keyword: 'ansigreen',
-        Token.String: 'ansiyellow',
-        Token.Comment: 'ansiblue',
-        Token.Name: '',
+        Token.Keyword: "ansigreen",
+        Token.String: "ansiyellow",
+        Token.Comment: "ansiblue",
+        Token.Name: "",
         # Add more token styles as desired
     }
+
 
 CHAT_HELP = (
     "Available commands:\n\n"
@@ -50,34 +53,37 @@ CHAT_HELP = (
     "Ctrl + X, Up Arrow    Cycle through response code blocks and quote them in the buffer.\n"
 )
 
+
 class EggChat:
     """
-    EggChat encapsulates the interactive and non-interactive chat sessions with the LLM.
+    EggChat manages both interactive and non-interactive chat sessions with the LLM.
 
-    This class handles setting up context from user files and operating modes.
-    It supports interactive mode (chat_mode) with command handling as well as single-prompt mode (auto_chat).
+    This class prepares context from user-provided files and configures the operating mode.
+    It supports an interactive chat mode (via chat_mode) for continuous sessions as well as a single-prompt
+    mode (via auto_chat) for one-off requests.
 
     Attributes:
         config (EggConfig): Configuration settings including model and chat options.
-        model (Model): Model used for processing requests.
-        mode (str): The current operational mode (general, architect, programmer).
-        quoting_state (dict): Contains state for cycling and quoting code blocks.
+        model (Model): The model instance used to process requests.
+        mode (str): Operational mode (e.g., "general", "architect", "programmer").
+        quoting_state (dict): State used for cycling through quoted code blocks.
         messages (List[Dict[str, str]]): Conversation history.
-        pre_fill (str): Prefilled text for the next prompt.
-        git_root (Optional[str]): Root path of the Git repository (if any).
-        files_history (set[str]): Set of file paths already processed.
-        egg_rag: Instance for Retrieval Augmented Generation (or NoOp).
-        target_files (List[str]): List of target file paths for context.
-        initial_file_content (str): Content read from target files.
+        pre_fill (str): Prefilled text for the upcoming prompt.
+        git_root (Optional[str]): Root directory of a Git repository, if detected.
+        files_history (set[str]): Set of processed file paths.
+        egg_rag (EggRag or NoOpEggRag): Retrieval Augmented Generation instance.
+        target_files (List[str]): File paths used to construct context.
+        initial_file_content (str): Aggregated content from target files.
         kbm (ChatKeyBindingsManager): Manager for custom keybindings.
     """
+
     def __init__(self, config: EggConfig, user_files: Optional[List[str]]):
         """
         Initialize a new EggChat session.
 
         Args:
-            config (EggConfig): The configuration object with settings.
-            user_files (Optional[List[str]]): List of file paths to include as context.
+            config (EggConfig): The configuration object containing settings.
+            user_files (Optional[List[str]]): List of file paths to be included as context.
         """
         self.config = config  # Store the passed config
         self.model = providers.create_model(config.model, config)
@@ -119,18 +125,16 @@ class EggChat:
 
         self.kbm = keybindings.ChatKeyBindingsManager(self.quoting_state, self.messages)
 
-    def chat_mode(
-        self,
-        initial_prompt: Optional[str] = None
-    ) -> None:
+    def chat_mode(self, initial_prompt: Optional[str] = None) -> None:
         """
-        Initiates interactive chat mode.
+        Starts the interactive chat mode.
 
-        Continuously prompts the user for input via a terminal session, processes commands
-        (starting with '/'), augments context from files and RAG, and displays the LLM response.
+        This method continuously prompts the user for input in a terminal session, processes commands
+        (prefixed with '/'), augments the prompt with context from files and RAG if available, and then
+        displays the LLM's response.
 
         Args:
-            initial_prompt (Optional[str]): An optional prefilled prompt to show in the input.
+            initial_prompt (Optional[str]): An optional prompt to prefill the input area.
 
         Returns:
             None
@@ -145,10 +149,7 @@ class EggChat:
 
         while True:
             try:
-                style = Style.from_dict({
-                    "user": "ansicyan",
-                    "assistant": "ansigreen"
-                })
+                style = Style.from_dict({"user": "ansicyan", "assistant": "ansigreen"})
 
                 def custom_prompt():
                     return [("class:user", f"\n[{datetime.now().strftime('%I:%M:%S %p')}][User] >\n")]
@@ -159,15 +160,15 @@ class EggChat:
                     multiline=True,
                     enable_history_search=True,
                     refresh_interval=5,
-                    default=self.pre_fill or ""
+                    default=self.pre_fill or "",
                 )
                 self.pre_fill = ""  # Reset pre_fill after use
 
                 if prompt_input.startswith("/"):
-                    if (self.handle_command(prompt_input)):
+                    if self.handle_command(prompt_input):
                         continue
 
-                if prompt_input.strip() == '':
+                if prompt_input.strip() == "":
                     continue
 
                 original_message = prompt_input
@@ -175,9 +176,7 @@ class EggChat:
                     original_message += "\n" + self.initial_file_content
                     self.initial_file_content = ""
 
-                retrieved_results = self.egg_rag.retrieve(
-                    target_files=self.target_files if self.target_files else None
-                )
+                retrieved_results = self.egg_rag.retrieve(target_files=self.target_files if self.target_files else None)
                 rag_context = ""
                 if retrieved_results:
                     rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
@@ -191,18 +190,13 @@ class EggChat:
                 answer = ""
                 with ProgressIndicator() as _:
                     chunk_iterator = operations.process_request(
-                        self.model,
-                        local_messages,
-                        prompts.get_prompt(self.mode)
+                        self.model, local_messages, prompts.get_prompt(self.mode)
                     )
                     for chunk in chunk_iterator:
                         answer += chunk
 
-                timestamp = datetime.now().strftime('%I:%M:%S %p')
-                print_formatted_text(
-                    FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]),
-                    style=style
-                )
+                timestamp = datetime.now().strftime("%I:%M:%S %p")
+                print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
                 formatted_response = utils.get_formatted_response_with_syntax_highlighting(
                     self.config.color_scheme, answer
                 )
@@ -220,20 +214,19 @@ class EggChat:
 
     def auto_chat(self, initial_prompt: str, diff_mode: bool = False) -> None:
         """
-        Executes a single prompt non-interactively and prints the LLM response.
-        When diff_mode is enabled, diff output is generated comparing file content
-        against the code blocks in the assistant's message.
+        Executes a single prompt in non-interactive mode and prints the LLM response.
+
+        When diff_mode is True, the method generates and prints a diff output by comparing file content
+        with the code blocks found in the assistant's response.
 
         Args:
             initial_prompt (str): The prompt text provided by the user.
-            diff_mode (bool): If True, only the diff output is printed to stdout.
+            diff_mode (bool): If set to True, only the diff output will be displayed.
 
         Returns:
             None
         """
-        style = Style.from_dict({
-            "assistant": "ansigreen"
-        })
+        style = Style.from_dict({"assistant": "ansigreen"})
 
         # Use the provided prompt and append any initial file context
         original_message = initial_prompt
@@ -242,9 +235,7 @@ class EggChat:
             self.initial_file_content = ""
 
         # Retrieve additional context if available
-        retrieved_results = self.egg_rag.retrieve(
-            target_files=self.target_files if self.target_files else None
-        )
+        retrieved_results = self.egg_rag.retrieve(target_files=self.target_files if self.target_files else None)
         rag_context = ""
         if retrieved_results:
             rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
@@ -257,18 +248,14 @@ class EggChat:
 
         answer = ""
         with ProgressIndicator() as _:
-            chunk_iterator = operations.process_request(
-                self.model,
-                local_messages,
-                prompts.get_prompt(self.mode)
-            )
+            chunk_iterator = operations.process_request(self.model, local_messages, prompts.get_prompt(self.mode))
             for chunk in chunk_iterator:
                 answer += chunk
 
         if diff_mode:
             code_blocks = utils.extract_code_blocks(answer)
             diff_found = False
-            for fence, lang, file_path, code, _, _ in code_blocks:
+            for _, _, file_path, code, _, _ in code_blocks:
                 if file_path:
                     # Adjust path based on git_root if available
                     if self.git_root and not os.path.isabs(file_path):
@@ -283,10 +270,7 @@ class EggChat:
                         original_content = ""
 
                     diff_text = utils.generate_unified_diff(
-                        original_content,
-                        code,
-                        fromfile=f"a/{file_path}",
-                        tofile=f"b/{file_path}"
+                        original_content, code, fromfile=f"a/{file_path}", tofile=f"b/{file_path}"
                     )
                     print(diff_text)
                     diff_found = True
@@ -294,14 +278,9 @@ class EggChat:
                 print("No code blocks with file paths found in the response. No diff to show.")
             return
         else:
-            timestamp = datetime.now().strftime('%I:%M:%S %p')
-            print_formatted_text(
-                FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]),
-                style=style
-            )
-            formatted_response = utils.get_formatted_response_with_syntax_highlighting(
-                self.config.color_scheme, answer
-            )
+            timestamp = datetime.now().strftime("%I:%M:%S %p")
+            print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
+            formatted_response = utils.get_formatted_response_with_syntax_highlighting(self.config.color_scheme, answer)
             utils.pipe_output_via_pager(formatted_response)
             print("")
 
@@ -310,13 +289,13 @@ class EggChat:
 
     def handle_command(self, prompt_input: str) -> bool:
         """
-        Processes a command input starting with '/' and routes it to the appropriate handler.
+        Processes a user command that starts with '/' and dispatches it to the corresponding handler.
 
         Args:
             prompt_input (str): The full command string entered by the user.
 
         Returns:
-            bool: True if the command was handled successfully.
+            bool: True if the command was processed successfully.
         """
         command, *args = prompt_input.strip().split(maxsplit=1)
 
@@ -325,43 +304,76 @@ class EggChat:
             return True
 
         handler = {
-            '/help': self.handle_help,
-            '/quote': self.handle_quote,
-            '/reset': self.handle_reset,
-            '/meld': self.handle_meld,
-            '/model': self.handle_model,
-            '/mode': self.handle_mode,
-            '/exit': self.handle_exit
+            "/help": self.handle_help,
+            "/quote": self.handle_quote,
+            "/reset": self.handle_reset,
+            "/meld": self.handle_meld,
+            "/model": self.handle_model,
+            "/mode": self.handle_mode,
+            "/exit": self.handle_exit,
         }.get(command, _unknown_command)
 
         return handler(*args) if args else handler()
 
     def handle_help(self) -> bool:
-        """Handle the '/help' command by displaying available commands."""
+        """
+        Handle the '/help' command.
+
+        Displays a help message outlining available commands and keyboard shortcuts.
+
+        Returns:
+            bool: Always returns True.
+        """
         print(CHAT_HELP)
         return True
 
     def handle_quote(self, file_to_quote: str) -> bool:
-        """Handle the '/quote' command by reading and quoting the specified file."""
+        """
+        Handle the '/quote' command.
+
+        Reads the specified file and prefixes each line with '> ' to format it as a quote before
+        pre-filling the input prompt.
+
+        Args:
+            file_to_quote (str): The file path to be quoted.
+
+        Returns:
+            bool: True after processing the command.
+        """
         if os.path.exists(file_to_quote):
-            with open(file_to_quote, 'r') as f:
+            with open(file_to_quote, "r") as f:
                 content = f.read()
             # Prefix each line with '> '
-            quoted_content = '\n'.join(f'> {line}' for line in content.splitlines())
+            quoted_content = "\n".join(f"> {line}" for line in content.splitlines())
             self.pre_fill = quoted_content  # Pre-fill the next prompt with quoted content
         else:
             print(f"File '{file_to_quote}' not found.\n")
         return True
 
     def handle_reset(self) -> bool:
-        """Handle the '/reset' command by clearing all conversation messages and file history."""
+        """
+        Handle the '/reset' command.
+
+        Clears the conversation history as well as the file history.
+
+        Returns:
+            bool: True after the reset is executed.
+        """
         self.messages = []
         self.files_history = set()
         print("Chat messages cleared.\n")
         return True
 
     def handle_meld(self) -> bool:
-        """Handle the '/meld' command by merging aggregated changes from the last assistant message into files."""
+        """
+        Handle the '/meld' command.
+
+        Merges aggregated changes from the latest assistant response into the corresponding files.
+        This is achieved by extracting code blocks with valid file paths and then applying the changes.
+
+        Returns:
+            bool: True after attempting to meld changes.
+        """
         last_assistant_message = next(
             (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
         )
@@ -387,13 +399,22 @@ class EggChat:
                 file_path,
                 aggregated_patch,
                 self.git_root,
-                unified_diff=True if self.model.model_name.lower().startswith("gemini") else False
+                unified_diff=False,
+                # unified_diff=True if self.model.model_name.lower().startswith("gemini") else False
             )
 
         return True
 
     def handle_model(self, *args) -> bool:
-        """Handle the '/model' command for switching or displaying the current model."""
+        """
+        Handle the '/model' command.
+
+        Depending on the provided arguments, either displays the current model and supported models or
+        attempts to switch the model to a user-specified one.
+
+        Returns:
+            bool: True after the command is processed.
+        """
 
         def print_supported_models():
             print("Supported models:")
@@ -418,7 +439,14 @@ class EggChat:
             return True
 
     def handle_mode(self, *args) -> bool:
-        """Handle the '/mode' command for switching or displaying the current operating mode."""
+        """
+        Handle the '/mode' command.
+
+        Displays the current operating mode or switches it based on the user request.
+
+        Returns:
+            bool: True after processing the command.
+        """
         if not args:
             print(f"Current mode: {self.mode}")
         else:
@@ -432,6 +460,13 @@ class EggChat:
         return True
 
     def handle_exit(self) -> bool:
-        """Handle the '/exit' command by terminating the chat session."""
+        """
+        Handle the '/exit' command.
+
+        Terminates the chat session by exiting the program.
+
+        Returns:
+            bool: (This will not be reached as the function terminates the process.)
+        """
         sys.exit(0)
         return True  # This line will not be reached, but added for consistency

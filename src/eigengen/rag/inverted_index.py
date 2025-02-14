@@ -1,4 +1,6 @@
-from typing import List, Dict, Set
+import logging
+from typing import Dict, List, Set
+
 
 class InvertedIndexBuilder:
     def __init__(self, tokens: List[Dict]):
@@ -37,6 +39,7 @@ class InvertedIndexBuilder:
         filtered_index = {token: files for token, files in self.index.items() if len(files) < threshold}
         return filtered_index
 
+
 # Example usage:
 if __name__ == "__main__":
     # This is just an example, assuming tokens were obtained from file_parser.py
@@ -51,11 +54,11 @@ if __name__ == "__main__":
 
     builder = InvertedIndexBuilder(sample_tokens)
     index = builder.build_index()
-    print("Full Inverted Index:")
+    logging.debug("Full Inverted Index:")
     for token, files in index.items():
-        print(f"  {token}: {list(files)}")
+        logging.debug(f"  {token}: {list(files)}")
 
     filtered = builder.get_filtered_index(threshold=3)
-    print("\nFiltered Inverted Index (tokens in fewer than 3 files):")
+    logging.debug("\nFiltered Inverted Index (tokens in fewer than 3 files):")
     for token, files in filtered.items():
-        print(f"  {token}: {list(files)}")
+        logging.debug(f"  {token}: {list(files)}")

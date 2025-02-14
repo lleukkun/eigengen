@@ -3,15 +3,17 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from eigengen import meld, operations, prompts, utils
+
 # Import necessary components from the existing codebase
 from eigengen.chat import EggChat
-from eigengen import operations, prompts, utils, meld
 from eigengen.config import EggConfig
+
 
 def create_app(config: EggConfig) -> FastAPI:
     # Instantiate a global EggChat instance using the active configuration.
     chat_instance = EggChat(config, user_files=None)
-    app = FastAPI(debug=True, max_body_size=256*1024*1024)
+    app = FastAPI(debug=True, max_body_size=256 * 1024 * 1024)
 
     @app.post("/api/send")
     async def send_endpoint(request: Request):
@@ -34,7 +36,7 @@ def create_app(config: EggConfig) -> FastAPI:
                     # Wrap the file content in a markdown code block
                     code_block = utils.encode_code_block(file_content)
                     original_message += "\n" + code_block
-                except Exception as e:
+                except Exception:
                     # Optionally log the error or handle missing file gracefully
                     pass
 
@@ -55,9 +57,7 @@ def create_app(config: EggConfig) -> FastAPI:
         answer = ""
 
         chunk_iterator = operations.process_request(
-            chat_instance.model,
-            local_messages,
-            prompts.get_prompt(chat_instance.mode)
+            chat_instance.model, local_messages, prompts.get_prompt(chat_instance.mode)
         )
         for chunk in chunk_iterator:
             answer += chunk
@@ -90,7 +90,9 @@ def create_app(config: EggConfig) -> FastAPI:
         code_block = data.get("code_block")
         code_filepath = data.get("code_filepath")
         if not code_block or not code_filepath:
-            return JSONResponse(status_code=400, content={"error": "Both 'code_block' and 'code_filepath' are required fields."})
+            return JSONResponse(
+                status_code=400, content={"error": "Both 'code_block' and 'code_filepath' are required fields."}
+            )
 
         # Generate the diff preview using the small model.
         original_content = ""
@@ -99,7 +101,7 @@ def create_app(config: EggConfig) -> FastAPI:
             with open(code_filepath) as f:
                 original_content = f.read()
 
-        new_content = meld.apply_custom_diff(original_content, code_block)
+        new_content = meld.apply_contextual_diff(original_content, code_block)
         diff_output = meld.produce_diff(code_filepath, original_content, new_content)
 
         if not diff_output:
@@ -114,13 +116,16 @@ def create_app(config: EggConfig) -> FastAPI:
         - "file_content": The new content to be saved.
         - "file_path": The target file path.
         Attempts to update the specified file with the provided content.
-        Returns a JSON response indicating whether the changes were successfully applied or detailing any error encountered.
+        Returns a JSON response indicating whether the changes were successfully
+        applied or detailing any error encountered.
         """
         data = await request.json()
         file_content = data.get("file_content")
         file_path = data.get("file_path")
         if not file_content or not file_path:
-            return JSONResponse(status_code=400, content={"error": "Both 'file_content' and 'file_path' are required fields."})
+            return JSONResponse(
+                status_code=400, content={"error": "Both 'file_content' and 'file_path' are required fields."}
+            )
 
         # Apply the changes to the file.
         try:
@@ -146,6 +151,3 @@ def create_app(config: EggConfig) -> FastAPI:
             return JSONResponse(status_code=400, content={"error": "Not running in a Git repository."})
 
     return app
-
-if __name__ == "__main__":
-    print("Standalone API mode is disabled. Please run 'eigengen.py' to start the application.")

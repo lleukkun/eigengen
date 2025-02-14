@@ -1,9 +1,12 @@
+from logging import getLogger
 from typing import List, Tuple
 
 from eigengen import utils
+from eigengen.rag.context_extractor import ContextExtractor
 from eigengen.rag.file_parser import FileParser
 from eigengen.rag.inverted_index import InvertedIndexBuilder
-from eigengen.rag.context_extractor import ContextExtractor
+
+logger = getLogger(__name__)
 
 
 class EggRag:
@@ -49,15 +52,18 @@ class EggRag:
                     # quote snippet lines with a prefix '> '
                     snippet_info["snippet"] = "\n".join([f"> {line}" for line in snippet_info["snippet"].split("\n")])
                     contexts.append(
-                        (snippet_info["file"], 0,
-                            f"In file {snippet_info['file']} for token '{token}':\n{snippet_info['snippet']}")
+                        (
+                            snippet_info["file"],
+                            0,
+                            f"In file {snippet_info['file']} for token '{token}':\n{snippet_info['snippet']}",
+                        )
                     )
         return contexts
 
 
 class NoOpEggRag:
     def add_file(self, file_path: str, modification_time: int, content: str) -> None:
-        print(f"RAG is disabled. Skipping indexing for '{file_path}'.")
+        logger.info(f"RAG is disabled. Skipping indexing for '{file_path}'.")
 
     def retrieve(self, target_files: list[str]) -> list[tuple[str, int, str]]:
         return []

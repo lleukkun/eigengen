@@ -1,0 +1,30 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+exclude = [".git", "__pycache__", "build", "dist", ".venv"]
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "B",  # Bug risk linting
+    "E",  # Pycodestyle error codes
+    "F",  # PyFlakes errors
+    "I",  # Import order
+    "N",  # Naming conventions
+    "Q",  # Quote style (Black-compatible)
+    "T",  # Type checking
+    "W",  # Warnings and stylistic issues
+]
+ignore = []
