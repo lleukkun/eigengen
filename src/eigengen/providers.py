@@ -276,7 +276,7 @@ class MistralProvider(Provider):
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {
     "claude": ModelConfig("anthropic", "claude-3-5-sonnet-latest", 0.7),
-    "deepseek-r1:32b": ModelConfig("ollama", "deepseek-r1:32b", 0.5),
+    "deepseek-r1:14b": ModelConfig("ollama", "deepseek-r1:14b", 0.5),
     "deepseek-r1": ModelConfig("deepseek", "deepseek-reasoner", 0.5),
     "groq": ModelConfig("groq", "deepseek-r1-distill-llama-70b", 0.25),
     "o1": ModelConfig("openai", "o1", 0.7),

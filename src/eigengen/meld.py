@@ -84,19 +84,11 @@ def apply_contextual_diff(original_content: str, patch_content: str) -> str:
     patch_lines = patch_content.splitlines()
     new_lines = []
     # Handle the case where the original file is empty:
+    # Apply all addition lines in the diff (ignoring removal lines and diff markers).
     if not orig_lines:
-        i = 0
-        while i < len(patch_lines):
-            if patch_lines[i].startswith("@@"):
-                i += 1
-                while i < len(patch_lines) and not patch_lines[i].startswith("@@"):
-                    current = patch_lines[i]
-                    if current.startswith("+"):
-                        new_lines.append(current[1:])
-                    # Ignore any removal lines if the file is empty
-                    i += 1
-            else:
-                i += 1
+        for line in patch_lines:
+            if line.startswith("+"):
+                new_lines.append(line[1:])
         return "\n".join(new_lines) + "\n"
     orig_pos = 0
     i = 0
