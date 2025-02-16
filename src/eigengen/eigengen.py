@@ -28,23 +28,22 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument(
-        "--config", "-C", default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
+        "--config",default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
     )
-    parser.add_argument("--provider", "-m", choices=list(PROVIDER_ALIASES.keys()), help="Choose Model")
-    parser.add_argument("--editor", "-e", help="Choose editor (e.g., nano, vim)")
+    parser.add_argument("--provider", choices=list(PROVIDER_ALIASES.keys()), help="Choose Model")
+    parser.add_argument("--editor", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=["github-dark", "monokai", "solarized"], help="Choose color scheme")
     parser.add_argument(
-        "--files", "-f", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)"
+        "--files", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)"
     )
-    parser.add_argument("--prompt", "-p", help="Prompt string to use")
-    parser.add_argument("-d", action="store_true", help="Show diff output (used with -p and without --chat)")
+    parser.add_argument("--prompt", help="Prompt string to use")
+    parser.add_argument("--diff", action="store_true", help="Show diff output (used with -p and without --chat)")
     parser.add_argument(
         "--list-history", nargs="?", const=5, type=int, metavar="N", help="List the last N prompts (default 5)"
     )
-    parser.add_argument("--chat", "-c", action="store_true", help="Enter chat mode")
+    parser.add_argument("--chat", action="store_true", help="Enter chat mode")
     parser.add_argument(
         "--chat-mode",
-        "-M",
         default="programmer",
         choices=["general", "architect", "programmer"],
         help="Choose operating mode",
@@ -78,10 +77,10 @@ def handle_modes(config: EggConfig) -> None:
     # use the auto mode via chat.py rather than the default mode.
     if config.args.prompt and not config.args.chat:
         egg_chat = chat.EggChat(config, list(user_files or []))
-        if config.args.d:
+        if config.args.diff:
             egg_chat.auto_chat(config.args.prompt, diff_mode=True)
         else:
-            egg_chat.auto_chat(config.args.prompt)
+            egg_chat.auto_chat(config.args.prompt, diff_mode=False)
         return
 
     # Otherwise, enter interactive chat mode.
