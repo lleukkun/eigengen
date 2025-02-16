@@ -5,7 +5,7 @@ import os
 import re
 import subprocess
 import tempfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import pygments
 import pygments.formatters  # Ensure this import is present
@@ -50,8 +50,19 @@ def encode_code_block(code_content: str, file_path: str = "") -> str:
     # Return the code content encapsulated within the fences
     return f"{opening_fence}\n{code_content}\n{closing_fence}"
 
+def group_code_blocks_by_file(code_blocks: list[tuple[str, str, str, str, int, int]]
+                              ) -> dict[str, list[tuple[str, str, str, str, int, int]]]:
+    """
+    Groups code blocks by file path.
+    """
+    code_blocks_by_file: dict[str, list[tuple[str, str, str, str, int, int]]] = {}
+    for fence, actual_lang, actual_path, code, start_index, end_index in code_blocks:
+        if actual_path not in code_blocks_by_file:
+            code_blocks_by_file[actual_path] = []
+        code_blocks_by_file[actual_path].append((fence, actual_lang, actual_path, code, start_index, end_index))
+    return code_blocks_by_file
 
-def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, int]]:
+def extract_code_blocks(response: str) -> list[tuple[str, str, str, str, int, int]]:
     """
     Extracts code blocks from a response string.
 
@@ -68,7 +79,7 @@ def extract_code_blocks(response: str) -> List[Tuple[str, str, str, str, int, in
                 - start_index (int): The start index of the code block in the response string.
                 - end_index (int): The end index of the code block in the response string.
     """
-    code_blocks = []
+    code_blocks: list[tuple[str, str, str, str, int, int]] = []
 
     # Regular expression pattern to match code blocks with variable-length fences and indentation
     code_block_pattern = re.compile(
@@ -296,3 +307,20 @@ def find_git_root() -> Optional[str]:
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return None
+
+def extract_change_descriptions(text: str) -> dict[str, list[str]]:
+    # Regular expression pattern to match change descriptions that are
+    # enclosed in <change_desc filename="dirpath/filename">...</change_desc> tags.
+    change_desc_pattern = re.compile(
+        r"<change_desc filename=\"(?P<filename>[^\"]+)\">(?P<description>.*?)</change_desc>",
+        re.DOTALL,
+    )
+    descriptions: dict[str, list[str]] = {}
+    for match in change_desc_pattern.finditer(text):
+        filename = match.group("filename")
+        description = match.group("description").strip()
+        if filename not in descriptions:
+            descriptions[filename] = []
+        descriptions[filename].append(description)
+
+    return descriptions

@@ -11,13 +11,12 @@ from prompt_toolkit.shortcuts import print_formatted_text
 from prompt_toolkit.styles import Style
 from pygments.token import Token
 
-from eigengen import keybindings, meld, operations, prompts, providers, utils
+from eigengen import keybindings, meld, prompts, providers, utils
 from eigengen.config import EggConfig
 
 # New imports for EggRag support
 from eigengen.eggrag import EggRag, NoOpEggRag
 from eigengen.progress import ProgressIndicator
-from eigengen.providers import MODEL_CONFIGS
 
 # disable T201 for this file
 # ruff: noqa: T201
@@ -86,7 +85,7 @@ class EggChat:
             user_files (Optional[List[str]]): List of file paths to be included as context.
         """
         self.config = config  # Store the passed config
-        self.model = providers.create_model(config.model, config)
+        self.pm = providers.ProviderManager(config.provider, config)
         self.mode = config.args.chat_mode
         self.quoting_state = {"current_index": -1, "code_blocks": None, "cycle_iterator": None}
         self.messages: List[Dict[str, str]] = []
@@ -112,14 +111,11 @@ class EggChat:
                     continue
                 self.files_history.add(abs_path)
 
-                # Read the file content and encode it as a Markdown code block.
+                # Read the file content and encode it as a Markdown code block using cwd-relative path.
                 with open(abs_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    if self.git_root:
-                        rel_path = os.path.relpath(abs_path, self.git_root)
-                        content = utils.encode_code_block(content, rel_path)
-                    else:
-                        content = utils.encode_code_block(content, fname)
+                    rel_path = os.path.relpath(abs_path, os.getcwd())
+                    content = utils.encode_code_block(content, rel_path)
                     self.initial_file_content += "\n" + content
                 self.target_files.append(abs_path)
 
@@ -189,9 +185,11 @@ class EggChat:
 
                 answer = ""
                 with ProgressIndicator() as _:
-                    chunk_iterator = operations.process_request(
-                        self.model, local_messages, prompts.get_prompt(self.mode)
-                    )
+                    chunk_iterator = self.pm.process_request(
+                        providers.ModelType.LARGE,
+                        providers.ReasoningAmount.HIGH,
+                        prompts.get_prompt(self.mode),
+                        local_messages)
                     for chunk in chunk_iterator:
                         answer += chunk
 
@@ -248,7 +246,9 @@ class EggChat:
 
         answer = ""
         with ProgressIndicator() as _:
-            chunk_iterator = operations.process_request(self.model, local_messages, prompts.get_prompt(self.mode))
+            chunk_iterator = self.pm.process_request(providers.ModelType.LARGE,
+                                                     providers.ReasoningAmount.HIGH,
+                                                     local_messages, prompts.get_prompt(self.mode))
             for chunk in chunk_iterator:
                 answer += chunk
 
@@ -257,8 +257,11 @@ class EggChat:
             diff_found = False
             for _, _, file_path, code, _, _ in code_blocks:
                 if file_path:
-                    # Adjust path based on git_root if available
-                    if self.git_root and not os.path.isabs(file_path):
+                    # Prefer file path relative to the current working directory if it exists.
+                    cwd_full_path = os.path.abspath(file_path)
+                    if os.path.exists(cwd_full_path):
+                        full_path = cwd_full_path
+                    elif self.git_root and not os.path.isabs(file_path):
                         full_path = os.path.abspath(os.path.join(self.git_root, file_path))
                     else:
                         full_path = os.path.abspath(file_path)
@@ -299,7 +302,8 @@ class EggChat:
         """
         command, *args = prompt_input.strip().split(maxsplit=1)
 
-        def _unknown_command() -> bool:
+        # handle any number of args for the fallback command
+        def _unknown_command(**_) -> bool:
             print(f"Unknown command {command}")
             return True
 
@@ -378,29 +382,25 @@ class EggChat:
             (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
         )
 
+        change_descriptions = utils.extract_change_descriptions(last_assistant_message)
         code_blocks = utils.extract_code_blocks(last_assistant_message)
-        if not code_blocks:
+        if not code_blocks or len(code_blocks) == 0:
             print("No code blocks found in the last assistant message.")
             return True
 
-        patches_by_file = {}
-        for block in code_blocks:
-            _, _, block_path, block_content, _, _ = block
-            if block_path:
-                patches_by_file.setdefault(block_path, []).append(block_content)
+        # group code_blocks by filepath
+        code_blocks_by_file = utils.group_code_blocks_by_file(code_blocks)
 
-        if not patches_by_file:
-            print("No code blocks with valid file paths found.")
-            return True
-
-        for file_path, patches in patches_by_file.items():
-            aggregated_patch = "\n".join(patches)
+        for file_path, patches in code_blocks_by_file.items():
+            aggregate_desc = "\n".join(change_descriptions.get(file_path, []))
+            encoded_patches = [f"{utils.encode_code_block(patch, path)}" for _, _, path, patch, _, _ in patches]
+            aggregated_patch = "\n".join(encoded_patches)
+            combined_patch = f"{aggregate_desc}\n{aggregated_patch}"
             meld.meld_changes(
+                self.pm,
                 file_path,
-                aggregated_patch,
+                combined_patch,
                 self.git_root,
-                unified_diff=False,
-                # unified_diff=True if self.model.model_name.lower().startswith("gemini") else False
             )
 
         return True
@@ -418,7 +418,7 @@ class EggChat:
 
         def print_supported_models():
             print("Supported models:")
-            supported_models = list(MODEL_CONFIGS.keys())
+            supported_models = list(providers.PROVIDER_ALIASES.keys())
             for m in supported_models:
                 print(f" - {m}")
 
@@ -430,7 +430,7 @@ class EggChat:
         else:
             # Argument provided; attempt to switch model
             new_model = args[0].strip()
-            if new_model in MODEL_CONFIGS:
+            if new_model in providers.PROVIDER_ALIASES:
                 self.config.model = new_model
                 print(f"Model switched to: {new_model}")
             else:

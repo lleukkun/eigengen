@@ -1,6 +1,6 @@
 from typing import Dict, Generator, List
 
-from eigengen.providers import Model, ModelPair, Provider
+from eigengen.providers import ModelConfig, ModelPair, Provider
 
 
 class MockProvider(Provider):
@@ -27,7 +27,7 @@ class MockProvider(Provider):
 
 def create_mock_model_pair(canned_responses: Dict[str, str]) -> ModelPair:
     model_pair = ModelPair(
-        large=Model(provider=MockProvider(canned_responses), model_name="mock_large", temperature=0.7, max_tokens=8192),
-        small=Model(provider=MockProvider(canned_responses), model_name="mock_small", temperature=0.7, max_tokens=8192),
+        large=ModelConfig(provider=MockProvider(canned_responses), model_name="mock_large", temperature=0.7, max_tokens=8192),
+        small=ModelConfig(provider=MockProvider(canned_responses), model_name="mock_small", temperature=0.7, max_tokens=8192),
     )
     return model_pair

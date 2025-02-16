@@ -12,7 +12,7 @@ from typing import Optional
 
 from eigengen import chat, log, utils
 from eigengen.config import EggConfig
-from eigengen.providers import MODEL_CONFIGS
+from eigengen.providers import PROVIDER_ALIASES
 
 # Set up logging for the application.
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -30,7 +30,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--config", "-C", default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
     )
-    parser.add_argument("--model", "-m", choices=list(MODEL_CONFIGS.keys()), help="Choose Model")
+    parser.add_argument("--provider", "-m", choices=list(PROVIDER_ALIASES.keys()), help="Choose Model")
     parser.add_argument("--editor", "-e", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=["github-dark", "monokai", "solarized"], help="Choose color scheme")
     parser.add_argument(
@@ -119,8 +119,8 @@ def main() -> None:
     config = EggConfig.load_config(config_path=args.config)
 
     # Apply command-line arguments to config
-    if args.model:
-        config.model = args.model
+    if args.provider:
+        config.provider = args.provider
     if args.editor:
         config.editor = args.editor
     if args.color_scheme:
