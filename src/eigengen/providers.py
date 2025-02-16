@@ -58,7 +58,7 @@ class ProviderManager:
         self.provider_name = provider_name
         self.config = config
         self.provider_params = PROVIDER_ALIASES[provider_name]
-        self.provider = create_provider(self.provider_name)
+        self.provider = create_provider(self.provider_name, self.config)
 
     def process_request(
         self,
@@ -344,7 +344,7 @@ PROVIDER_ALIASES: dict[str, ProviderParams] = {
                                 small_model=ModelParams("gpt-4o-mini", 0.5)),
     "openai-o3-mini": ProviderParams(large_model=ModelParams("o3-mini", 0.7),
                                      small_model=ModelParams("gpt-4o-mini", 0.5)),
-    "gemini": ProviderParams(large_model=ModelParams("gemini-2.0-pro-exp-02-05", 0.7),
+    "google": ProviderParams(large_model=ModelParams("gemini-2.0-pro-exp-02-05", 0.7),
                              small_model=ModelParams("gemini-2.0-flash", 0.7)),
     "mistral": ProviderParams(large_model=ModelParams("mistral-large-latest", 0.5),
                               small_model=ModelParams("mistral-codestral-latest", 0.5)),
@@ -366,7 +366,7 @@ def get_api_key(provider_name: str, config: config.EggConfig) -> str:
     return config_file_key
 
 
-def create_provider(provider_name: str) -> Provider:
+def create_provider(provider_name: str, config: config.EggConfig) -> Provider:
     if provider_name == "ollama":
         return OllamaProvider()
     elif provider_name == "anthropic":
@@ -393,5 +393,9 @@ def create_provider(provider_name: str) -> Provider:
         api_key = get_api_key("mistral", config)
         client = Mistral(api_key=api_key)
         return MistralProvider(client)
+    elif provider_name == "deepseek":
+        api_key = get_api_key("deepseek", config)
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        return OpenAIProvider(client)
     else:
         raise ValueError(f"Invalid provider name: {provider_name}")
