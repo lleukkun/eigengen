@@ -28,7 +28,7 @@ def parse_arguments() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser("eigengen")
     parser.add_argument(
-        "--config",default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
+        "--config", default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
     )
     parser.add_argument("--provider", choices=list(PROVIDER_ALIASES.keys()), help="Choose Model")
     parser.add_argument("--editor", help="Choose editor (e.g., nano, vim)")

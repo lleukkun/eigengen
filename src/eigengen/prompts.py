@@ -94,5 +94,5 @@ existing code that is not specified to be changed.
 You must provide the complete content of the file after applying the changes.
 The content must be enclosed in a Markdown code block. The file content must
 include all the changes specified in the input.
-"""
+""",
 }

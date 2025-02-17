@@ -6,10 +6,7 @@ from eigengen import prompts, providers, utils
 logger = logging.getLogger(__name__)
 
 
-def meld_changes(pm: providers.ProviderManager,
-                 filepath: str,
-                 changes: str,
-                 git_root: str = None) -> None:
+def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git_root: str = None) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
 
@@ -34,10 +31,9 @@ def meld_changes(pm: providers.ProviderManager,
         original_content = ""
 
     system_prompt = prompts.get_prompt("meld")
-    response = pm.process_request(providers.ModelType.SMALL,
-                       providers.ReasoningAmount.LOW,
-                       system_prompt,
-                       [{"role": "user", "content": changes}])
+    response = pm.process_request(
+        providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, [{"role": "user", "content": changes}]
+    )
     full_response = "".join(response)
     # response is in a Markdown code block; extract the content
     blocks = utils.extract_code_blocks(full_response)

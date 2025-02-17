@@ -189,7 +189,8 @@ class EggChat:
                         providers.ModelType.LARGE,
                         providers.ReasoningAmount.MEDIUM,
                         prompts.get_prompt(self.mode),
-                        local_messages)
+                        local_messages,
+                    )
                     for chunk in chunk_iterator:
                         answer += chunk
 
@@ -246,9 +247,9 @@ class EggChat:
 
         answer = ""
         with ProgressIndicator() as _:
-            chunk_iterator = self.pm.process_request(providers.ModelType.LARGE,
-                                                     providers.ReasoningAmount.HIGH,
-                                                     local_messages, prompts.get_prompt(self.mode))
+            chunk_iterator = self.pm.process_request(
+                providers.ModelType.LARGE, providers.ReasoningAmount.HIGH, local_messages, prompts.get_prompt(self.mode)
+            )
             for chunk in chunk_iterator:
                 answer += chunk
 

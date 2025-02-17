@@ -63,8 +63,9 @@ class EggConfig:
 
         try:
             with open(config_path, "w") as f:
-                json.dump({"provider": self.provider, "editor": self.editor,
-                           "color_scheme": self.color_scheme}, f, indent=4)
+                json.dump(
+                    {"provider": self.provider, "editor": self.editor, "color_scheme": self.color_scheme}, f, indent=4
+                )
             logger.info("Configuration saved to %s.", config_path)
         except Exception as e:
             logger.error(f"Error saving config file '{config_path}': {e}.")

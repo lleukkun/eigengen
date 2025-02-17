@@ -50,8 +50,10 @@ def encode_code_block(code_content: str, file_path: str = "") -> str:
     # Return the code content encapsulated within the fences
     return f"{opening_fence}\n{code_content}\n{closing_fence}"
 
-def group_code_blocks_by_file(code_blocks: list[tuple[str, str, str, str, int, int]]
-                              ) -> dict[str, list[tuple[str, str, str, str, int, int]]]:
+
+def group_code_blocks_by_file(
+    code_blocks: list[tuple[str, str, str, str, int, int]],
+) -> dict[str, list[tuple[str, str, str, str, int, int]]]:
     """
     Groups code blocks by file path.
     """
@@ -61,6 +63,7 @@ def group_code_blocks_by_file(code_blocks: list[tuple[str, str, str, str, int, i
             code_blocks_by_file[actual_path] = []
         code_blocks_by_file[actual_path].append((fence, actual_lang, actual_path, code, start_index, end_index))
     return code_blocks_by_file
+
 
 def extract_code_blocks(response: str) -> list[tuple[str, str, str, str, int, int]]:
     """
@@ -307,6 +310,7 @@ def find_git_root() -> Optional[str]:
         return result.stdout.strip()
     except subprocess.CalledProcessError:
         return None
+
 
 def extract_change_descriptions(text: str) -> dict[str, list[str]]:
     # Regular expression pattern to match change descriptions that are

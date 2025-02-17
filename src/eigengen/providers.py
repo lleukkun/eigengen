@@ -33,6 +33,7 @@ class Provider(Protocol):
         reasoning_effort: str | None,
     ) -> Generator[str, None, None]: ...
 
+
 @dataclasses.dataclass
 class ModelParams:
     name: str
@@ -44,14 +45,17 @@ class ProviderParams:
     large_model: ModelParams
     small_model: ModelParams
 
+
 class ModelType(Enum):
     LARGE = "large"
     SMALL = "small"
+
 
 class ReasoningAmount(Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+
 
 class ProviderManager:
     def __init__(self, provider_name: str, config: config.EggConfig):
@@ -84,10 +88,7 @@ class ProviderManager:
         combined_messages = steering_messages + messages
         model = self.provider_params.large_model if model_type == ModelType.LARGE else self.provider_params.small_model
         final_answer: str = ""
-        for chunk in self.provider.make_request(model.name,
-                                                combined_messages,
-                                                model.temperature,
-                                                reasoning_effort):
+        for chunk in self.provider.make_request(model.name, combined_messages, model.temperature, reasoning_effort):
             final_answer += chunk
             yield chunk
 
@@ -305,9 +306,9 @@ class MistralProvider(Provider):
     ) -> Generator[str, None, None]:
         for attempt in range(self.max_retries):
             try:
-                response = self.client.chat.stream(model=model_name,
-                                                   messages=cast(list, messages),
-                                                   temperature=temperature)
+                response = self.client.chat.stream(
+                    model=model_name, messages=cast(list, messages), temperature=temperature
+                )
                 if response is None:
                     return
 
@@ -340,14 +341,16 @@ PROVIDER_ALIASES: dict[str, ProviderParams] = {
         large_model=ModelParams("deepseek-r1-distill-llama-70b", 0.6),
         small_model=ModelParams("llama3.1-70b-versatile", 0.6),
     ),
-    "openai-o1": ProviderParams(large_model=ModelParams("o1", 0.7),
-                                small_model=ModelParams("gpt-4o-mini", 0.5)),
-    "openai-o3-mini": ProviderParams(large_model=ModelParams("o3-mini", 0.6),
-                                     small_model=ModelParams("gpt-4o-mini", 0.5)),
-    "google": ProviderParams(large_model=ModelParams("gemini-2.0-pro-exp-02-05", 0.7),
-                             small_model=ModelParams("gemini-2.0-flash", 0.7)),
-    "mistral": ProviderParams(large_model=ModelParams("mistral-large-latest", 0.5),
-                              small_model=ModelParams("mistral-codestral-latest", 0.5)),
+    "openai-o1": ProviderParams(large_model=ModelParams("o1", 0.7), small_model=ModelParams("gpt-4o-mini", 0.5)),
+    "openai-o3-mini": ProviderParams(
+        large_model=ModelParams("o3-mini", 0.6), small_model=ModelParams("gpt-4o-mini", 0.5)
+    ),
+    "google": ProviderParams(
+        large_model=ModelParams("gemini-2.0-pro-exp-02-05", 0.7), small_model=ModelParams("gemini-2.0-flash", 0.7)
+    ),
+    "mistral": ProviderParams(
+        large_model=ModelParams("mistral-large-latest", 0.5), small_model=ModelParams("mistral-codestral-latest", 0.5)
+    ),
 }
 
 
