@@ -254,32 +254,24 @@ class EggChat:
                 answer += chunk
 
         if diff_mode:
-            code_blocks = utils.extract_code_blocks(answer)
+            changes = utils.extract_change_descriptions(answer)
             diff_found = False
-            for _, _, file_path, code, _, _ in code_blocks:
+            for file_path, change_list in changes.items():
                 if file_path:
                     # Prefer file path relative to the current working directory if it exists.
-                    cwd_full_path = os.path.abspath(file_path)
-                    if os.path.exists(cwd_full_path):
-                        full_path = cwd_full_path
-                    elif self.git_root and not os.path.isabs(file_path):
-                        full_path = os.path.abspath(os.path.join(self.git_root, file_path))
-                    else:
-                        full_path = os.path.abspath(file_path)
+                    full_path = os.path.abspath(file_path)
 
                     try:
                         with open(full_path, "r") as f:
                             original_content = f.read()
                     except Exception:
                         original_content = ""
-
-                    diff_text = utils.generate_unified_diff(
-                        original_content, code, fromfile=f"a/{file_path}", tofile=f"b/{file_path}"
-                    )
+                    new_content = meld.apply_changes(self.pm, full_path, original_content, "\n".join(change_list))
+                    diff_text = meld.produce_diff(full_path, original_content, new_content)
                     print(diff_text)
                     diff_found = True
             if not diff_found:
-                print("No code blocks with file paths found in the response. No diff to show.")
+                print("No changes with file paths found in the response. No diff to show.")
             return
         else:
             timestamp = datetime.now().strftime("%I:%M:%S %p")

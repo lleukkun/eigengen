@@ -5,6 +5,27 @@ from eigengen import prompts, providers, utils
 
 logger = logging.getLogger(__name__)
 
+
+def apply_changes(pm: providers.ProviderManager, filepath: str, original_content: str, changes: str) -> str:
+    """
+    Applies changes to the original content using the LLM.
+    """
+    system_prompt = prompts.get_prompt("meld")
+    encoded_original_content = utils.encode_code_block(original_content, filepath)
+    messages = [
+        {"role": "user", "content": f"{encoded_original_content}\n{changes}"},
+    ]
+    response = pm.process_request(providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, messages)
+    full_response = "".join(response)
+    # response is in a Markdown code block; extract the content
+    blocks = utils.extract_code_blocks(full_response)
+    if len(blocks) != 1:
+        logger.error("Expected exactly one code block in the response.")
+        return
+    new_content = blocks[0][3]
+    return new_content
+
+
 def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git_root: str = None) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
@@ -32,30 +53,16 @@ def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git
     except FileNotFoundError:
         # It's acceptable if the file does not exist; it will be created.
         original_content = ""
-    original = utils.encode_code_block(original_content, filepath)
-    system_prompt = prompts.get_prompt("meld")
-    messages = [
-        {"role": "user", "content": f"{original}\n{changes}"},
-    ]
-    response = pm.process_request(
-        providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, messages
-    )
-    full_response = "".join(response)
-    # response is in a Markdown code block; extract the content
-    blocks = utils.extract_code_blocks(full_response)
-    if len(blocks) != 1:
-        logger.error("Expected exactly one code block in the response.")
-        return
-    new_content = blocks[0][3]
 
+    new_content = apply_changes(pm, filepath, original_content, changes)
     diff_output = produce_diff(filepath, original_content, new_content)
 
     # Show the diff preview to the user.
     utils.pipe_output_via_pager(diff_output)
 
     # Ask the user if they want to apply the changes.
-    apply_changes = input("Do you want to apply these changes? (y/n): ").strip().lower()
-    if apply_changes in ("y", "yes"):
+    apply = input("Do you want to apply these changes? (y/n): ").strip().lower()
+    if apply in ("y", "yes"):
         # Write the new content directly to the file.
         new_content = new_content.rstrip() + "\n"
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -63,6 +70,7 @@ def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git
             f.write(new_content)
     else:
         logger.info("Changes not applied.")
+
 
 def produce_diff(filename: str, original_content: str, new_content: str) -> str:
     """
