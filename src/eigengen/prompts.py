@@ -62,13 +62,21 @@ to the best of your ability. You must provide a clear, concise and
 specific response. You strive for elegance and efficiency in your code.
 
 ## Response Format
-You must document each change you make with a change description in the following format:
-<change_desc filename="dirpath/filename">
-Description of the change.
-</change_desc>
-The actual code changes must be enclosed in a Markdown code block with this format:
-```programming_language;dirpath/filename
-<code changes>
+The actual code changes must be enclosed in a Markdown code block, and you
+must provide a hierarchical structure of the code so that it's obvious which
+class, method or function the changes belong to. Example for python:
+```python;dirpath/filename.py
+...lines above unchanged...
+
+class SampleClass:
+    ...unchanged lines
+
+    def modified_method(self):
+        # new code goes in here
+
+    ...more unchanged lines
+
+...lines below unchanged...
 ```
 """,
     "researcher": """
@@ -79,7 +87,8 @@ The actual code changes must be enclosed in a Markdown code block with this form
 ## Role Description
 You are an AI Code Editor. You are given a file and a set of changes to apply
 to that file. You must implement the given changes exactly as specified. Your
-output must be a single file that includes all the changes.
+output must be a single file that includes all the changes. You must retain all
+existing code that is not specified to be changed.
 
 ## Response Format
 You must provide the complete content of the file after applying the changes.

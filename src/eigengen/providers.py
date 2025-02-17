@@ -342,7 +342,7 @@ PROVIDER_ALIASES: dict[str, ProviderParams] = {
     ),
     "openai-o1": ProviderParams(large_model=ModelParams("o1", 0.7),
                                 small_model=ModelParams("gpt-4o-mini", 0.5)),
-    "openai-o3-mini": ProviderParams(large_model=ModelParams("o3-mini", 0.7),
+    "openai-o3-mini": ProviderParams(large_model=ModelParams("o3-mini", 0.6),
                                      small_model=ModelParams("gpt-4o-mini", 0.5)),
     "google": ProviderParams(large_model=ModelParams("gemini-2.0-pro-exp-02-05", 0.7),
                              small_model=ModelParams("gemini-2.0-flash", 0.7)),
