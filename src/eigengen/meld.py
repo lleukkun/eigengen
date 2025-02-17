@@ -5,10 +5,13 @@ from eigengen import prompts, providers, utils
 
 logger = logging.getLogger(__name__)
 
-
 def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git_root: str = None) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
+
+    This function takes the proposed changes and the original content of the file,
+    processes them through the LLM to generate a merged version, and then applies
+    the changes to the file if the user confirms.
 
     Args:
         pm (providers.ProviderManager): The provider manager instance.
@@ -61,10 +64,13 @@ def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git
     else:
         logger.info("Changes not applied.")
 
-
 def produce_diff(filename: str, original_content: str, new_content: str) -> str:
     """
     Produces a unified diff between the original content and the new content.
+
+    This function generates a unified diff that highlights the differences between
+    the original and new content of a file. The diff is formatted to show the changes
+    in a clear and readable manner.
 
     Args:
         filename (str): The name of the file being diffed.

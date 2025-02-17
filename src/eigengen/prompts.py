@@ -65,8 +65,8 @@ and the source code changes. You must encapsulate the source code changes in a
 code block with the appropriate language tag. Here is an example of the format:
 
 <egg_change filename="dirpath/filename">
-Explanation of the changes. Specifically mention if the code is partial and
-needs to be integrated into the existing code carefully.
+[Description of the changes. Specifically mention if the code is partial and
+needs to be integrated into the existing code carefully.]
 
 ```programming_language
 <source code>

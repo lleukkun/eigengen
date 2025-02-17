@@ -329,10 +329,11 @@ class MistralProvider(Provider):
 PROVIDER_ALIASES: dict[str, ProviderParams] = {
     "anthropic": ProviderParams(
         large_model=ModelParams("claude-3-5-sonnet-latest", 0.7),
-        small_model=ModelParams("claude-3-5-sonnet-latest", 0.7),
+        small_model=ModelParams("claude-3-5-haiku-latest", 0.5),
     ),
     "ollama": ProviderParams(
-        large_model=ModelParams("deepseek-r1:14b", 0.6), small_model=ModelParams("deepseek-r1:14b", 0.6)
+        large_model=ModelParams("deepseek-r1:14b", 0.6),
+        small_model=ModelParams("deepseek-r1:14b", 0.6)
     ),
     "deepseek": ProviderParams(
         large_model=ModelParams("deepseek-reasoner", 0.6), small_model=ModelParams("deepseek-chat", 0.6)
@@ -346,10 +347,10 @@ PROVIDER_ALIASES: dict[str, ProviderParams] = {
         large_model=ModelParams("o3-mini", 0.6), small_model=ModelParams("gpt-4o-mini", 0.5)
     ),
     "google": ProviderParams(
-        large_model=ModelParams("gemini-2.0-pro-exp-02-05", 0.7), small_model=ModelParams("gemini-2.0-flash", 0.7)
+        large_model=ModelParams("gemini-2.0-flash-thinking-exp", 0.7), small_model=ModelParams("gemini-2.0-flash", 0.7)
     ),
     "mistral": ProviderParams(
-        large_model=ModelParams("mistral-large-latest", 0.5), small_model=ModelParams("mistral-codestral-latest", 0.5)
+        large_model=ModelParams("mistral-large-latest", 0.5), small_model=ModelParams("codestral-latest", 0.5)
     ),
 }
 
