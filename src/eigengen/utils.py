@@ -51,20 +51,6 @@ def encode_code_block(code_content: str, file_path: str = "") -> str:
     return f"{opening_fence}\n{code_content}\n{closing_fence}"
 
 
-def group_code_blocks_by_file(
-    code_blocks: list[tuple[str, str, str, str, int, int]],
-) -> dict[str, list[tuple[str, str, str, str, int, int]]]:
-    """
-    Groups code blocks by file path.
-    """
-    code_blocks_by_file: dict[str, list[tuple[str, str, str, str, int, int]]] = {}
-    for fence, actual_lang, actual_path, code, start_index, end_index in code_blocks:
-        if actual_path not in code_blocks_by_file:
-            code_blocks_by_file[actual_path] = []
-        code_blocks_by_file[actual_path].append((fence, actual_lang, actual_path, code, start_index, end_index))
-    return code_blocks_by_file
-
-
 def extract_code_blocks(response: str) -> list[tuple[str, str, str, str, int, int]]:
     """
     Extracts code blocks from a response string.
@@ -316,7 +302,7 @@ def extract_change_descriptions(text: str) -> dict[str, list[str]]:
     # Regular expression pattern to match change descriptions that are
     # enclosed in <change_desc filename="dirpath/filename">...</change_desc> tags.
     change_desc_pattern = re.compile(
-        r"<change_desc filename=\"(?P<filename>[^\"]+)\">(?P<description>.*?)</change_desc>",
+        r"<egg_change filename=\"(?P<filename>[^\"]+)\">(?P<description>.*?)</egg_change>",
         re.DOTALL,
     )
     descriptions: dict[str, list[str]] = {}

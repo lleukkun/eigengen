@@ -383,24 +383,17 @@ class EggChat:
             (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
         )
 
-        change_descriptions = utils.extract_change_descriptions(last_assistant_message)
-        code_blocks = utils.extract_code_blocks(last_assistant_message)
-        if not code_blocks or len(code_blocks) == 0:
-            print("No code blocks found in the last assistant message.")
+        changes = utils.extract_change_descriptions(last_assistant_message)
+        if not changes or len(changes) == 0:
+            print("No changes found in the last assistant message.")
             return True
 
-        # group code_blocks by filepath
-        code_blocks_by_file = utils.group_code_blocks_by_file(code_blocks)
-
-        for file_path, patches in code_blocks_by_file.items():
-            aggregate_desc = "\n".join(change_descriptions.get(file_path, []))
-            encoded_patches = [f"{utils.encode_code_block(patch, path)}" for _, _, path, patch, _, _ in patches]
-            aggregated_patch = "\n".join(encoded_patches)
-            combined_patch = f"{aggregate_desc}\n{aggregated_patch}"
+        for file_path, change_list in changes.items():
+            aggregated_changes = "\n".join(change_list)
             meld.meld_changes(
                 self.pm,
                 file_path,
-                combined_patch,
+                aggregated_changes,
                 self.git_root,
             )
 

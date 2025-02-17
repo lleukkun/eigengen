@@ -29,10 +29,13 @@ def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git
     except FileNotFoundError:
         # It's acceptable if the file does not exist; it will be created.
         original_content = ""
-
+    original = utils.encode_code_block(original_content, filepath)
     system_prompt = prompts.get_prompt("meld")
+    messages = [
+        {"role": "user", "content": f"{original}\n{changes}"},
+    ]
     response = pm.process_request(
-        providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, [{"role": "user", "content": changes}]
+        providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, messages
     )
     full_response = "".join(response)
     # response is in a Markdown code block; extract the content
