@@ -77,32 +77,54 @@ def create_app(config: EggConfig) -> FastAPI:
         """
         return JSONResponse(content=chat_instance.messages)
 
+    @app.post("/api/extract_changes")
+    async def extract_changes_endpoint(request: Request):
+        """
+        Receives a JSON payload with the following
+        keys:
+        - "assistant_answer": The assistant's response containing the diff instructions.
+        """
+        data = await request.json()
+        assistant_answer = data.get("assistant_answer")
+        if not assistant_answer:
+            return JSONResponse(status_code=400, content={"error": "The 'assistant_answer' field is required."})
+
+        # Extract the diff instructions from the assistant's response.
+        changes = utils.extract_change_descriptions
+        if not changes:
+            return JSONResponse(status_code=500, content={"error": "Failed to extract diff instructions."})
+
+        return JSONResponse(content={"changes": changes})
+
     @app.post("/api/meld")
     async def meld_endpoint(request: Request):
         """
         Receives a JSON payload with the fields:
-        - "code_block": The diff instructions to be applied.
-        - "code_filepath": The path to the file whose content will be modified.
+        - "change": The diff instructions to be applied.
+        - "filepath": The path to the file whose content will be modified.
         Applies the diff to the existing file content (or an empty string if absent) and produces
         a unified diff preview. Returns a JSON response containing both the diff preview and the new file content.
         """
         data = await request.json()
-        code_block = data.get("code_block")
-        code_filepath = data.get("code_filepath")
-        if not code_block or not code_filepath:
+        change_content = data.get("change")
+        filepath = data.get("filepath")
+        if not change_content or not filepath:
             return JSONResponse(
-                status_code=400, content={"error": "Both 'code_block' and 'code_filepath' are required fields."}
+                status_code=400, content={"error": "Both 'change' and 'filepath' are required fields."}
             )
 
         # Generate the diff preview using the small model.
         original_content = ""
         # check if the file exists using os.path.exists
-        if os.path.exists(code_filepath):
-            with open(code_filepath) as f:
-                original_content = f.read()
+        if os.path.exists(filepath):
+            try:
+                with open(filepath) as f:
+                    original_content = f.read()
+            except Exception:
+                return JSONResponse(status_code=500, content={"error": "Failed to read file."})
 
-        new_content = meld.apply_contextual_diff(original_content, code_block)
-        diff_output = meld.produce_diff(code_filepath, original_content, new_content)
+        new_content = meld.apply_changes(chat_instance.pm, filepath, original_content, change_content)
+        diff_output = meld.produce_diff(filepath, original_content, new_content)
 
         if not diff_output:
             return JSONResponse(status_code=500, content={"error": "Diff generation failed."})
