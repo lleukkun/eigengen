@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 from eigengen import prompts, providers, utils
 from eigengen.progress import ProgressIndicator
@@ -22,13 +23,7 @@ def apply_changes(pm: providers.ProviderManager, filepath: str, original_content
         response = "".join(chunks)
 
     blocks = utils.extract_code_blocks(response)
-    new_content = ""
-    # there should be only one block
-    if blocks and len(blocks) == 1:
-        new_content = blocks[0].content
-    else:
-        logger.error("Error extracting code block from response.")
-        new_content = original_content
+    new_content = blocks[0].content if blocks and len(blocks) > 0 else original_content
 
     return new_content
 

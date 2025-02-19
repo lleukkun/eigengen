@@ -75,14 +75,15 @@ needs to be integrated into the existing code carefully.
 </egg_change>
 """,
     "meld": """
-You are given the original content of a file in a markdown codeblock
-and the proposed changes in <egg_change></egg_change> tags.
+You are given original content of the file in <egg_file filename="dirpath/filename"></egg_file>
+tags and a set of changes in <egg_change></egg_change> tags.
 
 You must provide a merged version of the file that incorporates the proposed changes.
 Do not change anything in the suggested changes. You must respond with the full
-file contents. You must encapsulate the file contents in a Markdown codeblock with
-format:
-```programming_language
+file contents without any encoding or additional markup.
+Your response format should be as follows:
+```plaintext
+# Original file content here
 ```
 """
 }

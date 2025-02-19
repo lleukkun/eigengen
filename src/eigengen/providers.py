@@ -351,6 +351,8 @@ PROVIDER_ALIASES: dict[str, ProviderParams] = {
     "mistral": ProviderParams(
         large_model=ModelParams("mistral-large-latest", 0.5), small_model=ModelParams("codestral-latest", 0.5)
     ),
+    "xai": ProviderParams(
+        large_model=ModelParams("grok-2-latest", 0.6), small_model=ModelParams("grok-2-latest", 0.6))
 }
 
 
@@ -399,6 +401,10 @@ def create_provider(provider_name: str, config: config.EggConfig) -> Provider:
     elif provider_name == "deepseek":
         api_key = get_api_key("deepseek", config)
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        return OpenAIProvider(client)
+    elif provider_name == "xai":
+        api_key = get_api_key("xai", config)
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
         return OpenAIProvider(client)
     else:
         raise ValueError(f"Invalid provider name: {provider_name}")
