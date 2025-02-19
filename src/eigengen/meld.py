@@ -2,6 +2,7 @@ import logging
 import os
 
 from eigengen import prompts, providers, utils
+from eigengen.progress import ProgressIndicator
 
 logger = logging.getLogger(__name__)
 
@@ -15,18 +16,26 @@ def apply_changes(pm: providers.ProviderManager, filepath: str, original_content
     messages = [
         {"role": "user", "content": f"{encoded_original_content}\n{changes}"},
     ]
-    response = pm.process_request(providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, messages)
-    full_response = "".join(response)
-    # response is in a Markdown code block; extract the content
-    blocks = utils.extract_code_blocks(full_response)
-    if len(blocks) != 1:
-        logger.error("Expected exactly one code block in the response.")
-        return
-    new_content = blocks[0][3]
+    response = ""
+    with ProgressIndicator() as _:
+        chunks = pm.process_request(providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, messages)
+        response = "".join(chunks)
+
+    blocks = utils.extract_code_blocks(response)
+    new_content = ""
+    # there should be only one block
+    if blocks and len(blocks) == 1:
+        new_content = blocks[0].content
+    else:
+        logger.error("Error extracting code block from response.")
+        new_content = original_content
+
     return new_content
 
 
-def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git_root: str = None) -> None:
+def meld_changes(
+    pm: providers.ProviderManager, filepath: str, changes: str, git_root: str = None, yes: bool = False
+) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
 
@@ -58,14 +67,19 @@ def meld_changes(pm: providers.ProviderManager, filepath: str, changes: str, git
     diff_output = produce_diff(filepath, original_content, new_content)
 
     # Show the diff preview to the user.
-    utils.pipe_output_via_pager(diff_output)
+    if not yes:
+        utils.pipe_output_via_pager(diff_output)
 
     # Ask the user if they want to apply the changes.
-    apply = input("Do you want to apply these changes? (y/n): ").strip().lower()
+    apply = "y" if yes else input("Do you want to apply these changes? (y/n): ").strip().lower()
+
     if apply in ("y", "yes"):
         # Write the new content directly to the file.
         new_content = new_content.rstrip() + "\n"
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        dirpath = os.path.dirname(filepath)
+        if dirpath and not os.path.exists(dirpath):
+            os.makedirs(dirpath, exist_ok=True)
+
         with open(filepath, "w") as f:
             f.write(new_content)
     else:

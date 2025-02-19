@@ -34,7 +34,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--editor", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=["github-dark", "monokai", "solarized"], help="Choose color scheme")
     parser.add_argument(
-        "--files", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)"
+        "-f", "--files", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)"
     )
     parser.add_argument("--prompt", help="Prompt string to use")
     parser.add_argument("--diff", action="store_true", help="Show diff output (used with -p and without --chat)")
@@ -56,6 +56,7 @@ def parse_arguments() -> argparse.Namespace:
         metavar="ip:port",
         help="Start API server at ip:port address (default: 127.0.0.1:8000)",
     )
+
     args = parser.parse_args()
     return args
 

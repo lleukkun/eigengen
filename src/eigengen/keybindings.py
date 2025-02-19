@@ -73,7 +73,7 @@ class ChatKeyBindingsManager:
                 # Extract code blocks from the assistant's message for the first time
                 code_blocks = utils.extract_code_blocks(last_assistant_message)
                 # Since extract_code_blocks returns tuples, extract the code content from each tuple
-                self.quoting_state["code_blocks"] = [code for _, _, _, code, _, _ in code_blocks]
+                self.quoting_state["code_blocks"] = [block.content for block in code_blocks]
                 # Create a cycle iterator to cycle through the code blocks
                 self.quoting_state["cycle_iterator"] = (
                     cycle(self.quoting_state["code_blocks"]) if self.quoting_state["code_blocks"] else None

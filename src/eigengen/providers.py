@@ -332,8 +332,7 @@ PROVIDER_ALIASES: dict[str, ProviderParams] = {
         small_model=ModelParams("claude-3-5-haiku-latest", 0.5),
     ),
     "ollama": ProviderParams(
-        large_model=ModelParams("deepseek-r1:14b", 0.6),
-        small_model=ModelParams("deepseek-r1:14b", 0.6)
+        large_model=ModelParams("deepseek-r1:14b", 0.6), small_model=ModelParams("deepseek-r1:14b", 0.6)
     ),
     "deepseek": ProviderParams(
         large_model=ModelParams("deepseek-reasoner", 0.6), small_model=ModelParams("deepseek-chat", 0.6)

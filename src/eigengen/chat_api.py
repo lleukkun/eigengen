@@ -109,9 +109,7 @@ def create_app(config: EggConfig) -> FastAPI:
         change_content = data.get("change")
         filepath = data.get("filepath")
         if not change_content or not filepath:
-            return JSONResponse(
-                status_code=400, content={"error": "Both 'change' and 'filepath' are required fields."}
-            )
+            return JSONResponse(status_code=400, content={"error": "Both 'change' and 'filepath' are required fields."})
 
         # Generate the diff preview using the small model.
         original_content = ""

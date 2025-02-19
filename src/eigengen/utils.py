@@ -1,3 +1,4 @@
+import dataclasses
 import difflib
 import io  # Add this import for StringIO
 import logging
@@ -51,7 +52,17 @@ def encode_code_block(code_content: str, file_path: str = "") -> str:
     return f"{opening_fence}\n{code_content}\n{closing_fence}"
 
 
-def extract_code_blocks(response: str) -> list[tuple[str, str, str, str, int, int]]:
+@dataclasses.dataclass
+class CodeBlock:
+    fence: str
+    lang: str
+    path: str
+    content: str
+    start_index: int
+    end_index: int
+
+
+def extract_code_blocks(response: str) -> list[CodeBlock]:
     """
     Extracts code blocks from a response string.
 
@@ -68,7 +79,7 @@ def extract_code_blocks(response: str) -> list[tuple[str, str, str, str, int, in
                 - start_index (int): The start index of the code block in the response string.
                 - end_index (int): The end index of the code block in the response string.
     """
-    code_blocks: list[tuple[str, str, str, str, int, int]] = []
+    code_blocks: list[CodeBlock] = []
 
     # Regular expression pattern to match code blocks with variable-length fences and indentation
     code_block_pattern = re.compile(
@@ -102,7 +113,7 @@ def extract_code_blocks(response: str) -> list[tuple[str, str, str, str, int, in
                 actual_path = lang_parts[1]
 
         # Append the extracted code block information to the list
-        code_blocks.append((fence, actual_lang, actual_path, code, start_index, end_index))
+        code_blocks.append(CodeBlock(fence, actual_lang, actual_path, code, start_index, end_index))
 
     return code_blocks
 
@@ -199,35 +210,35 @@ def get_formatted_response_with_syntax_highlighting(color_scheme: str, response:
     # Create a formatter with the specified style
     formatter = pygments.formatters.TerminalFormatter(style=pygments_style)
 
-    for fence, actual_lang, actual_path, code, start, end in code_blocks:
+    for block in code_blocks:
         # Append text before the code block
-        output.write(response[last_end:start])
+        output.write(response[last_end:block.start_index])
 
         # Reconstruct the opening fence with optional language and path
-        lang_path = ";".join(filter(None, [actual_lang, actual_path]))
-        output.write(f"{fence}{lang_path}\n")
+        lang_path = ";".join(filter(None, [block.lang, block.path]))
+        output.write(f"{block.fence}{lang_path}\n")
 
         # Determine the lexer to use for syntax highlighting
-        if actual_lang:
+        if block.lang:
             try:
-                lexer = get_lexer_by_name(actual_lang.lower())
+                lexer = get_lexer_by_name(block.lang.lower())
             except Exception:
-                lexer = guess_lexer(code)
+                lexer = guess_lexer(block.content)
         else:
             try:
-                lexer = guess_lexer(code)
+                lexer = guess_lexer(block.content)
             except Exception:
                 lexer = TextLexer()
 
         # Syntax-highlight the code content, output as ANSI text
-        formatted_code = pygments.highlight(code, lexer, formatter)
+        formatted_code = pygments.highlight(block.content, lexer, formatter)
 
         output.write(formatted_code)
 
         # Append the closing fence
-        output.write(f"\n{fence}\n")
+        output.write(f"\n{block.fence}\n")
 
-        last_end = end
+        last_end = block.end_index
 
     # Append any remaining text after the last code block
     output.write(response[last_end:])
@@ -279,6 +290,24 @@ def get_git_files(pattern: Optional[str] = None) -> list[str]:
         return result.stdout.decode("utf-8").split("\x00")[:-1]
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         logger.error(f"Git error: {str(e)}")
+        return []
+
+
+def get_all_files(git_root: str) -> list[str]:
+    """
+    Returns a list of all tracked and untracked files in the repository.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "-c", "--others", "--exclude-standard"],
+            capture_output=True,
+            check=True,
+            text=True,
+            cwd=git_root,
+        )
+        return result.stdout.split("\x00")[:-1]
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Git error: {e}")
         return []
 
 

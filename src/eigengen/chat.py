@@ -168,8 +168,9 @@ class EggChat:
                     continue
 
                 original_message = prompt_input
+                message_context = ""
                 if self.initial_file_content and self.initial_file_content.strip() != "":
-                    original_message += "\n" + self.initial_file_content
+                    message_context += "\n" + self.initial_file_content
                     self.initial_file_content = ""
 
                 retrieved_results = self.egg_rag.retrieve(target_files=self.target_files if self.target_files else None)
@@ -177,11 +178,10 @@ class EggChat:
                 if retrieved_results:
                     rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
 
-                extended_message = original_message
                 if rag_context:
-                    extended_message = original_message + "\n\nRetrieved Context:\n" + rag_context
+                    message_context += "\n\nRetrieved Context:\n" + rag_context
 
-                local_messages = self.messages + [{"role": "user", "content": extended_message}]
+                message_list = self.messages + [{"role": "user", "content": original_message + "\n" + message_context}]
 
                 answer = ""
                 with ProgressIndicator() as _:
@@ -189,7 +189,7 @@ class EggChat:
                         providers.ModelType.LARGE,
                         providers.ReasoningAmount.MEDIUM,
                         prompts.get_prompt(self.mode),
-                        local_messages,
+                        message_list,
                     )
                     for chunk in chunk_iterator:
                         answer += chunk
@@ -246,14 +246,14 @@ class EggChat:
         local_messages = self.messages + [{"role": "user", "content": extended_message}]
 
         answer = ""
-        with ProgressIndicator() as _:
-            chunk_iterator = self.pm.process_request(
-                providers.ModelType.LARGE, providers.ReasoningAmount.MEDIUM,
-                prompts.get_prompt(self.mode),
-                local_messages
-            )
-            for chunk in chunk_iterator:
-                answer += chunk
+        chunk_iterator = self.pm.process_request(
+            providers.ModelType.LARGE,
+            providers.ReasoningAmount.MEDIUM,
+            prompts.get_prompt(self.mode),
+            local_messages,
+        )
+        for chunk in chunk_iterator:
+            answer += chunk
 
         if diff_mode:
             changes = utils.extract_change_descriptions(answer)

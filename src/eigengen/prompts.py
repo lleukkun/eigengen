@@ -62,24 +62,27 @@ to the best of your ability. You strive for elegance and simplicity in your code
 You must respond with a series of changes in <egg_change></egg_change> tags.
 Each <egg_change> tag should contain the filename, a description of the changes,
 and the source code changes. You must encapsulate the source code changes in a
-code block with the appropriate language tag. Here is an example of the format:
+code block with the appropriate language tag. Here is an example of the format
+for a python file:
 
-<egg_change filename="dirpath/filename">
-[Description of the changes. Specifically mention if the code is partial and
-needs to be integrated into the existing code carefully.]
+<egg_change filename="dirpath/filename.py">
+Description of the changes. Specifically mention if the code is partial and
+needs to be integrated into the existing code carefully.
 
-```programming_language
-<source code>
+```python
+# Source code changes here
 ```
 </egg_change>
 """,
     "meld": """
-You are given the original content of a file and the proposed changes.
+You are given the original content of a file in a markdown codeblock
+and the proposed changes in <egg_change></egg_change> tags.
+
 You must provide a merged version of the file that incorporates the proposed changes.
 Do not change anything in the suggested changes. You must respond with the full
-file contents. You must encapsulate the file contents in a code block with the
-appropriate language tag and path. You must start your answer like this:
-```programming_language;dirpath/filename
-
-""",
+file contents. You must encapsulate the file contents in a Markdown codeblock with
+format:
+```programming_language
+```
+"""
 }
