@@ -49,6 +49,7 @@ def parse_arguments() -> argparse.Namespace:
         help="Choose operating mode",
     )
     parser.add_argument("--rag", action="store_true", help="Enable Retrieval Augmented Generation functionality")
+    parser.add_argument("--high", action="store_true", help="Use high reasoning effort for chat (requires LLM support)")
     parser.add_argument(
         "--run-api",
         nargs="?",

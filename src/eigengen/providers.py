@@ -29,7 +29,6 @@ class Provider(Protocol):
         self,
         model_name: str,
         messages: list[dict[str, str]],
-        prediction: str | None,
         reasoning_effort: str | None,
     ) -> Generator[str, None, None]: ...
 
@@ -198,17 +197,11 @@ class OpenAIProvider(Provider):
     ) -> Generator[str, None, None]:
         # map to openai specifics
         openai_messages: list[openai.types.chat.ChatCompletionMessageParam] = []
-        if model_name.startswith("deepseek-") or model_name in ["o1-preview", "o1-mini"]:
-            # deepseek models prefer no system messages, so we integrate the
-            # system message into the user message
-            system_instruction = messages[0]["content"]
+        # we integrate the system message into the user message
+        system_instruction = messages[0]["content"]
 
-            openai_messages.extend(messages[1:])
-            openai_messages[-1]["content"] += f"\n{system_instruction}"
-        else:
-            for message in messages:
-                role = message["role"]
-                openai_messages.append({"role": role, "content": message["content"]})
+        openai_messages.extend(messages[1:])
+        openai_messages[-1]["content"] += f"\n{system_instruction}"
 
         for attempt in range(self.max_retries):
             try:

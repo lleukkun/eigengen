@@ -150,6 +150,7 @@ class EggChat:
                 def custom_prompt():
                     return [("class:user", f"\n[{datetime.now().strftime('%I:%M:%S %p')}][User] >\n")]
 
+                reasoning_effort = providers.ReasoningAmount.HIGH if self.config.args.high else providers.ReasoningAmount.MEDIUM
                 prompt_input = session.prompt(
                     custom_prompt,
                     style=style,
@@ -187,7 +188,7 @@ class EggChat:
                 with ProgressIndicator() as _:
                     chunk_iterator = self.pm.process_request(
                         providers.ModelType.LARGE,
-                        providers.ReasoningAmount.MEDIUM,
+                        reasoning_effort,
                         prompts.get_prompt(self.mode),
                         message_list,
                     )
@@ -246,9 +247,10 @@ class EggChat:
         local_messages = self.messages + [{"role": "user", "content": extended_message}]
 
         answer = ""
+        reasoning_effort = providers.ReasoningAmount.HIGH if self.config.args.high else providers.ReasoningAmount.MEDIUM
         chunk_iterator = self.pm.process_request(
             providers.ModelType.LARGE,
-            providers.ReasoningAmount.MEDIUM,
+            reasoning_effort,
             prompts.get_prompt(self.mode),
             local_messages,
         )
