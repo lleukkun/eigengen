@@ -137,13 +137,13 @@ class AnthropicProvider(Provider):
         if model_name.startswith("claude-3.7"):
             if reasoning_effort == ReasoningAmount.LOW:
                 extra_params["thinking"] = { "type": "enabled",
-                                             "budget_tokens": 1000 }
+                                             "budget_tokens": 2000 }
             elif reasoning_effort == ReasoningAmount.MEDIUM:
                 extra_params["thinking"] = { "type": "enabled",
-                                             "budget_tokens": 4000 }
+                                             "budget_tokens": 8000 }
             elif reasoning_effort == ReasoningAmount.HIGH:
                 extra_params["thinking"] = { "type": "enabled",
-                                             "budget_tokens": 16000 }
+                                             "budget_tokens": 24000 }
         for attempt in range(max_retries):
             try:
                 with self.client.messages.stream(
