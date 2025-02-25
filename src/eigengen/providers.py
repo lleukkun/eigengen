@@ -133,7 +133,17 @@ class AnthropicProvider(Provider):
         messages = messages[1:]
         max_retries = 5
         base_delay = 1
-
+        extra_params = {}
+        if model_name.startswith("claude-3.7"):
+            if reasoning_effort == ReasoningAmount.LOW:
+                extra_params["thinking"] = { "type": "enabled",
+                                             "budget_tokens": 1000 }
+            elif reasoning_effort == ReasoningAmount.MEDIUM:
+                extra_params["thinking"] = { "type": "enabled",
+                                             "budget_tokens": 4000 }
+            elif reasoning_effort == ReasoningAmount.HIGH:
+                extra_params["thinking"] = { "type": "enabled",
+                                             "budget_tokens": 16000 }
         for attempt in range(max_retries):
             try:
                 with self.client.messages.stream(
@@ -142,6 +152,7 @@ class AnthropicProvider(Provider):
                     messages=cast(Iterable[anthropic.types.MessageParam], messages),
                     max_tokens=8192,
                     system=system_message,
+                    **extra_params,
                 ) as stream:
                     for text in stream.text_stream:
                         yield text
@@ -321,7 +332,7 @@ class MistralProvider(Provider):
 
 PROVIDER_ALIASES: dict[str, ProviderParams] = {
     "anthropic": ProviderParams(
-        large_model=ModelParams("claude-3-5-sonnet-latest", 0.7),
+        large_model=ModelParams("claude-3-7-sonnet-latest", 0.7),
         small_model=ModelParams("claude-3-5-haiku-latest", 0.5),
     ),
     "ollama": ProviderParams(
