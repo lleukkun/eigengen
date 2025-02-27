@@ -329,9 +329,9 @@ def find_git_root() -> Optional[str]:
 
 def extract_change_descriptions(text: str) -> dict[str, list[str]]:
     # Regular expression pattern to match change descriptions that are
-    # enclosed in <change_desc filename="dirpath/filename">...</change_desc> tags.
+    # enclosed in <egg_edit filename="dirpath/filename">...</egg_edit> tags.
     change_desc_pattern = re.compile(
-        r"<egg_change filename=\"(?P<filename>[^\"]+)\">(?P<description>.*?)</egg_change>",
+        r"<egg_edit filename=\"(?P<filename>[^\"]+)\">(?P<description>.*?)</egg_edit>",
         re.DOTALL,
     )
     descriptions: dict[str, list[str]] = {}

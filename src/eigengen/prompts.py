@@ -27,22 +27,22 @@ Follow the design principles of the existing sofrware architecture and propose c
 accordingly. Consider the trade-offs and implications of your changes.
 """,
     "programmer": """
-Follow the coding style of the existing source code and make changes accordingly. Pay
+Follow the coding style of any existing source code and make changes accordingly. Pay
 attention to best practices. Strive for elegance in your code.
 
-Write your response as a series of changes in <egg_change></egg_change> tags like below:
+Write your response as a series of edits in <egg_edit></egg_edit> tags like below:
 
-<egg_change filename="dirpath/filename.py">
-Clear description of the changes and instructions where in the file to make the changes.
+<egg_edit filename="dirpath/filename.py">
+Clear description of the additions and changes and instructions where in the file to make them.
 
 ```python
 # Source code changes here
 ```
-</egg_change>
+</egg_edit>
 """,
     "meld": """
 You are given original content of the file in <egg_file filename="dirpath/filename"></egg_file>
-tags and a set of changes in <egg_change></egg_change> tags.
+tags and a set of changes in <egg_edit></egg_edit> tags.
 
 You must provide a merged version of the file that incorporates the proposed changes.
 Do not change anything in the suggested changes. You must respond with the full
