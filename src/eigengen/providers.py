@@ -349,6 +349,7 @@ PROVIDER_ALIASES: dict[str, ProviderParams] = {
     "openai-o3-mini": ProviderParams(
         large_model=ModelParams("o3-mini", 0.6), small_model=ModelParams("gpt-4o-mini", 0.5)
     ),
+    "openai-gpt-4.5": ProviderParams(large_model=ModelParams("gpt-4.5-preview", 0.6), small_model=ModelParams("gpt-4o-mini", 0.5)),
     "google": ProviderParams(
         large_model=ModelParams("gemini-2.0-flash-thinking-exp", 0.7), small_model=ModelParams("gemini-2.0-flash", 0.7)
     ),
@@ -386,11 +387,7 @@ def create_provider(provider_name: str, config: config.EggConfig) -> Provider:
         api_key = get_api_key("groq", config)
         client = groq.Groq(api_key=api_key)
         return GroqProvider(client)
-    elif provider_name == "openai-o3-mini":
-        api_key = get_api_key("openai", config)
-        client = openai.OpenAI(api_key=api_key)
-        return OpenAIProvider(client)
-    elif provider_name == "openai-o1":
+    elif provider_name.startswith("openai-"):
         api_key = get_api_key("openai", config)
         client = openai.OpenAI(api_key=api_key)
         return OpenAIProvider(client)
