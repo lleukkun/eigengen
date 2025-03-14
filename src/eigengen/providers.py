@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 from abc import abstractmethod
 from enum import Enum
@@ -14,7 +15,7 @@ import openai
 import requests
 from google import genai
 from google.genai import types
-from mistralai import Mistral
+from mistralai import Mistral, TextChunkType
 
 from eigengen import config, log
 
@@ -23,14 +24,24 @@ logger = logging.getLogger(__name__)
 OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 
-class Provider(Protocol):
-    @abstractmethod
-    def make_request(
-        self,
-        model_name: str,
-        messages: list[dict[str, str]],
-        reasoning_effort: str | None,
-    ) -> Generator[str, None, None]: ...
+class ReasoningAmount(Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class ModelType(Enum):
+    LARGE = "large"
+    SMALL = "small"
+
+
+@dataclasses.dataclass
+class ModelSpec:
+    provider: str
+    large_name: str
+    large_temperature: float
+    small_name: str
+    small_temperature: float
 
 
 @dataclasses.dataclass
@@ -39,29 +50,54 @@ class ModelParams:
     temperature: float
 
 
+class Provider(Protocol):
+    model_spec: ModelSpec
+
+    def __init__(self, model_spec: ModelSpec) -> None:
+        self.model_spec = model_spec
+
+    def get_model_params(self, model_type: ModelType) -> ModelParams:
+        if model_type == ModelType.LARGE:
+            return ModelParams(name=self.model_spec.large_name, temperature=self.model_spec.large_temperature)
+        else:
+            return ModelParams(name=self.model_spec.small_name, temperature=self.model_spec.small_temperature)
+
+    @abstractmethod
+    def make_request(
+        self,
+        model_type: ModelType,
+        messages: list[dict[str, str]],
+        reasoning_effort: ReasoningAmount = ReasoningAmount.MEDIUM,
+    ) -> Generator[str, None, None]: ...
+
+
 @dataclasses.dataclass
 class ProviderParams:
     large_model: ModelParams
     small_model: ModelParams
 
 
-class ModelType(Enum):
-    LARGE = "large"
-    SMALL = "small"
+def parse_model_spec(input_str: str) -> ModelSpec:
+    """
+    Parses model string using regex with strict format validation.
+    Format: provider:large_name@temperature:small_name@temperature
+    """
+    pattern = r"^([^:]+):([^:@]+)@(\d+\.?\d*|\.\d+):([^:@]+)@(\d+\.?\d*|\.\d+)$"
+    match = re.fullmatch(pattern, input_str)
 
+    if not match:
+        raise ValueError("Invalid format. Expected: provider:name@num:name@num")
 
-class ReasoningAmount(Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+    return (ModelSpec(provider=match.group(1), large_name=match.group(2), large_temperature=float(match.group(3)),
+            small_name=match.group(4), small_temperature=float(match.group(5))))
+
 
 
 class ProviderManager:
-    def __init__(self, provider_name: str, config: config.EggConfig):
-        self.provider_name = provider_name
+    def __init__(self, model_identifier: str, config: config.EggConfig):
+        self.spec = parse_model_spec(model_identifier)
         self.config = config
-        self.provider_params = PROVIDER_ALIASES[provider_name]
-        self.provider = create_provider(self.provider_name, self.config)
+        self.provider = create_provider(self.spec, self.config)
 
     def process_request(
         self,
@@ -85,29 +121,29 @@ class ProviderManager:
         steering_messages = [{"role": steering_role, "content": system_message}]
 
         combined_messages = steering_messages + messages
-        model = self.provider_params.large_model if model_type == ModelType.LARGE else self.provider_params.small_model
         final_answer: str = ""
-        for chunk in self.provider.make_request(model.name, combined_messages, model.temperature, reasoning_effort):
+        for chunk in self.provider.make_request(model_type, combined_messages, reasoning_effort):
             final_answer += chunk
             yield chunk
 
         # Log the request and response
-        log.log_request_response(model.name, messages, final_answer)
+        log.log_request_response(self.spec.large_name, messages, final_answer)
 
 
 class OllamaProvider(Provider):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, model_spec: ModelSpec):
+        super().__init__(model_spec)
 
     def make_request(
-        self, model_name: str, messages: list[dict[str, str]], temperature: float, reasoning_effort=None
+        self, model_type: ModelType, messages: list[dict[str, str]], reasoning_effort=None
     ) -> Generator[str, None, None]:
         headers: dict[str, str] = {"Content-Type": "application/json"}
+        model_params = self.get_model_params(model_type)
         data: dict[str, Any] = {
-            "model": model_name,
+            "model": model_params.name,
             "messages": messages,
             "stream": True,
-            "options": {"temperature": temperature},
+            "options": {"temperature": model_params.temperature},
         }
         response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data), stream=True)
         response.raise_for_status()
@@ -119,12 +155,13 @@ class OllamaProvider(Provider):
 
 
 class AnthropicProvider(Provider):
-    def __init__(self, client: anthropic.Anthropic):
-        super().__init__()
+    def __init__(self, client: anthropic.Anthropic, model_spec: ModelSpec):
+        super().__init__(model_spec)
         self.client: anthropic.Anthropic = client
 
     def make_request(
-        self, model_name: str, messages: list[dict[str, str]], temperature: float, reasoning_effort=None
+        self, model_type: ModelType, messages: list[dict[str, str]],
+        reasoning_effort=ReasoningAmount.MEDIUM
     ) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
@@ -133,8 +170,9 @@ class AnthropicProvider(Provider):
         messages = messages[1:]
         max_retries = 5
         base_delay = 1
+        model_params = self.get_model_params(model_type)
         extra_params = {}
-        if model_name.startswith("claude-3.7"):
+        if model_params.name.startswith("claude-3.7"):
             if reasoning_effort == ReasoningAmount.LOW:
                 extra_params["thinking"] = { "type": "enabled",
                                              "budget_tokens": 2000 }
@@ -147,8 +185,8 @@ class AnthropicProvider(Provider):
         for attempt in range(max_retries):
             try:
                 with self.client.messages.stream(
-                    model=model_name,
-                    temperature=temperature,
+                    model=model_params.name,
+                    temperature=model_params.temperature,
                     messages=cast(Iterable[anthropic.types.MessageParam], messages),
                     max_tokens=8192,
                     system=system_message,
@@ -167,19 +205,26 @@ class AnthropicProvider(Provider):
 
 
 class GroqProvider(Provider):
-    def __init__(self, client: groq.Groq):
-        super().__init__()
+    default_large_model_name = "qwen-qwq-32b"
+    default_small_model_name = "qwen-qwq-32b"
+
+    def __init__(self, client: groq.Groq, model_spec: ModelSpec):
+        super().__init__(model_spec)
         self.client: groq.Groq = client
         self.max_retries = 5
         self.base_delay = 1
 
     def make_request(
-        self, model: str, messages: list[dict[str, str]], temperature: float, reasoning_effort=None
+        self, model_type: ModelType, messages: list[dict[str, str]],
+        reasoning_effort=ReasoningAmount.MEDIUM
     ) -> Generator[str, None, None]:
+        model_params = self.get_model_params(model_type)
+
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.completions.create(
-                    messages=cast(list, messages), model=model, temperature=temperature, stream=True
+                    messages=cast(list, messages), model=model_params.name,
+                    temperature=model_params.temperature, stream=True
                 )
 
                 for chunk in response:
@@ -197,15 +242,18 @@ class GroqProvider(Provider):
 
 
 class OpenAIProvider(Provider):
-    def __init__(self, client: openai.OpenAI):
-        super().__init__()
+    def __init__(self, client: openai.OpenAI, model_spec: ModelSpec):
+        super().__init__(model_spec)
         self.client: openai.OpenAI = client
         self.max_retries = 5
         self.base_delay = 1
 
     def make_request(
-        self, model_name: str, messages: list[dict[str, str]], temperature: float, reasoning_effort: str = "medium"
+        self, model_type: ModelType, messages: list[dict[str, str]],
+        reasoning_effort: ReasoningAmount = ReasoningAmount.MEDIUM
     ) -> Generator[str, None, None]:
+        model_params = self.get_model_params(model_type)
+
         # map to openai specifics
         openai_messages: list[openai.types.chat.ChatCompletionMessageParam] = []
         # we integrate the system message into the user message
@@ -218,15 +266,20 @@ class OpenAIProvider(Provider):
             try:
                 params = {}
 
-                use_stream = True if model_name not in ["o1", "o1-mini"] else False
+                use_stream = True if model_params.name not in ["o1", "o1-mini"] else False
 
-                if model_name in ["o3-mini"]:
-                    params["reasoning_effort"] = "high"
-                if model_name not in ["o1", "o3-mini"]:
-                    params["temperature"] = temperature
+                if model_params.name in ["o3-mini"]:
+                    if reasoning_effort == ReasoningAmount.LOW:
+                        params["reasoning_effort"] = "low"
+                    elif reasoning_effort == ReasoningAmount.MEDIUM:
+                        params["reasoning_effort"] = "medium"
+                    elif reasoning_effort == ReasoningAmount.HIGH:
+                        params["reasoning_effort"] = "high"
+                if model_params.name not in ["o1", "o3-mini"]:
+                    params["temperature"] = str(model_params.temperature)
 
                 response = self.client.chat.completions.create(
-                    model=model_name, messages=cast(list, openai_messages), stream=use_stream, **params
+                    model=model_params.name, messages=cast(list, openai_messages), stream=use_stream, **params
                 )
                 if isinstance(response, openai.Stream):
                     for chunk in response:
@@ -247,28 +300,29 @@ class OpenAIProvider(Provider):
 
 
 class GoogleProvider(Provider):
-    def __init__(self, client: genai.Client):
-        super().__init__()
+    def __init__(self, client: genai.Client, model_spec: ModelSpec):
+        super().__init__(model_spec)
         self.client = client
         self.max_retries = 5
         self.base_delay = 1
 
     def make_request(
-        self, model_name: str, messages: list[dict[str, str]], temperature: float, reasoning_effort=None
+        self, model_type: ModelType, messages: list[dict[str, str]], reasoning_effort=None
     ) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
+        model_params = self.get_model_params(model_type)
 
         system_message = messages[0]["content"]
 
         for attempt in range(self.max_retries):
             try:
                 chat = self.client.chats.create(
-                    model=model_name,
+                    model=model_params.name,
                     config=types.GenerateContentConfig(
                         system_instruction=system_message,
                         candidate_count=1,
-                        temperature=temperature,
+                        temperature=model_params.temperature,
                     ),
                     history=cast(
                         list[types.Content],
@@ -283,7 +337,7 @@ class GoogleProvider(Provider):
                 response = chat.send_message(
                     messages[-1]["content"],
                 )
-                if response.candidates:
+                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
                     yield response.candidates[0].content.parts[0].text or ""
                 else:
                     yield ""
@@ -299,19 +353,22 @@ class GoogleProvider(Provider):
 
 
 class MistralProvider(Provider):
-    def __init__(self, client: Mistral):
-        super().__init__()
+    def __init__(self, client: Mistral, model_spec: ModelSpec):
+        super().__init__(model_spec)
         self.client: Mistral = client
         self.max_retries = 5
         self.base_delay = 1
 
     def make_request(
-        self, model_name: str, messages: list[dict[str, str]], temperature: float, reasoning_effort=None
+        self, model_type: ModelType, messages: list[dict[str, str]], reasoning_effort=None
     ) -> Generator[str, None, None]:
+
+        model_params = self.get_model_params(model_type)
+
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.stream(
-                    model=model_name, messages=cast(list, messages), temperature=temperature
+                    model=model_params.name, messages=cast(list, messages), temperature=model_params.temperature
                 )
                 if response is None:
                     return
@@ -319,7 +376,12 @@ class MistralProvider(Provider):
                 for event in response:
                     content = event.data.choices[0].delta.content
                     if content:
-                        yield content
+                        if isinstance(content, list):
+                            for chunk in content:
+                                if chunk is TextChunkType:
+                                    yield chunk.text
+                        else:
+                            yield content
                 return
             except Exception as e:
                 if attempt == self.max_retries - 1:
@@ -329,36 +391,6 @@ class MistralProvider(Provider):
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
 
-
-PROVIDER_ALIASES: dict[str, ProviderParams] = {
-    "anthropic": ProviderParams(
-        large_model=ModelParams("claude-3-7-sonnet-latest", 0.7),
-        small_model=ModelParams("claude-3-5-haiku-latest", 0.5),
-    ),
-    "ollama": ProviderParams(
-        large_model=ModelParams("deepseek-r1:14b", 0.6), small_model=ModelParams("deepseek-r1:14b", 0.6)
-    ),
-    "deepseek": ProviderParams(
-        large_model=ModelParams("deepseek-reasoner", 0.6), small_model=ModelParams("deepseek-chat", 0.6)
-    ),
-    "groq": ProviderParams(
-        large_model=ModelParams("deepseek-r1-distill-llama-70b", 0.6),
-        small_model=ModelParams("llama3.1-70b-versatile", 0.6),
-    ),
-    "openai-o1": ProviderParams(large_model=ModelParams("o1", 0.7), small_model=ModelParams("gpt-4o-mini", 0.5)),
-    "openai-o3-mini": ProviderParams(
-        large_model=ModelParams("o3-mini", 0.6), small_model=ModelParams("gpt-4o-mini", 0.5)
-    ),
-    "openai-gpt-4.5": ProviderParams(large_model=ModelParams("gpt-4.5-preview", 0.6), small_model=ModelParams("gpt-4o-mini", 0.5)),
-    "google": ProviderParams(
-        large_model=ModelParams("gemini-2.0-flash-thinking-exp", 0.7), small_model=ModelParams("gemini-2.0-flash", 0.7)
-    ),
-    "mistral": ProviderParams(
-        large_model=ModelParams("mistral-large-latest", 0.5), small_model=ModelParams("codestral-latest", 0.5)
-    ),
-    "xai": ProviderParams(
-        large_model=ModelParams("grok-2-latest", 0.6), small_model=ModelParams("grok-2-latest", 0.6))
-}
 
 
 def get_api_key(provider_name: str, config: config.EggConfig) -> str:
@@ -376,36 +408,37 @@ def get_api_key(provider_name: str, config: config.EggConfig) -> str:
     return config_file_key
 
 
-def create_provider(provider_name: str, config: config.EggConfig) -> Provider:
-    if provider_name == "ollama":
-        return OllamaProvider()
-    elif provider_name == "anthropic":
+def create_provider(model_spec: ModelSpec,
+                    config: config.EggConfig) -> Provider:
+    if model_spec.provider == "ollama":
+        return OllamaProvider(model_spec=model_spec)
+    elif model_spec.provider == "anthropic":
         api_key = get_api_key("anthropic", config)
         client = anthropic.Anthropic(api_key=api_key)
-        return AnthropicProvider(client)
-    elif provider_name == "groq":
+        return AnthropicProvider(client, model_spec)
+    elif model_spec.provider == "groq":
         api_key = get_api_key("groq", config)
         client = groq.Groq(api_key=api_key)
-        return GroqProvider(client)
-    elif provider_name.startswith("openai-"):
+        return GroqProvider(client, model_spec)
+    elif model_spec.provider.startswith("openai-"):
         api_key = get_api_key("openai", config)
         client = openai.OpenAI(api_key=api_key)
-        return OpenAIProvider(client)
-    elif provider_name == "google":
+        return OpenAIProvider(client, model_spec)
+    elif model_spec.provider == "google":
         api_key = get_api_key("google", config)
         client = genai.Client(api_key=api_key)
-        return GoogleProvider(client)
-    elif provider_name == "mistral":
+        return GoogleProvider(client, model_spec)
+    elif model_spec.provider == "mistral":
         api_key = get_api_key("mistral", config)
         client = Mistral(api_key=api_key)
-        return MistralProvider(client)
-    elif provider_name == "deepseek":
+        return MistralProvider(client, model_spec)
+    elif model_spec.provider == "deepseek":
         api_key = get_api_key("deepseek", config)
         client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        return OpenAIProvider(client)
-    elif provider_name == "xai":
+        return OpenAIProvider(client, model_spec)
+    elif model_spec.provider == "xai":
         api_key = get_api_key("xai", config)
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
-        return OpenAIProvider(client)
+        return OpenAIProvider(client, model_spec)
     else:
-        raise ValueError(f"Invalid provider name: {provider_name}")
+        raise ValueError(f"Invalid provider name: {model_spec.provider}")

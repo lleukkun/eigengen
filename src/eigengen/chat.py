@@ -41,8 +41,7 @@ CHAT_HELP = (
     "                      the specified file paths.\n"
     "                      If no paths are provided, changes will be applied\n"
     "                      to all files referenced in the latest assistant message.\n"
-    "/mode                 Mode of the system: general, architect, programmer (default)\n"
-    "/model [<model>]      Display current model or switch to a specified model.\n"
+    "/mode                 Mode of the system: general, programmer (default)\n"
     "/quote <path>         Read and quote the contents of a file into the buffer.\n"
     "/reset                Clear all messages.\n"
     "\nKeyboard Shortcuts:\n"
@@ -85,8 +84,8 @@ class EggChat:
             user_files (Optional[List[str]]): List of file paths to be included as context.
         """
         self.config = config  # Store the passed config
-        self.pm = providers.ProviderManager(config.provider, config)
-        self.mode = config.args.chat_mode
+        self.pm = providers.ProviderManager(config.model_spec_str, config)
+        self.mode = "general" if config.args.general else "programmer"
         self.quoting_state = {"current_index": -1, "code_blocks": None, "cycle_iterator": None}
         self.messages: List[Dict[str, str]] = []
         self.pre_fill = ""
@@ -150,7 +149,10 @@ class EggChat:
                 def custom_prompt():
                     return [("class:user", f"\n[{datetime.now().strftime('%I:%M:%S %p')}][User] >\n")]
 
-                reasoning_effort = providers.ReasoningAmount.HIGH if self.config.args.high else providers.ReasoningAmount.MEDIUM
+                reasoning_effort = providers.ReasoningAmount.MEDIUM
+                if self.config.args.high:
+                    reasoning_effort = providers.ReasoningAmount.HIGH
+
                 prompt_input = session.prompt(
                     custom_prompt,
                     style=style,
@@ -174,7 +176,9 @@ class EggChat:
                     message_context += "\n" + self.initial_file_content
                     self.initial_file_content = ""
 
-                retrieved_results = self.egg_rag.retrieve(target_files=self.target_files if self.target_files else None)
+                retrieved_results = None
+                if self.target_files:
+                    retrieved_results = self.egg_rag.retrieve(target_files=self.target_files)
                 rag_context = ""
                 if retrieved_results:
                     rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
@@ -235,7 +239,9 @@ class EggChat:
             self.initial_file_content = ""
 
         # Retrieve additional context if available
-        retrieved_results = self.egg_rag.retrieve(target_files=self.target_files if self.target_files else None)
+        retrieved_results = None
+        if self.target_files:
+            retrieved_results = self.egg_rag.retrieve(target_files=self.target_files)
         rag_context = ""
         if retrieved_results:
             rag_context = "\n".join([f"{r[2]}" for r in retrieved_results])
@@ -309,7 +315,6 @@ class EggChat:
             "/quote": self.handle_quote,
             "/reset": self.handle_reset,
             "/meld": self.handle_meld,
-            "/model": self.handle_model,
             "/mode": self.handle_mode,
             "/exit": self.handle_exit,
         }.get(command, _unknown_command)
@@ -390,43 +395,11 @@ class EggChat:
                 self.pm,
                 file_path,
                 aggregated_changes,
-                self.git_root,
+                self.git_root if self.git_root else "./",
             )
 
         return True
 
-    def handle_model(self, *args) -> bool:
-        """
-        Handle the '/model' command.
-
-        Depending on the provided arguments, either displays the current model and supported models or
-        attempts to switch the model to a user-specified one.
-
-        Returns:
-            bool: True after the command is processed.
-        """
-
-        def print_supported_models():
-            print("Supported models:")
-            supported_models = list(providers.PROVIDER_ALIASES.keys())
-            for m in supported_models:
-                print(f" - {m}")
-
-        if not args:
-            # No argument provided; display current model and supported models
-            print(f"Current model: {self.config.model}\n")
-            print_supported_models()
-            return True
-        else:
-            # Argument provided; attempt to switch model
-            new_model = args[0].strip()
-            if new_model in providers.PROVIDER_ALIASES:
-                self.config.model = new_model
-                print(f"Model switched to: {new_model}")
-            else:
-                print(f"Unsupported model: {new_model}\n")
-                print_supported_models()
-            return True
 
     def handle_mode(self, *args) -> bool:
         """

@@ -22,10 +22,6 @@ def get_prompt(role: str) -> str:
 PROMPTS = {
     "general": """
 """,
-    "architect": """
-Follow the design principles of the existing sofrware architecture and propose changes
-accordingly. Consider the trade-offs and implications of your changes.
-""",
     "programmer": """
 Follow the coding style of any existing source code and make changes accordingly. Pay
 attention to best practices. Strive for elegance in your code.

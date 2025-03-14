@@ -12,7 +12,7 @@ from typing import Optional
 
 from eigengen import chat, log, utils
 from eigengen.config import EggConfig
-from eigengen.providers import PROVIDER_ALIASES
+from eigengen.model_specs import MODEL_SPEC_STRINGS
 
 # Set up logging for the application.
 logging.basicConfig(level=logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -30,24 +30,20 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--config", default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
     )
-    parser.add_argument("--provider", choices=list(PROVIDER_ALIASES.keys()), help="Choose Model")
+    parser.add_argument("--model", default=f"{MODEL_SPEC_STRINGS[0]}", choices=MODEL_SPEC_STRINGS,
+                        help="Model specifier")
     parser.add_argument("--editor", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=["github-dark", "monokai", "solarized"], help="Choose color scheme")
     parser.add_argument(
         "-f", "--files", nargs="+", help="List of files to attach to the request (e.g., -f file1.txt file2.txt)"
     )
     parser.add_argument("--prompt", help="Prompt string to use")
-    parser.add_argument("--diff", action="store_true", help="Show diff output (used with -p and without --chat)")
+    parser.add_argument("--diff", action="store_true", help="Show diff output (used with -p)")
     parser.add_argument(
         "--list-history", nargs="?", const=5, type=int, metavar="N", help="List the last N prompts (default 5)"
     )
-    parser.add_argument("--chat", action="store_true", help="Enter chat mode")
-    parser.add_argument(
-        "--chat-mode",
-        default="programmer",
-        choices=["general", "architect", "programmer"],
-        help="Choose operating mode",
-    )
+    parser.add_argument("--general", action="store_true", help="Use general chat mode")
+    parser.add_argument("--programmer", action="store_true", help="Use programmer chat mode")
     parser.add_argument("--rag", action="store_true", help="Enable Retrieval Augmented Generation functionality")
     parser.add_argument("--high", action="store_true", help="Use high reasoning effort for chat (requires LLM support)")
     parser.add_argument(
@@ -59,6 +55,9 @@ def parse_arguments() -> argparse.Namespace:
     )
 
     args = parser.parse_args()
+    # only one of --general and --programmer can be specified
+    if args.general and args.programmer:
+        parser.error("Only one of --general and --programmer can be specified")
     return args
 
 
@@ -120,8 +119,8 @@ def main() -> None:
     config = EggConfig.load_config(config_path=args.config)
 
     # Apply command-line arguments to config
-    if args.provider:
-        config.provider = args.provider
+    if args.model:
+        config.model_spec_str = args.model
     if args.editor:
         config.editor = args.editor
     if args.color_scheme:

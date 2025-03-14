@@ -5,12 +5,14 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional
 
+from eigengen.model_specs import MODEL_SPEC_STRINGS
+
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class EggConfig:
-    provider: str = "provider"
+    model_spec_str: str = MODEL_SPEC_STRINGS[0]
     editor: str = "nano"
     color_scheme: str = "github-dark"
     openai_api_key: Optional[str] = None
@@ -39,7 +41,7 @@ class EggConfig:
             with open(config_path, "r") as f:
                 data = json.load(f)
             return EggConfig(
-                provider=data.get("provider", "openai-o3-mini"),
+                model_spec_str=data.get("model_spec_str", MODEL_SPEC_STRINGS[0]),
                 editor=data.get("editor", "nano"),
                 color_scheme=data.get("color_scheme", "github-dark"),
                 openai_api_key=data.get("openai_api_key", None),
@@ -64,7 +66,8 @@ class EggConfig:
         try:
             with open(config_path, "w") as f:
                 json.dump(
-                    {"provider": self.provider, "editor": self.editor, "color_scheme": self.color_scheme}, f, indent=4
+                    {"model_spec_str": self.model_spec_str, "editor": self.editor,
+                     "color_scheme": self.color_scheme}, f, indent=4
                 )
             logger.info("Configuration saved to %s.", config_path)
         except Exception as e:

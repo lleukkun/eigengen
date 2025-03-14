@@ -18,8 +18,8 @@ egg = "eigengen.eigengen:main"
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.394",
-    "ruff>=0.9.6",
+    "pyright>=1.1.396",
+    "ruff>=0.9.10",
 ]
 
 
@@ -53,3 +53,9 @@ select = [
     "W",  # Warnings and stylistic issues
 ]
 ignore = []
+
+[tool.pyright]
+executionEnvironments = [{ root = "src" }]
+typeCheckingMode = "standard"
+venv = ".venv"
+venvPath = "."
