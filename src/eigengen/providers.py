@@ -276,7 +276,7 @@ class OpenAIProvider(Provider):
                     elif reasoning_effort == ReasoningAmount.HIGH:
                         params["reasoning_effort"] = "high"
                 if model_params.name not in ["o1", "o3-mini"]:
-                    params["temperature"] = str(model_params.temperature)
+                    params["temperature"] = model_params.temperature
 
                 response = self.client.chat.completions.create(
                     model=model_params.name, messages=cast(list, openai_messages), stream=use_stream, **params
