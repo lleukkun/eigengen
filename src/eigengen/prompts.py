@@ -20,8 +20,7 @@ def get_prompt(role: str) -> str:
 
 
 PROMPTS = {
-    "general": """
-""",
+    "general": "",
     "programmer": """
 Follow the coding style of any existing source code and make changes accordingly. Pay
 attention to best practices. Strive for elegance in your code.

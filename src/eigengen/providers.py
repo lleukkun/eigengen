@@ -420,7 +420,7 @@ def create_provider(model_spec: ModelSpec,
         api_key = get_api_key("groq", config)
         client = groq.Groq(api_key=api_key)
         return GroqProvider(client, model_spec)
-    elif model_spec.provider.startswith("openai-"):
+    elif model_spec.provider == "openai":
         api_key = get_api_key("openai", config)
         client = openai.OpenAI(api_key=api_key)
         return OpenAIProvider(client, model_spec)
