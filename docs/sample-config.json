@@ -1,5 +1,5 @@
 {
-  "model": "o1-mini",
+  "model_spec_str": "anthropic:claude-3-7-sonnet-latest@0.6:claude-3-5-haiku-latest@0.5",
   "editor": "subl -w",
   "color_scheme": "github-dark"
 }
