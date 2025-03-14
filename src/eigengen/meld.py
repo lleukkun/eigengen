@@ -29,7 +29,7 @@ def apply_changes(pm: providers.ProviderManager, filepath: str, original_content
 
 
 def meld_changes(
-    pm: providers.ProviderManager, filepath: str, changes: str, git_root: str = None, yes: bool = False
+    pm: providers.ProviderManager, filepath: str, changes: str, git_root: str | None = None, yes: bool = False
 ) -> None:
     """
     Melds the changes proposed by the LLM into the specified file.
