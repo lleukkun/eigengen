@@ -82,7 +82,7 @@ def parse_model_spec(input_str: str) -> ModelSpec:
     Parses model string using regex with strict format validation.
     Format: provider:large_name@temperature:small_name@temperature
     """
-    pattern = r"^([^:]+):([^:@]+)@(\d+\.?\d*|\.\d+):([^:@]+)@(\d+\.?\d*|\.\d+)$"
+    pattern = r"^([^;]+);([^;@]+)@(\d+\.?\d*|\.\d+);([^;@]+)@(\d+\.?\d*|\.\d+)$"
     match = re.fullmatch(pattern, input_str)
 
     if not match:

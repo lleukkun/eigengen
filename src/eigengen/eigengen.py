@@ -30,7 +30,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--config", default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
     )
-    parser.add_argument("--model", choices=MODEL_SPEC_STRINGS, help="Model specifier")
+    parser.add_argument("--model", help=f"Model specifier, eg. {MODEL_SPEC_STRINGS[0]}")
     parser.add_argument("--editor", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=["github-dark", "monokai", "solarized"], help="Choose color scheme")
     parser.add_argument(
