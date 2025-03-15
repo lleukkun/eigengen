@@ -30,8 +30,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--config", default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
     )
-    parser.add_argument("--model", choices=MODEL_SPEC_STRINGS,
-                        help="Model specifier")
+    parser.add_argument("--model", choices=MODEL_SPEC_STRINGS, help="Model specifier")
     parser.add_argument("--editor", help="Choose editor (e.g., nano, vim)")
     parser.add_argument("--color-scheme", choices=["github-dark", "monokai", "solarized"], help="Choose color scheme")
     parser.add_argument(
@@ -46,6 +45,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--programmer", action="store_true", help="Use programmer chat mode")
     parser.add_argument("--rag", action="store_true", help="Enable Retrieval Augmented Generation functionality")
     parser.add_argument("--high", action="store_true", help="Use high reasoning effort for chat (requires LLM support)")
+    parser.add_argument("--gui", action="store_true", help="Launch the graphical user interface")
 
     args = parser.parse_args()
     # only one of --general and --programmer can be specified
@@ -64,6 +64,18 @@ def handle_modes(config: EggConfig) -> None:
     if config.args.list_history is not None:
         log.list_prompt_history(config.args.list_history)
         return
+
+    # If the --gui flag is provided, launch the EggChat GUI and exit.
+    if config.args.gui:
+        import sys
+
+        from PySide6.QtWidgets import QApplication
+
+        from eigengen.gui import EggChatGUI
+        app = QApplication(sys.argv)
+        window = EggChatGUI(config=config)
+        window.show()
+        sys.exit(app.exec())
 
     user_files = config.args.files
 
