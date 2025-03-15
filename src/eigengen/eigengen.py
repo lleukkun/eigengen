@@ -26,7 +26,12 @@ def parse_arguments() -> argparse.Namespace:
     Returns:
         argparse.Namespace: The parsed command-line arguments.
     """
-    parser = argparse.ArgumentParser("eigengen")
+    model_strings = [f"'{s}'" for s in MODEL_SPEC_STRINGS]
+    model_help = "Model string examples:\n" + "\n".join(model_strings)
+    parser = argparse.ArgumentParser("eigengen",
+                                     description="Eigengen is an LLM front end for programming.",
+                                     epilog=model_help,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
         "--config", default=None, help="Path to the configuration file (default: ~/.eigengen/config.json)"
     )
