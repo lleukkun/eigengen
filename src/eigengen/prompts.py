@@ -39,7 +39,8 @@ Clear description of the additions and changes and instructions where in the fil
 You are given original content of the file in <egg_file filename="dirpath/filename"></egg_file>
 tags and a set of changes in <egg_edit></egg_edit> tags.
 
-You must provide a merged version of the file that incorporates the proposed changes.
+You must provide a merged version of the file that incorporates the proposed changes. Only
+make the requested changes, leave all other code and comments as they are.
 Do not change anything in the suggested changes. You must respond with the full
 file contents without any encoding or additional markup.
 Your response format should be as follows:

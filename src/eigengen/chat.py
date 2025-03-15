@@ -21,6 +21,9 @@ from eigengen.progress import ProgressIndicator
 # disable T201 for this file
 # ruff: noqa: T201
 
+# New constant for time format
+TIME_FORMAT = "%I:%M:%S %p"
+
 
 class CustomStyle(pygments.style.Style):
     """
@@ -173,7 +176,7 @@ class EggChat:
         reasoning_effort = (
             providers.ReasoningAmount.HIGH if self.config.args.high else providers.ReasoningAmount.MEDIUM
         )
-        answer = ""
+        answer_chunks = []
         if use_progress:
             with ProgressIndicator() as _:
                 for chunk in self.pm.process_request(
@@ -182,7 +185,7 @@ class EggChat:
                     prompts.get_prompt(self.mode),
                     message_list,
                 ):
-                    answer += chunk
+                    answer_chunks.append(chunk)
         else:
             for chunk in self.pm.process_request(
                 providers.ModelType.LARGE,
@@ -190,8 +193,8 @@ class EggChat:
                 prompts.get_prompt(self.mode),
                 message_list,
             ):
-                answer += chunk
-        return answer
+                answer_chunks.append(chunk)
+        return "".join(answer_chunks)
 
     def chat_mode(self, initial_prompt: Optional[str] = None) -> None:
         """
@@ -221,7 +224,7 @@ class EggChat:
                 style = Style.from_dict({"user": "ansicyan", "assistant": "ansigreen"})
 
                 def custom_prompt():
-                    return [("class:user", f"\n[{datetime.now().strftime('%I:%M:%S %p')}][User] >\n")]
+                    return [("class:user", f"\n[{datetime.now().strftime(TIME_FORMAT)}][User] >\n")]
 
                 prompt_input = session.prompt(
                     custom_prompt,
@@ -243,7 +246,7 @@ class EggChat:
                 original_message = prompt_input
                 answer = self._get_answer(original_message, use_progress=True)
 
-                timestamp = datetime.now().strftime("%I:%M:%S %p")
+                timestamp = datetime.now().strftime(TIME_FORMAT)
                 print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
                 formatted_response = utils.get_formatted_response_with_syntax_highlighting(
                     self.config.color_scheme, answer
@@ -289,7 +292,7 @@ class EggChat:
                     full_path = os.path.abspath(file_path)
 
                     try:
-                        with open(full_path, "r") as f:
+                        with open(full_path, "r", encoding="utf-8") as f:
                             original_content = f.read()
                     except Exception:
                         original_content = ""
@@ -301,7 +304,7 @@ class EggChat:
                 print("No changes with file paths found in the response. No diff to show.")
             return
         else:
-            timestamp = datetime.now().strftime("%I:%M:%S %p")
+            timestamp = datetime.now().strftime(TIME_FORMAT)
             print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
             formatted_response = utils.get_formatted_response_with_syntax_highlighting(self.config.color_scheme, answer)
             utils.pipe_output_via_pager(formatted_response)
@@ -363,8 +366,11 @@ class EggChat:
         Returns:
             bool: True after processing the command.
         """
-        if os.path.exists(file_to_quote):
-            with open(file_to_quote, "r") as f:
+        if not file_to_quote.strip():
+            print("Usage: /quote <file_path>")
+            return True
+        if os.path.isfile(file_to_quote):
+            with open(file_to_quote, "r", encoding="utf-8") as f:
                 content = f.read()
             quoted_content = "\n".join(f"> {line}" for line in content.splitlines())
             self.pre_fill = quoted_content  # Pre-fill the next prompt with the quoted content
@@ -414,7 +420,7 @@ class EggChat:
 
         return True
 
-    def handle_mode(self, *args) -> bool:
+    def handle_mode(self, *args: str) -> bool:
         """
         Process the '/mode' command for displaying or switching the operational mode.
 
@@ -449,4 +455,3 @@ class EggChat:
             bool: True (note: this return value is never reached due to process termination).
         """
         sys.exit(0)
-        return True  # Unreachable, but included for consistency.
