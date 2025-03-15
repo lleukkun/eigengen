@@ -2,8 +2,8 @@ import html
 import os
 import sys
 
-from PySide6.QtCore import Qt, QThread, Signal, Slot
-from PySide6.QtGui import QTextCursor
+from PySide6.QtCore import QModelIndex, Qt, QThread, Signal, Slot
+from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QFileSystemModel,
@@ -12,23 +12,82 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSplitter,
-    QTextEdit,
     QTreeView,
     QVBoxLayout,
     QWidget,
 )
+from superqt.utils import CodeSyntaxHighlight
+from eigengen.utils import extract_code_blocks  # Added import for extract_code_blocks
 
 from eigengen.chat import EggChat
 from eigengen.config import EggConfig  # Assuming EggConfig can be instantiated with defaults
 
+
+class CodeBlockWidget(QPlainTextEdit):
+    def __init__(self, code_text: str, lang: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setPlainText(code_text)
+        self.setReadOnly(True)
+        self.setFont(QFont("Courier", 10))
+
+        # Attach the superqt syntax highlighter.
+        # Use provided language (defaulting to "python" if none is given) and "monokai" style.
+        self.highlight = CodeSyntaxHighlight(self.document(), lang if lang else "python", "monokai")
+
+        # Update the text edit palette with the highlighter's background color.
+        palette = self.palette()
+        palette.setColor(QPalette.Base, QColor(self.highlight.background_color))
+        self.setPalette(palette)
+
+class ChatMessageWidget(QWidget):
+    def __init__(self, sender: str, message: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        # Header indicating the sender.
+        header = QLabel(f"<b>[{sender.capitalize()}]</b>")
+        layout.addWidget(header)
+        
+        # Use the same extract_code_blocks() as in chat.py to parse code blocks.
+        code_blocks = extract_code_blocks(message)
+        last_index = 0
+
+        if not code_blocks:
+            # If no code blocks were found, display the entire message as regular text.
+            if message.strip():
+                text_label = QLabel(message.replace("\n", "<br>"))
+                text_label.setWordWrap(True)
+                layout.addWidget(text_label)
+        else:
+            # Loop through each detected code block.
+            for block in code_blocks:
+                # Get any text before the code block and add it as a QLabel.
+                text_segment = message[last_index:block.start_index]
+                if text_segment.strip():
+                    text_label = QLabel(text_segment.replace("\n", "<br>"))
+                    text_label.setWordWrap(True)
+                    layout.addWidget(text_label)
+                # Instantiate a CodeBlockWidget using the extracted code and language information.
+                code_widget = CodeBlockWidget(block.content, block.lang)
+                layout.addWidget(code_widget)
+                last_index = block.end_index
+
+            # Append any text that follows after the last code block.
+            remaining_text = message[last_index:]
+            if remaining_text.strip():
+                text_label = QLabel(remaining_text.replace("\n", "<br>"))
+                text_label.setWordWrap(True)
+                layout.addWidget(text_label)
+        
+        layout.addStretch()
 
 class ChatWorker(QThread):
     """
     A QThread subclass that runs the EggChat._get_answer method on a background thread.
     Once the assistant's response is retrieved, it emits the resultReady signal.
     """
-    resultReady = Signal(str)
+    result_ready = Signal(str)
 
     def __init__(self, eggchat: EggChat, user_message: str, parent=None):
         super().__init__(parent)
@@ -38,28 +97,53 @@ class ChatWorker(QThread):
     def run(self):
         # Call the EggChat method to get the answer (blocking call)
         answer = self.eggchat._get_answer(self.user_message, use_progress=False)
-        self.resultReady.emit(answer)
+        self.result_ready.emit(answer)
 
 
 def html_format_message(sender: str, message: str) -> str:
     """
-    Format a message as HTML for display in the QTextEdit.
+    Format a message as HTML for display in the QTextEdit, following the app's light/dark theme.
 
     This function escapes HTML characters, replaces newline characters with <br> tags,
-    and converts text enclosed in triple backticks into a simple styled <pre> block.
-    The sender is highlighted with a color (blue for user, green for assistant).
+    and converts text enclosed in triple backticks into a styled <pre> block—with colors
+    dynamically selected based on whether the app is using a light or dark theme.
     """
+    # Determine the current theme (light or dark) by inspecting the application's palette.
+    app = QApplication.instance()
+    is_dark = False
+    if app:
+        palette = app.palette()
+        bg_color = palette.color(QPalette.Window)
+        # Calculate brightness using the luminance formula.
+        brightness = 0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue()
+        is_dark = brightness < 128
+
+    # Set colors based on the detected theme.
+    if is_dark:
+        user_color = "#82AAFF"         # Light blue for user messages in dark mode.
+        assistant_color = "#C3E88D"    # Light green for assistant messages in dark mode.
+        code_bg = "#3C3F41"            # Darker background for code blocks.
+        code_text = "#FFFFFF"          # White text for code blocks.
+    else:
+        user_color = "blue"            # Blue for user messages in light mode.
+        assistant_color = "green"      # Green for assistant messages in light mode.
+        code_bg = "#f0f0f0"            # Light grey background for code blocks.
+        code_text = "black"            # Black text for code blocks.
+
+    color = user_color if sender.lower() == "user" else assistant_color
+
+    # Escape HTML characters in the message.
     escaped = html.escape(message)
-    # Split the text on triple backticks to detect code blocks
+    # Split the message on triple backticks to detect code block sections.
     parts = escaped.split("```")
     formatted = ""
     for idx, part in enumerate(parts):
         if idx % 2 == 0:
-            formatted += part
+            # In non-code segments, replace newline characters with <br> tags.
+            formatted += part.replace("\n", "<br>")
         else:
-            # Wrap detected code blocks in a styled preformatted block.
-            formatted += f'<pre style="background-color:#f0f0f0; padding:5px; border-radius:4px;">{part}</pre>'
-    color = "blue" if sender.lower() == "user" else "green"
+            # Wrap code blocks in a preformatted block with the chosen styles.
+            formatted += f'<pre style="background-color:{code_bg}; color:{code_text}; padding:5px; border-radius:4px;">{part}</pre>'
     return f'<p style="color:{color}; margin:5px;"><b>[{sender.capitalize()}]</b> {formatted}</p>'
 
 
@@ -73,7 +157,7 @@ class EggChatGUI(QMainWindow):
     The right panel shows the conversation (using a read-only QTextEdit) plus a multi-line input
     area and buttons to send a message and clear the chat.
     """
-    def __init__(self, config: EggConfig = None, parent=None):
+    def __init__(self, config: EggConfig|None = None, parent: QWidget|None = None):
         super().__init__(parent)
         self.setWindowTitle("EggChat GUI")
         self.resize(800, 600)
@@ -128,10 +212,14 @@ class EggChatGUI(QMainWindow):
         right_panel.setLayout(right_layout)
         splitter.addWidget(right_panel)
 
-        # Conversation display (rich-text capable)
-        self.chat_display = QTextEdit()
-        self.chat_display.setReadOnly(True)
-        right_layout.addWidget(self.chat_display)
+        # Conversation area: a scrollable widget containing individual message widgets.
+        self.chat_container = QWidget()
+        self.chat_layout = QVBoxLayout(self.chat_container)
+        self.chat_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.chat_scroll_area = QScrollArea()
+        self.chat_scroll_area.setWidgetResizable(True)
+        self.chat_scroll_area.setWidget(self.chat_container)
+        right_layout.addWidget(self.chat_scroll_area)
 
         # Input area for typing messages (plain text)
         self.input_edit = QPlainTextEdit()
@@ -151,8 +239,8 @@ class EggChatGUI(QMainWindow):
 
         splitter.setSizes([200, 600])
 
-    @Slot()
-    def on_file_double_clicked(self, index):
+    @Slot(QModelIndex)  # type: ignore
+    def on_file_double_clicked(self, index: QModelIndex) -> None:
         """
         Load the selected file’s content into the input area as a quoted message.
 
@@ -166,8 +254,8 @@ class EggChatGUI(QMainWindow):
                         content = f.read()
                     quoted_content = "\n".join("> " + line for line in content.splitlines())
                     self.input_edit.setPlainText(quoted_content)
-                except Exception as e:
-                    self.chat_display.append(f"<p style='color:red;'>Error reading file: {file_path}</p>")
+                except Exception:
+                    self.chat_container.layout().addWidget(QLabel(f"<p style='color:red;'>Error reading file: {file_path}</p>"))
 
     @Slot()
     def send_message(self):
@@ -179,33 +267,45 @@ class EggChatGUI(QMainWindow):
         if not user_message:
             return
 
-        # Append the user's message to the chat display.
-        self.chat_display.append(html_format_message("user", user_message))
+        self.append_chat_message("user", user_message)
         self.input_edit.clear()
 
         # Disable the send button while processing.
         self.send_button.setEnabled(False)
         # Create and start the ChatWorker to get the assistant's answer.
         self.worker = ChatWorker(self.eggchat, user_message)
-        self.worker.resultReady.connect(self.display_assistant_response)
+        self.worker.result_ready.connect(self.display_assistant_response)
         self.worker.finished.connect(lambda: self.send_button.setEnabled(True))
         self.worker.start()
 
-    @Slot(str)
-    def display_assistant_response(self, response: str):
+    @Slot(str)  # type: ignore
+    def display_assistant_response(self, response: str) -> None:
         """
         Append the assistant's response to the chat display with basic syntax highlighting.
         """
-        self.chat_display.append(html_format_message("assistant", response))
-        # Auto-scroll to the bottom of the chat display.
-        self.chat_display.moveCursor(QTextCursor.End)
+        self.append_chat_message("assistant", response)
+
+    def append_chat_message(self, sender: str, message: str) -> None:
+        """
+        Create and append a ChatMessageWidget for the given sender and message.
+        Afterwards, auto-scroll to the bottom of the conversation.
+        """
+        msg_widget = ChatMessageWidget(sender, message)
+        self.chat_layout.addWidget(msg_widget)
+        # Auto-scroll to the bottom.
+        vsb = self.chat_scroll_area.verticalScrollBar()
+        vsb.setValue(vsb.maximum())
 
     @Slot()
     def clear_chat(self):
         """
         Clear the conversation display and reset the EggChat message history.
         """
-        self.chat_display.clear()
+        while self.chat_layout.count():
+            item = self.chat_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
         self.eggchat.messages = []
 
 

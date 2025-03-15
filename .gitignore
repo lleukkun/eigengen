@@ -7,3 +7,4 @@ dist/
 build/
 .venv/
 .eigengen_cache
+.DS_Store
