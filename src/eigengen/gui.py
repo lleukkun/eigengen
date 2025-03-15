@@ -1,4 +1,3 @@
-import html
 import os
 import sys
 
@@ -6,10 +5,12 @@ from PySide6.QtCore import QModelIndex, Qt, QThread, Signal, Slot
 from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,  # <-- added for modal dialogs
     QFileSystemModel,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,  # <-- added for error reporting
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -19,10 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from superqt.utils import CodeSyntaxHighlight
-from eigengen.utils import extract_code_blocks  # Added import for extract_code_blocks
 
+from eigengen import meld, utils  # <-- added access to meld functions
 from eigengen.chat import EggChat
 from eigengen.config import EggConfig  # Assuming EggConfig can be instantiated with defaults
+from eigengen.utils import extract_code_blocks  # Added import for extract_code_blocks
 
 
 class CodeBlockWidget(QPlainTextEdit):
@@ -38,7 +40,7 @@ class CodeBlockWidget(QPlainTextEdit):
 
         # Update the text edit palette with the highlighter's background color.
         palette = self.palette()
-        palette.setColor(QPalette.Base, QColor(self.highlight.background_color))
+        palette.setColor(QPalette.ColorRole.Base, QColor(self.highlight.background_color))
         self.setPalette(palette)
 
 class ChatMessageWidget(QWidget):
@@ -48,7 +50,7 @@ class ChatMessageWidget(QWidget):
         # Header indicating the sender.
         header = QLabel(f"<b>[{sender.capitalize()}]</b>")
         layout.addWidget(header)
-        
+
         # Use the same extract_code_blocks() as in chat.py to parse code blocks.
         code_blocks = extract_code_blocks(message)
         last_index = 0
@@ -79,7 +81,7 @@ class ChatMessageWidget(QWidget):
                 text_label = QLabel(remaining_text.replace("\n", "<br>"))
                 text_label.setWordWrap(True)
                 layout.addWidget(text_label)
-        
+
         layout.addStretch()
 
 class ChatWorker(QThread):
@@ -98,53 +100,6 @@ class ChatWorker(QThread):
         # Call the EggChat method to get the answer (blocking call)
         answer = self.eggchat._get_answer(self.user_message, use_progress=False)
         self.result_ready.emit(answer)
-
-
-def html_format_message(sender: str, message: str) -> str:
-    """
-    Format a message as HTML for display in the QTextEdit, following the app's light/dark theme.
-
-    This function escapes HTML characters, replaces newline characters with <br> tags,
-    and converts text enclosed in triple backticks into a styled <pre> block—with colors
-    dynamically selected based on whether the app is using a light or dark theme.
-    """
-    # Determine the current theme (light or dark) by inspecting the application's palette.
-    app = QApplication.instance()
-    is_dark = False
-    if app:
-        palette = app.palette()
-        bg_color = palette.color(QPalette.Window)
-        # Calculate brightness using the luminance formula.
-        brightness = 0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue()
-        is_dark = brightness < 128
-
-    # Set colors based on the detected theme.
-    if is_dark:
-        user_color = "#82AAFF"         # Light blue for user messages in dark mode.
-        assistant_color = "#C3E88D"    # Light green for assistant messages in dark mode.
-        code_bg = "#3C3F41"            # Darker background for code blocks.
-        code_text = "#FFFFFF"          # White text for code blocks.
-    else:
-        user_color = "blue"            # Blue for user messages in light mode.
-        assistant_color = "green"      # Green for assistant messages in light mode.
-        code_bg = "#f0f0f0"            # Light grey background for code blocks.
-        code_text = "black"            # Black text for code blocks.
-
-    color = user_color if sender.lower() == "user" else assistant_color
-
-    # Escape HTML characters in the message.
-    escaped = html.escape(message)
-    # Split the message on triple backticks to detect code block sections.
-    parts = escaped.split("```")
-    formatted = ""
-    for idx, part in enumerate(parts):
-        if idx % 2 == 0:
-            # In non-code segments, replace newline characters with <br> tags.
-            formatted += part.replace("\n", "<br>")
-        else:
-            # Wrap code blocks in a preformatted block with the chosen styles.
-            formatted += f'<pre style="background-color:{code_bg}; color:{code_text}; padding:5px; border-radius:4px;">{part}</pre>'
-    return f'<p style="color:{color}; margin:5px;"><b>[{sender.capitalize()}]</b> {formatted}</p>'
 
 
 class EggChatGUI(QMainWindow):
@@ -282,8 +237,87 @@ class EggChatGUI(QMainWindow):
     def display_assistant_response(self, response: str) -> None:
         """
         Append the assistant's response to the chat display with basic syntax highlighting.
+        If the response contains change descriptions, add an 'Apply Meld' button below the message.
         """
         self.append_chat_message("assistant", response)
+        # Check for change descriptions (using the extraction helper).
+        changes = utils.extract_change_descriptions(response)
+        if changes:
+            meld_button = QPushButton("Apply Meld")
+            meld_button.clicked.connect(lambda: self.open_meld_dialog(changes, meld_button))
+            self.chat_layout.addWidget(meld_button)
+            # Auto-scroll after adding the button.
+            vsb = self.chat_scroll_area.verticalScrollBar()
+            vsb.setValue(vsb.maximum())
+
+    def open_meld_dialog(self, changes: dict[str, list[str]], trigger_button: QPushButton) -> None:
+        """
+        Opens a modal dialog showing the proposed diff(s) for each file found in the change descriptions.
+        The user can review the diff and click 'Apply Changes' or 'Cancel'.
+        After applying, the triggering button is disabled.
+        """
+        import os  # Ensure os is imported
+
+        diff_results = []
+        # Process each file from the change descriptions.
+        for file_path, change_list in changes.items():
+            aggregated_changes = "\n".join(change_list)
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        original_content = f.read()
+                except Exception:
+                    original_content = ""
+            else:
+                original_content = ""
+            new_content, diff_text = meld.get_merged_content_and_diff(
+                self.eggchat.pm, file_path, original_content, aggregated_changes
+            )
+            diff_results.append((file_path, new_content, diff_text))
+        # Build a combined diff preview.
+        combined_diff = ""
+        for file_path, _, diff_text in diff_results:
+            combined_diff += f"--- Changes for: {file_path} ---\n"
+            combined_diff += diff_text + "\n"
+
+        # Create and set up the modal dialog.
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Meld Diff Preview")
+        dialog.setModal(True)
+        dialog_layout = QVBoxLayout(dialog)
+        description_label = QLabel("Review the diff changes below:")
+        dialog_layout.addWidget(description_label)
+        diff_display = QPlainTextEdit(dialog)
+        diff_display.setReadOnly(True)
+        diff_display.setPlainText(combined_diff)
+        dialog_layout.addWidget(diff_display)
+
+        # Create Apply and Cancel buttons.
+        button_layout = QHBoxLayout()
+        apply_btn = QPushButton("Apply Changes", dialog)
+        cancel_btn = QPushButton("Cancel", dialog)
+        button_layout.addWidget(apply_btn)
+        button_layout.addWidget(cancel_btn)
+        dialog_layout.addLayout(button_layout)
+
+        apply_btn.clicked.connect(lambda: self._apply_meld_changes(diff_results, dialog, trigger_button))
+        cancel_btn.clicked.connect(dialog.reject)
+
+        dialog.exec()
+
+    def _apply_meld_changes(self, diff_results: list[tuple[str, str, str]],
+                            dialog: QDialog, trigger_button: QPushButton) -> None:
+        """
+        Applies the changes for each file by writing the new content to disk,
+        then closes the dialog and disables the trigger button.
+        """
+        for file_path, new_content, _ in diff_results:
+            try:
+                meld.apply_new_content(file_path, new_content)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to apply changes to {file_path}:\n{e}")
+        dialog.accept()
+        trigger_button.setEnabled(False)
 
     def append_chat_message(self, sender: str, message: str) -> None:
         """

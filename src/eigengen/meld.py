@@ -106,3 +106,30 @@ def produce_diff(filename: str, original_content: str, new_content: str) -> str:
         tofile=f"b/{rel_filepath}",
     )
     return diff_output
+
+
+def get_merged_content_and_diff(
+    pm: providers.ProviderManager, filepath: str, original_content: str, changes: str
+) -> tuple[str, str]:
+    """
+    For GUI use: Applies the proposed changes using the LLM and returns a tuple of:
+    - new_content: the merged file content, and
+    - diff_output: a unified diff between the original and new content.
+    This function does not prompt for confirmation.
+    """
+    new_content = apply_changes(pm, filepath, original_content, changes)
+    diff_output = produce_diff(filepath, original_content, new_content)
+    return new_content, diff_output
+
+
+def apply_new_content(filepath: str, new_content: str) -> None:
+    """
+    Writes the new content to the specified file.
+    Ensures that directories exist and always writes with a trailing newline.
+    """
+    new_content = new_content.rstrip() + "\n"
+    dirpath = os.path.dirname(filepath)
+    if dirpath and not os.path.exists(dirpath):
+        os.makedirs(dirpath, exist_ok=True)
+    with open(filepath, "w") as f:
+        f.write(new_content)
