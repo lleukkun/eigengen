@@ -46,13 +46,6 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--programmer", action="store_true", help="Use programmer chat mode")
     parser.add_argument("--rag", action="store_true", help="Enable Retrieval Augmented Generation functionality")
     parser.add_argument("--high", action="store_true", help="Use high reasoning effort for chat (requires LLM support)")
-    parser.add_argument(
-        "--run-api",
-        nargs="?",
-        const="127.0.0.1:8000",
-        metavar="ip:port",
-        help="Start API server at ip:port address (default: 127.0.0.1:8000)",
-    )
 
     args = parser.parse_args()
     # only one of --general and --programmer can be specified
@@ -131,21 +124,6 @@ def main() -> None:
 
     # Store the remaining arguments
     config.args = args
-
-    # If --run-api is specified, start the API server using FastHTML's serve() and exit.
-    if args.run_api is not None:
-        try:
-            ip, port = args.run_api.split(":")
-            port = int(port)
-        except Exception as e:
-            logging.error(f"Error parsing --run-api value '{args.run_api}': {e}")
-            sys.exit(1)
-        import uvicorn
-
-        from eigengen.chat_api import create_app
-
-        uvicorn.run(create_app(config=config), host=ip, port=port)
-        return
 
     # Glob wildcard file patterns on Windows only
 
