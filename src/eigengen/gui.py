@@ -1,8 +1,8 @@
 import os
 import sys
 
-from PySide6.QtCore import QModelIndex, Qt, QThread, Signal, Slot
-from PySide6.QtGui import QColor, QFont, QPalette
+from PySide6.QtCore import QEvent, QModelIndex, QRect, Qt, QThread, Signal, Slot
+from PySide6.QtGui import QColor, QFont, QPalette, QPainter  # <-- Added QPainter import
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,  # <-- added for modal dialogs
@@ -15,6 +15,9 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSplitter,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,  # <-- added to adjust option rect in delegate
     QTreeView,
     QVBoxLayout,
     QWidget,
@@ -102,6 +105,79 @@ class ChatWorker(QThread):
         answer = self.eggchat._get_answer(self.user_message, use_progress=False)
         self.result_ready.emit(answer)
 
+class FileSelectionDelegate(QStyledItemDelegate):
+    def __init__(self, is_selected_callback, toggle_callback, parent=None):
+        super().__init__(parent)
+        self.is_selected_callback = is_selected_callback
+        self.toggle_callback = toggle_callback
+        self.button_size = 20
+
+    def paint(self, painter, option, index):
+        # Obtain the file path from the model.
+        file_path = index.model().filePath(index)
+        selected = self.is_selected_callback(file_path)
+        margin = 4
+
+        # Adjust the text rectangle to leave room for the custom button.
+        option2 = QStyleOptionViewItem(option)
+        option2.rect = QRect(option.rect)
+        option2.rect.setLeft(option.rect.left() + self.button_size + margin * 2)
+        super().paint(painter, option2, index)
+
+        # Define the button rectangle.
+        button_rect = QRect(
+            option.rect.left() + margin,
+            option.rect.top() + (option.rect.height() - self.button_size) // 2,
+            self.button_size,
+            self.button_size,
+        )
+
+        # Prepare the button parameters.
+        blue = QColor(0, 120, 215)
+        symbol = "-" if selected else "+"
+
+        painter.save()
+        # Use QPainter.Antialiasing correctly.
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        # Draw the blue button background.
+        painter.setBrush(blue)
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(button_rect)
+
+        # Optionally, draw a light bevel effect.
+        highlight = blue.lighter(120)
+        shadow = blue.darker(120)
+        painter.setPen(highlight)
+        painter.drawLine(button_rect.topLeft(), button_rect.topRight())
+        painter.drawLine(button_rect.topLeft(), button_rect.bottomLeft())
+        painter.setPen(shadow)
+        painter.drawLine(button_rect.bottomLeft(), button_rect.bottomRight())
+        painter.drawLine(button_rect.topRight(), button_rect.bottomRight())
+
+        # Draw the appropriate symbol in white, using a bold font.
+        painter.setPen(Qt.white)
+        font = option.font
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(button_rect, Qt.AlignCenter, symbol)
+        painter.restore()
+
+    def editorEvent(self, event, model, option, index):
+        # Use Qt.LeftButton (the preferred enum) instead of Qt.MouseButton.LeftButton.
+        if event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+            margin = 4
+            indicator_rect = QRect(
+                option.rect.left() + margin,
+                option.rect.top() + (option.rect.height() - self.button_size) // 2,
+                self.button_size,
+                self.button_size,
+            )
+            if indicator_rect.contains(event.pos()):
+                file_path = model.filePath(index)
+                self.toggle_callback(file_path)
+                return True
+        return super().editorEvent(event, model, option, index)
 
 class EggChatGUI(QMainWindow):
     """
@@ -133,31 +209,50 @@ class EggChatGUI(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
 
-        # ---- Left Panel: File Explorer ----
+        # ---- Left Panel: File Explorer and Selected Files ----
         left_panel = QWidget()
         left_layout = QVBoxLayout()
         left_panel.setLayout(left_layout)
         splitter.addWidget(left_panel)
 
+        # Selected Files Section
+        selected_files_label = QLabel("Selected Files")
+        left_layout.addWidget(selected_files_label)
+
+        self.selected_files_container = QWidget()
+        self.selected_files_layout = QVBoxLayout(self.selected_files_container)
+        self.selected_files_layout.setContentsMargins(0, 0, 0, 0)
+        self.selected_files_layout.setSpacing(0)  # Set spacing to zero for a compact list.
+        left_layout.addWidget(self.selected_files_container)
+
+        # Initialize data structures for managing selected files.
+        self.selected_files = set()
+        self.selected_file_widgets = {}
+
+        # File Explorer Section
         file_label = QLabel("File Explorer")
         left_layout.addWidget(file_label)
 
         self.tree_view = QTreeView()
         left_layout.addWidget(self.tree_view)
 
-        # Set up the filesystem model to browse the current directory
+        # Set up the filesystem model to browse the current directory.
         self.fs_model = QFileSystemModel()
         self.fs_model.setRootPath(os.getcwd())
         self.tree_view.setModel(self.fs_model)
-        # Hide extra columns so only the name is displayed
         for i in range(1, self.fs_model.columnCount()):
             self.tree_view.hideColumn(i)
         self.tree_view.setRootIndex(self.fs_model.index(os.getcwd()))
         self.tree_view.setSortingEnabled(True)
         self.tree_view.sortByColumn(0, Qt.SortOrder.AscendingOrder)
         self.tree_view.setSelectionMode(QTreeView.SelectionMode.SingleSelection)
-        # Connect double-click events to load the file as a quoted message
         self.tree_view.doubleClicked.connect(self.on_file_double_clicked)
+
+        # Set the custom delegate to display a plus/minus button on each file item.
+        self.tree_view.setItemDelegateForColumn(0, FileSelectionDelegate(
+            is_selected_callback=self.is_file_selected,
+            toggle_callback=self.toggle_file_selection
+        ))
 
         instruction = QLabel("Double-click a file to load its content as a quote.")
         left_layout.addWidget(instruction)
@@ -343,6 +438,75 @@ class EggChatGUI(QMainWindow):
                 widget.deleteLater()
         self.eggchat.messages = []
 
+    def is_file_selected(self, file_path: str) -> bool:
+        """
+        Returns True if the given file is currently selected.
+        """
+        return file_path in self.selected_files
+
+    def toggle_file_selection(self, file_path: str) -> None:
+        """
+        Toggle the selection state of the given file.
+        If the file is selected, remove it; otherwise, add it.
+        Updates both the UI list and refreshes the file browser display.
+        """
+        if file_path in self.selected_files:
+            self.remove_selected_file(file_path)
+        else:
+            self.add_selected_file(file_path)
+        # Force an update of the tree view so that the delegate repaints the selection indicator.
+        self.tree_view.viewport().update()
+
+    def add_selected_file(self, file_path: str) -> None:
+        """
+        Add the given file to the selected files list and update the UI.
+        """
+        if file_path in self.selected_files:
+            return
+        self.selected_files.add(file_path)
+        file_item = QWidget()
+        layout = QHBoxLayout(file_item)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)  # Set inner layout spacing to zero for compactness.
+        # Display only the base name of the file.
+        label = QLabel(os.path.basename(file_path))
+        layout.addWidget(label)
+
+        # Create a custom-styled remove button.
+        remove_button = QPushButton("-")
+        remove_button.setFixedSize(20, 20)
+        remove_button.setFlat(True)
+        remove_button.setStyleSheet(
+            "QPushButton {"
+            "background-color: #0078d7;"   # Blue background
+            "color: white;"                # White text
+            "border: 1px solid #005a9e;"   # Slightly darker border for a bevel effect
+            "border-radius: 3px;"
+            "padding: 0; margin: 0;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #005a9e;"   # Darker blue on press
+            "}"
+        )
+        remove_button.clicked.connect(lambda: self.remove_selected_file(file_path))
+        layout.addWidget(remove_button)
+
+        self.selected_files_layout.addWidget(file_item)
+        self.selected_file_widgets[file_path] = file_item
+
+    def remove_selected_file(self, file_path: str) -> None:
+        """
+        Remove the given file from the selected files list and update the UI.
+        """
+        if file_path not in self.selected_files:
+            return
+        self.selected_files.remove(file_path)
+        widget = self.selected_file_widgets.pop(file_path, None)
+        if widget is not None:
+            self.selected_files_layout.removeWidget(widget)
+            widget.deleteLater()
+        # Update the tree view to refresh the selection indicator.
+        self.tree_view.viewport().update()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

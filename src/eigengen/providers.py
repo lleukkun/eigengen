@@ -182,13 +182,17 @@ class AnthropicProvider(Provider):
             elif reasoning_effort == ReasoningAmount.HIGH:
                 extra_params["thinking"] = { "type": "enabled",
                                              "budget_tokens": 24000 }
+        max_tokens = 8192
+        if "thinking" in extra_params:
+            max_tokens += extra_params["thinking"]["budget_tokens"]
+
         for attempt in range(max_retries):
             try:
                 with self.client.messages.stream(
                     model=model_params.name,
                     temperature=model_params.temperature,
                     messages=cast(Iterable[anthropic.types.MessageParam], messages),
-                    max_tokens=8192,
+                    max_tokens=max_tokens,
                     system=system_message,
                     **extra_params,
                 ) as stream:

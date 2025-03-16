@@ -41,8 +41,10 @@ tags and a set of changes in <egg_edit></egg_edit> tags.
 
 You must provide a merged version of the file that incorporates the proposed changes. Only
 make the requested changes, leave all other code and comments as they are.
-Do not change anything in the suggested changes. You must respond with the full
-file contents without any encoding or additional markup.
+Do not change anything in the suggested changes.
+
+You must respond with the full file contents without any encoding or additional markup.
+
 Your response format should be as follows:
 ```plaintext
 # Original file content here
