@@ -73,11 +73,27 @@ def handle_modes(config: EggConfig) -> None:
     # If the --gui flag is provided, launch the EggChat GUI and exit.
     if config.args.gui:
         import sys
+        from importlib.resources import files
 
+        from PySide6.QtGui import QIcon
         from PySide6.QtWidgets import QApplication
 
         from eigengen.gui import EggChatGUI
+
         app = QApplication(sys.argv)
+        app.setApplicationName("EggChat")
+        app.setApplicationDisplayName("EggChat")
+        # Load the custom application icon from package resources.
+        try:
+            # Locate the app icon stored in the assets directory.
+            icon_path = files("eigengen.assets").joinpath("egg_icon.png")
+            app_icon = QIcon(str(icon_path))
+            if not app_icon.isNull():
+                app.setWindowIcon(app_icon)
+            else:
+                print("Warning: Loaded app icon is null. Verify the asset file.")
+        except Exception as e:
+            print(f"Error loading application icon: {e}")
         window = EggChatGUI(config=config)
         window.show()
         sys.exit(app.exec())

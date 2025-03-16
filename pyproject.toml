@@ -61,3 +61,6 @@ executionEnvironments = [{ root = "src" }]
 typeCheckingMode = "standard"
 venv = ".venv"
 venvPath = "."
+
+[tool.setuptools.package-data]
+eigengen = ["assets/*.webp", "assets/*.png"]

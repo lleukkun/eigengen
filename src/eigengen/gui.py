@@ -2,8 +2,8 @@ import os
 import sys
 from typing import Dict, List, Optional, Set, Tuple, cast
 
-from PySide6.QtCore import QEvent, QModelIndex, QRect, Qt, QThread, Signal, Slot
-from PySide6.QtGui import QColor, QFont, QPainter, QPalette
+from PySide6.QtCore import QEvent, QModelIndex, QRect, QSize, Qt, QThread, Signal, Slot
+from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -15,9 +15,11 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStyledItemDelegate,
     QStyleOptionViewItem,
+    QTextEdit,
     QTreeView,
     QVBoxLayout,
     QWidget,
@@ -31,32 +33,62 @@ from eigengen.config import EggConfig
 from eigengen.utils import extract_code_blocks
 
 
-class CodeBlockWidget(QPlainTextEdit):
-    """A widget for displaying syntax-highlighted code blocks."""
-
-    def __init__(self, code_text: str, lang: str = "", parent: Optional[QWidget] = None):
-        """
-        Initialize a code block widget with syntax highlighting.
-
-        Args:
-            code_text: The code content to display
-            lang: The programming language for syntax highlighting (defaults to python)
-            parent: The parent widget
-        """
+class CodeBlockWidget(QTextEdit):
+    def __init__(self, content: str, lang: str, parent: Optional[QWidget] = None):
+        # Initialize QTextEdit with the parent widget.
         super().__init__(parent)
-        self.setPlainText(code_text)
-        self.setReadOnly(True)
-        # Use a generic fixed-width font to prevent runtime font aliasing cost on macOS.
-        self.setFont(QFont("Monospace", 10))
+        # Set the code content as plain text.
+        self.setPlainText(content)
+        # Store the language information for potential syntax highlighting or other purposes.
+        self.lang = lang
 
-        # Attach the superqt syntax highlighter.
-        # Use provided language (defaulting to "python" if none is given) and "monokai" style.
-        self.highlight = CodeSyntaxHighlight(self.document(), lang if lang else "python", "monokai")
+        # Re-introduce syntax highlighting for code blocks.
+        # CodeSyntaxHighlight attaches to the document and highlights based on the provided language.
+        self.highlighter = CodeSyntaxHighlight(self.document(), lang=self.lang)
 
-        # Update the text edit palette with the highlighter's background color.
-        palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Base, QColor(self.highlight.background_color))
-        self.setPalette(palette)
+        # Disable internal scrollbars – we rely on the overall chat_scroll_area for scrolling.
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Use a policy that allows the widget to expand based on its content.
+        policy = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self.setSizePolicy(policy)
+        # Whenever the document changes, update the widget’s geometry.
+        self.document().contentsChanged.connect(self._updateSize)
+        # Optionally remove extra document margins if not desired.
+        # self.document().setDocumentMargin(0)
+
+    def _updateSize(self):
+        """
+        Helper slot to update document width, which in turn recalculates its height,
+        and then forces a geometry update.
+        """
+        # Set the document's text width to match the available viewport width,
+        # so wrapping is computed correctly.
+        self.document().setTextWidth(self.viewport().width())
+        self.updateGeometry()
+        self.adjustSize()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Update the document's text width when the widget is resized to ensure correct wrapping.
+        self.document().setTextWidth(self.viewport().width())
+        self.updateGeometry()
+
+    def sizeHint(self) -> QSize:
+        """
+        Returns a size hint that exactly fits the full height of the document's content.
+        The computed height is based on the document layout's documentSize plus widget margins and frame.
+        """
+        # Ensure the text wraps with the current viewport width.
+        self.document().setTextWidth(self.viewport().width())
+        doc_size = self.document().documentLayout().documentSize()
+        margins = self.contentsMargins().top() + self.contentsMargins().bottom()
+        frame = int(self.frameWidth() * 2)
+        total_height = int(doc_size.height() + margins + frame)
+        # Use the widget’s current width as the width hint.
+        return QSize(self.width(), total_height)
+
+    def minimumSizeHint(self) -> QSize:
+        return self.sizeHint()
 
 
 class ChatMessageWidget(QWidget):
@@ -107,8 +139,7 @@ class ChatMessageWidget(QWidget):
                 text_label = QLabel(remaining_text.replace("\n", "<br>"))
                 text_label.setWordWrap(True)
                 layout.addWidget(text_label)
-
-        layout.addStretch()
+        # layout.addStretch()  # Commented out to avoid nested scrolling.
 
 
 class ChatWorker(QThread):
@@ -264,6 +295,36 @@ class EggChatGUI(QMainWindow):
             parent: The parent widget
         """
         super().__init__(parent)
+
+        # Load background image
+        from importlib.resources import files  # Standard library in Python 3.9+
+
+        try:
+            # Locate the background image from the assets directory in the eigengen package.
+            bg_path = files("eigengen.assets").joinpath("background.webp")
+            bg_pixmap = QPixmap(str(bg_path))
+            if not bg_pixmap.isNull():
+                # Set the background using a QBrush and ensure the window auto-fills its background.
+                palette = self.palette()
+                palette.setBrush(QPalette.Window, QBrush(bg_pixmap))
+                self.setPalette(palette)
+                self.setAutoFillBackground(True)
+            else:
+                print("Background image loaded but is null; check file integrity.")
+        except Exception as e:
+            print(f"Failed to load background image: {e}")
+
+        # Set application icon using egg_icon.png from the eigengen.assets package
+        try:
+            icon_path = files("eigengen.assets").joinpath("egg_icon.png")
+            icon_pixmap = QPixmap(str(icon_path))
+            if not icon_pixmap.isNull():
+                self.setWindowIcon(QIcon(icon_pixmap))
+            else:
+                print("Egg icon loaded but is null; check file integrity.")
+        except Exception as ex:
+            print(f"Failed to load egg icon: {ex}")
+
         self.setWindowTitle("EggChat GUI")
         self.resize(800, 600)
 

@@ -1,0 +1,2 @@
+include src/eigengen/assets/*.webp
+include src/eigengen/assets/*.png
