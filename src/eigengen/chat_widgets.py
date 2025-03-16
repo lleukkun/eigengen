@@ -13,6 +13,8 @@ class CodeBlockWidget(QTextEdit):
         super().__init__(parent)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
         self.setPlainText(content)
+        self.setReadOnly(True)  # Disable editing in the code block widget
+
         if sys.platform.startswith("darwin"):
             font_name = "Menlo"
         elif sys.platform.startswith("win"):
