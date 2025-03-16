@@ -9,7 +9,7 @@ from eigengen.utils import extract_code_blocks
 
 
 class CodeBlockWidget(QTextEdit):
-    def __init__(self, content: str, lang: str, parent: QWidget = None):
+    def __init__(self, content: str, lang: str, parent: QWidget | None = None):
         super().__init__(parent)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
         self.setPlainText(content)
