@@ -1,4 +1,7 @@
+import sys
+
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 
@@ -12,6 +15,14 @@ class ChatInputWidget(QWidget):
         self.input_edit = QPlainTextEdit()
         self.input_edit.setPlaceholderText("Type your message here...")
         self.input_edit.setStyleSheet("background-color: rgba(0, 0, 0, 100);")
+        # Set fixed width font for the text input widget based on the operating system.
+        if sys.platform.startswith("darwin"):
+            font_name = "Menlo"
+        elif sys.platform.startswith("win"):
+            font_name = "Consolas"
+        else:
+            font_name = "Monospace"
+        self.input_edit.setFont(QFont(font_name))
         layout.addWidget(self.input_edit)
 
         btn_layout = QHBoxLayout()

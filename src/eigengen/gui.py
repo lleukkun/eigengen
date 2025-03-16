@@ -1,7 +1,8 @@
 import os
+import sys
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QBrush, QIcon, QPalette, QPixmap
+from PySide6.QtGui import QBrush, QFont, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -160,6 +161,14 @@ class EggChatGUI(QMainWindow):
         dialog_layout.addWidget(description_label)
         diff_display = QPlainTextEdit(dialog)
         diff_display.setReadOnly(True)
+        # Set fixed width font for the diff display widget based on the operating system.
+        if sys.platform.startswith("darwin"):
+            font_name = "SF Mono"
+        elif sys.platform.startswith("win"):
+            font_name = "Consolas"
+        else:
+            font_name = "Monospace"
+        diff_display.setFont(QFont(font_name))
         diff_display.setPlainText(combined_diff)
         diff_display.setStyleSheet("background-color: rgba(0, 0, 0, 230);")
         dialog_layout.addWidget(diff_display)
@@ -196,4 +205,3 @@ class EggChatGUI(QMainWindow):
     def _clear_chat(self) -> None:
         self.chat_area_widget.clear_messages()
         self.eggchat.messages = []
-

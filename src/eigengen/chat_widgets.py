@@ -1,4 +1,7 @@
+import sys
+
 from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
 from superqt.utils import CodeSyntaxHighlight
 
@@ -10,8 +13,15 @@ class CodeBlockWidget(QTextEdit):
         super().__init__(parent)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 0);")
         self.setPlainText(content)
+        if sys.platform.startswith("darwin"):
+            font_name = "Menlo"
+        elif sys.platform.startswith("win"):
+            font_name = "Consolas"
+        else:
+            font_name = "Monospace"
+        self.setFont(QFont(font_name))
         self.lang = lang
-        self.highlighter = CodeSyntaxHighlight(self.document(), lang=self.lang)
+        self.highlighter = CodeSyntaxHighlight(self.document(), lang=self.lang, theme="solarized-dark")
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.document().contentsChanged.connect(self._updateSize)
 
