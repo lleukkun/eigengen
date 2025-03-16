@@ -94,7 +94,7 @@ def handle_modes(config: EggConfig) -> None:
                 print("Warning: Loaded app icon is null. Verify the asset file.")
         except Exception as e:
             print(f"Error loading application icon: {e}")
-        window = EggChatGUI(config=config)
+        window = EggChatGUI(config=config, parent=None)
         window.show()
         sys.exit(app.exec())
 
