@@ -7,11 +7,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStyle,
     QStyledItemDelegate,
+    QStyleOptionButton,
+    QStyleOptionViewItem,
     QTreeView,
     QVBoxLayout,
     QWidget,
-    QStyle, QStyleOptionButton, QStyleOptionViewItem
 )
 from qtpy.QtCore import QPersistentModelIndex
 
@@ -29,24 +31,13 @@ class FileSelectionDelegate(QStyledItemDelegate):
         self.button_size = 20
         self.margin = 4
 
-    def get_item_level(self, index: QModelIndex) -> int:
-        level = 0
-        while index.parent().isValid():
-            level += 1
-            index = index.parent()
-        return level
-
     def paint(self, painter, option, index: QModelIndex | QPersistentModelIndex) -> None:
         file_path = index.model().filePath(index)
         selected = self.is_selected_callback(file_path)
-        # Compute the item's depth for proper indentation.
-        level = self.get_item_level(index)
-        base_indent = option.widget.indentation() if option.widget else 20
-        effective_indent = base_indent * level
-
-        # Define the checkbox rectangle.
+        # Instead of computing an extra indentation based on the tree level,
+        # we rely on the option.rect which already comes pre-indented from QTreeView.
         check_box_rect = QRect(
-            option.rect.left() + self.margin + effective_indent,
+            option.rect.left() + self.margin,  # Removed extra effective_indent.
             option.rect.top() + (option.rect.height() - self.button_size) // 2,
             self.button_size,
             self.button_size,
@@ -60,7 +51,7 @@ class FileSelectionDelegate(QStyledItemDelegate):
             checkbox_option.state |= QStyle.State_HasFocus
         option.widget.style().drawControl(QStyle.CE_CheckBox, checkbox_option, painter)
 
-        # Adjust the text rectangle to avoid overlapping with the checkbox.
+        # Adjust the text rectangle so it doesn't overlap the checkbox.
         text_rect = QRect(option.rect)
         text_rect.setLeft(check_box_rect.right() + self.margin)
         text_option = QStyleOptionViewItem(option)
@@ -70,11 +61,9 @@ class FileSelectionDelegate(QStyledItemDelegate):
 
     def editorEvent(self, event: QEvent, model, option, index: QModelIndex) -> bool:
         if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
-            level = self.get_item_level(index)
-            base_indent = option.widget.indentation() if option.widget else 20
-            effective_indent = base_indent * level
+            # Remove extra indentation; use the option.rect position directly.
             checkbox_rect = QRect(
-                option.rect.left() + self.margin + effective_indent,
+                option.rect.left() + self.margin,  # Removed effective_indent here as well.
                 option.rect.top() + (option.rect.height() - self.button_size) // 2,
                 self.button_size,
                 self.button_size,
