@@ -32,7 +32,8 @@ class CodeBlockWidget(QPlainTextEdit):
         super().__init__(parent)
         self.setPlainText(code_text)
         self.setReadOnly(True)
-        self.setFont(QFont("Courier", 10))
+        # Use a generic fixed-width font to prevent runtime font aliasing cost on macOS.
+        self.setFont(QFont("Monospace", 10))
 
         # Attach the superqt syntax highlighter.
         # Use provided language (defaulting to "python" if none is given) and "monokai" style.
