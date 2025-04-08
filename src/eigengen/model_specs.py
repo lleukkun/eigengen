@@ -6,7 +6,7 @@ MODEL_SPEC_STRINGS = [
 "groq;qwen-qwq-32b@0.6;qwen-qwq-32b@0.5",
 "openai;o3-mini@0.6;gpt-4o-mini@0.5",
 "openai;gpt-4.5-preview@0.6;gpt-4o-mini@0.5",
-"google;gemini-2.0-flash-thinking-exp@0.6;gemini-2.0-flash@0.5",
+"google;gemini-2.5-pro-preview-03-25@0.6;gemini-2.0-flash@0.5",
 "mistral;mistral-large-latest@0.6;codestral-latest@0.5",
 "xai;grok-2-latest@0.6;grok-2-latest@0.5",
 ]
