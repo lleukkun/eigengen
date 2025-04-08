@@ -208,43 +208,6 @@ class AnthropicProvider(Provider):
         raise IOError(f"Unable to complete API call in {max_retries} retries")
 
 
-class GroqProvider(Provider):
-    default_large_model_name = "qwen-qwq-32b"
-    default_small_model_name = "qwen-qwq-32b"
-
-    def __init__(self, client: groq.Groq, model_spec: ModelSpec):
-        super().__init__(model_spec)
-        self.client: groq.Groq = client
-        self.max_retries = 5
-        self.base_delay = 1
-
-    def make_request(
-        self, model_type: ModelType, messages: list[dict[str, str]],
-        reasoning_effort=ReasoningAmount.MEDIUM
-    ) -> Generator[str, None, None]:
-        model_params = self.get_model_params(model_type)
-
-        for attempt in range(self.max_retries):
-            try:
-                response = self.client.chat.completions.create(
-                    messages=cast(list, messages), model=model_params.name,
-                    temperature=model_params.temperature, stream=True
-                )
-
-                for chunk in response:
-                    content = chunk.choices[0].delta.content
-                    if content is not None:
-                        yield content
-                return
-            except groq.RateLimitError as e:
-                if attempt == self.max_retries - 1:
-                    raise e
-                delay = self.base_delay * (2**attempt) + random.uniform(0, 1)
-                logger.warning(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
-                time.sleep(delay)
-        raise IOError(f"Unable to complete API call in {self.max_retries} retries")
-
-
 class OpenAIProvider(Provider):
     def __init__(self, client: openai.OpenAI, model_spec: ModelSpec):
         super().__init__(model_spec)
@@ -272,7 +235,7 @@ class OpenAIProvider(Provider):
 
                 use_stream = True if model_params.name not in ["o1", "o1-mini"] else False
 
-                if model_params.name in ["o3-mini"]:
+                if model_params.name in ["o3-mini", "deepseek-reasoner"]:
                     if reasoning_effort == ReasoningAmount.LOW:
                         params["reasoning_effort"] = "low"
                     elif reasoning_effort == ReasoningAmount.MEDIUM:
@@ -298,59 +261,6 @@ class OpenAIProvider(Provider):
                 if attempt == self.max_retries - 1:
                     raise e
                 delay = self.base_delay * (2**attempt) + random.uniform(0, 1)
-                logger.warning(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
-                time.sleep(delay)
-        raise IOError(f"Unable to complete API call in {self.max_retries} retries")
-
-
-class GoogleProvider(Provider):
-    def __init__(self, client: genai.Client, model_spec: ModelSpec):
-        super().__init__(model_spec)
-        self.client = client
-        self.max_retries = 5
-        self.base_delay = 1
-
-    def make_request(
-        self, model_type: ModelType, messages: list[dict[str, str]], reasoning_effort=None
-    ) -> Generator[str, None, None]:
-        if len(messages) < 1:
-            return
-        model_params = self.get_model_params(model_type)
-
-        system_message = messages[0]["content"]
-
-        for attempt in range(self.max_retries):
-            try:
-                chat = self.client.chats.create(
-                    model=model_params.name,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_message,
-                        candidate_count=1,
-                        temperature=model_params.temperature,
-                    ),
-                    history=cast(
-                        list[types.Content],
-                        [
-                            {"role": "user", "parts": [{"text": message["content"]}]}
-                            if message["role"] == "user"
-                            else {"role": "model", "parts": [{"text": message["content"]}]}
-                            for message in messages[1:-1]
-                        ],
-                    ),
-                )
-                response = chat.send_message(
-                    messages[-1]["content"],
-                )
-                if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                    yield response.candidates[0].content.parts[0].text or ""
-                else:
-                    yield ""
-                return
-            except Exception as e:
-                delay = self.base_delay * (2**attempt) + random.uniform(0, 1)
-                logger.warning(f"Error occurred. Retrying in {delay:.2f} seconds...")
-                if attempt == self.max_retries - 1:
-                    raise e
                 logger.warning(f"Rate limit hit. Retrying in {delay:.2f} seconds...")
                 time.sleep(delay)
         raise IOError(f"Unable to complete API call in {self.max_retries} retries")
@@ -422,16 +332,16 @@ def create_provider(model_spec: ModelSpec,
         return AnthropicProvider(client, model_spec)
     elif model_spec.provider == "groq":
         api_key = get_api_key("groq", config)
-        client = groq.Groq(api_key=api_key)
-        return GroqProvider(client, model_spec)
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
+        return OpenAIProvider(client, model_spec)
     elif model_spec.provider == "openai":
         api_key = get_api_key("openai", config)
         client = openai.OpenAI(api_key=api_key)
         return OpenAIProvider(client, model_spec)
     elif model_spec.provider == "google":
         api_key = get_api_key("google", config)
-        client = genai.Client(api_key=api_key)
-        return GoogleProvider(client, model_spec)
+        client = openai.OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+        return OpenAIProvider(client, model_spec)
     elif model_spec.provider == "mistral":
         api_key = get_api_key("mistral", config)
         client = Mistral(api_key=api_key)
