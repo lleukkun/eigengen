@@ -96,7 +96,13 @@ class EggChat:
         """
         self.config = config  # Store the passed configuration
         self.pm = providers.ProviderManager(config.model_spec_str, config)
-        self.mode = "general" if config.args.general else "programmer"
+        if config.args.general:
+            self.mode = "general"
+        elif config.args.tutor:
+            self.mode = "tutor"
+        else:
+            self.mode = "programmer"
+
         self.quoting_state = {"current_index": -1, "code_blocks": None, "cycle_iterator": None}
         self.messages: List[Dict[str, str]] = []
         self.pre_fill = ""
@@ -104,6 +110,12 @@ class EggChat:
         # Find the Git repository root (if available)
         self.git_root = utils.find_git_root()
         self.files_history: set[str] = set()
+        if self.config.args.high:
+            self.reasoning_effort = providers.ReasoningAmount.HIGH
+        elif self.config.args.low:
+            self.reasoning_effort = providers.ReasoningAmount.LOW
+        else:
+            self.reasoning_effort = providers.ReasoningAmount.MEDIUM
 
         # Initialize retrieval augmentation if enabled
         if config.args.rag:
@@ -173,15 +185,12 @@ class EggChat:
         """
         full_message = self._prepare_full_message(user_message)
         message_list = self.messages + [{"role": "user", "content": full_message}]
-        reasoning_effort = (
-            providers.ReasoningAmount.HIGH if self.config.args.high else providers.ReasoningAmount.MEDIUM
-        )
         answer_chunks = []
         if use_progress:
             with ProgressIndicator() as _:
                 for chunk in self.pm.process_request(
                     providers.ModelType.LARGE,
-                    reasoning_effort,
+                    self.reasoning_effort,
                     prompts.get_prompt(self.mode),
                     message_list,
                 ):
@@ -189,7 +198,7 @@ class EggChat:
         else:
             for chunk in self.pm.process_request(
                 providers.ModelType.LARGE,
-                reasoning_effort,
+                self.reasoning_effort,
                 prompts.get_prompt(self.mode),
                 message_list,
             ):

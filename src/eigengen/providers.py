@@ -10,11 +10,8 @@ from enum import Enum
 from typing import Any, Generator, Iterable, Protocol, cast
 
 import anthropic
-import groq
 import openai
 import requests
-from google import genai
-from google.genai import types
 from mistralai import Mistral, TextChunkType
 
 from eigengen import config, log
@@ -233,16 +230,16 @@ class OpenAIProvider(Provider):
             try:
                 params = {}
 
-                use_stream = True if model_params.name not in ["o1", "o1-mini"] else False
+                use_stream = True if model_params.name not in ["o1", "o1-mini", "o3", "o3-mini", "o4-mini"] else False
 
-                if model_params.name in ["o3-mini", "deepseek-reasoner"]:
+                if model_params.name in ["o4-mini", "o3", "o3-mini", "deepseek-reasoner"]:
                     if reasoning_effort == ReasoningAmount.LOW:
                         params["reasoning_effort"] = "low"
                     elif reasoning_effort == ReasoningAmount.MEDIUM:
                         params["reasoning_effort"] = "medium"
                     elif reasoning_effort == ReasoningAmount.HIGH:
                         params["reasoning_effort"] = "high"
-                if model_params.name not in ["o1", "o3-mini"]:
+                if model_params.name not in ["o1", "o3-mini", "o3", "o4-mini"]:
                     params["temperature"] = model_params.temperature
 
                 response = self.client.chat.completions.create(
