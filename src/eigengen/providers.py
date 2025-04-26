@@ -7,12 +7,25 @@ import re
 import time
 from abc import abstractmethod
 from enum import Enum
-from typing import Any, Generator, Iterable, Protocol, cast
+from typing import Any, Generator, Protocol, cast
 
 import anthropic
 import openai
 import requests
-from mistralai import Mistral, TextChunkType
+from mistralai import (
+    AssistantMessage,
+    ChatCompletionStreamRequestMessages,
+    Mistral,
+    SystemMessage,
+    TextChunkType,
+    UserMessage,
+)
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 
 from eigengen import config, log
 
@@ -63,7 +76,8 @@ class Provider(Protocol):
     def make_request(
         self,
         model_type: ModelType,
-        messages: list[dict[str, str]],
+        messages: list[tuple[str, str]],
+        system_message: str,
         reasoning_effort: ReasoningAmount = ReasoningAmount.MEDIUM,
     ) -> Generator[str, None, None]: ...
 
@@ -101,7 +115,7 @@ class ProviderManager:
         model_type: ModelType,
         reasoning_effort: ReasoningAmount,
         system_message: str,
-        messages: list[dict[str, str]],
+        messages: list[tuple[str, str]],
     ) -> Generator[str, None, None]:
         """
         Processes a request by interfacing with the specified model and handling the conversation flow.
@@ -113,13 +127,8 @@ class ProviderManager:
             str: Chunks of the final answer as they are generated.
         """
 
-        steering_messages = []
-        steering_role = "system"
-        steering_messages = [{"role": steering_role, "content": system_message}]
-
-        combined_messages = steering_messages + messages
         final_answer: str = ""
-        for chunk in self.provider.make_request(model_type, combined_messages, reasoning_effort):
+        for chunk in self.provider.make_request(model_type, messages, system_message, reasoning_effort):
             final_answer += chunk
             yield chunk
 
@@ -132,13 +141,19 @@ class OllamaProvider(Provider):
         super().__init__(model_spec)
 
     def make_request(
-        self, model_type: ModelType, messages: list[dict[str, str]], reasoning_effort=None
+        self, model_type: ModelType, messages: list[tuple[str, str]], system_message: str, reasoning_effort=None
     ) -> Generator[str, None, None]:
         headers: dict[str, str] = {"Content-Type": "application/json"}
         model_params = self.get_model_params(model_type)
+        ollama_messages: list[dict[str, str]] = []
+
+        ollama_messages.append({ "role": "system", "content": system_message })
+        for message in messages:
+            ollama_messages.append({ "role": message[0], "content": message[1]})
+
         data: dict[str, Any] = {
             "model": model_params.name,
-            "messages": messages,
+            "messages": ollama_messages,
             "stream": True,
             "options": {"temperature": model_params.temperature},
         }
@@ -157,14 +172,19 @@ class AnthropicProvider(Provider):
         self.client: anthropic.Anthropic = client
 
     def make_request(
-        self, model_type: ModelType, messages: list[dict[str, str]],
+        self, model_type: ModelType, messages: list[tuple[str, str]],
+        system_message: str,
         reasoning_effort=ReasoningAmount.MEDIUM
     ) -> Generator[str, None, None]:
         if len(messages) < 1:
             return
 
-        system_message = messages[0]["content"]
-        messages = messages[1:]
+        anthropic_messages: list[anthropic.types.MessageParam] = []
+        for message in messages:
+            if message[0] == "user":
+                anthropic_messages.append(anthropic.types.MessageParam(role="user", content=message[1]))
+            else:
+                anthropic_messages.append(anthropic.types.MessageParam(role="assistant", content=message[1]))
         max_retries = 5
         base_delay = 1
         model_params = self.get_model_params(model_type)
@@ -188,7 +208,7 @@ class AnthropicProvider(Provider):
                 with self.client.messages.stream(
                     model=model_params.name,
                     temperature=model_params.temperature,
-                    messages=cast(Iterable[anthropic.types.MessageParam], messages),
+                    messages=anthropic_messages,
                     max_tokens=max_tokens,
                     system=system_message,
                     **extra_params,
@@ -213,18 +233,26 @@ class OpenAIProvider(Provider):
         self.base_delay = 1
 
     def make_request(
-        self, model_type: ModelType, messages: list[dict[str, str]],
+        self, model_type: ModelType, messages: list[tuple[str,str]],
+        system_message: str,
         reasoning_effort: ReasoningAmount = ReasoningAmount.MEDIUM
     ) -> Generator[str, None, None]:
         model_params = self.get_model_params(model_type)
 
         # map to openai specifics
-        openai_messages: list[openai.types.chat.ChatCompletionMessageParam] = []
-        # we integrate the system message into the user message
-        system_instruction = messages[0]["content"]
+        openai_messages: list[ChatCompletionMessageParam] = []
+        # we integrate the system message into the user message for deepseek-reasoner
+        if model_params.name not in ["deepseek-reasoner"]:
+            openai_messages.append(ChatCompletionSystemMessageParam(role="system", content=system_message))
 
-        openai_messages.extend(messages[1:])
-        openai_messages[-1]["content"] += f"\n{system_instruction}"
+        for index, message in enumerate(messages):
+            if message[0] == "user":
+                content = message[1]
+                if index == len(messages) - 1 and model_params.name in ["deepseek-reasoner"]:
+                    content += f"\n{system_message}"
+                openai_messages.append(ChatCompletionUserMessageParam(role="user", content=content))
+            else:
+                openai_messages.append(ChatCompletionAssistantMessageParam(role="assistant", content=message[1]))
 
         for attempt in range(self.max_retries):
             try:
@@ -271,15 +299,23 @@ class MistralProvider(Provider):
         self.base_delay = 1
 
     def make_request(
-        self, model_type: ModelType, messages: list[dict[str, str]], reasoning_effort=None
+        self, model_type: ModelType, messages: list[tuple[str, str]], system_message: str, reasoning_effort=None
     ) -> Generator[str, None, None]:
 
         model_params = self.get_model_params(model_type)
 
+        mistral_messages: list[ChatCompletionStreamRequestMessages] = []
+        mistral_messages.append(SystemMessage(role="system", content=system_message))
+        for message in messages:
+            if message[0] == "user":
+                mistral_messages.append(UserMessage(role="user", content=message[1]))
+            else:
+                mistral_messages.append(AssistantMessage(role="assistant", content=message[1]))
+
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.stream(
-                    model=model_params.name, messages=cast(list, messages), temperature=model_params.temperature
+                    model=model_params.name, messages=mistral_messages, temperature=model_params.temperature
                 )
                 if response is None:
                     return

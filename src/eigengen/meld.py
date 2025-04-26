@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 
 from eigengen import prompts, providers, utils
 from eigengen.progress import ProgressIndicator
@@ -15,7 +14,7 @@ def apply_changes(pm: providers.ProviderManager, filepath: str, original_content
     system_prompt = prompts.get_prompt("meld")
     encoded_original_content = utils.encode_code_block(original_content, filepath)
     messages = [
-        {"role": "user", "content": f"{encoded_original_content}\n{changes}"},
+        ("user", f"{encoded_original_content}\n{changes}"),
     ]
     response = ""
     with ProgressIndicator() as _:

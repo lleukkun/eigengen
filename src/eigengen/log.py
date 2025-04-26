@@ -1,14 +1,12 @@
 import json
 import os
-import sys
 from datetime import datetime
 from logging import getLogger
-from typing import Dict, List
 
 logger = getLogger(__name__)
 
 
-def log_request_response(model: str, messages: List[Dict[str, str]], final_answer: str) -> None:
+def log_request_response(model: str, messages: list[tuple[str, str]], final_answer: str) -> None:
     """
     Logs the request and response information to a JSON lines file for later analysis.
 
@@ -39,7 +37,7 @@ def log_request_response(model: str, messages: List[Dict[str, str]], final_answe
             f.write(json.dumps(log_entry) + "\n")
     except Exception as e:
         # Print a warning message to stderr if logging fails
-        logger.warning(f"Failed to log request/response: {str(e)}", file=sys.stderr)
+        logger.warning(f"Failed to log request/response: {str(e)}")
 
 
 def log_prompt(prompt: str) -> None:
@@ -65,7 +63,7 @@ def log_prompt(prompt: str) -> None:
             f.write(json.dumps(log_entry) + "\n")
     except Exception as e:
         # Print a warning message to stderr if logging fails
-        logger.warning(f"Failed to log prompt: {str(e)}", file=sys.stderr)
+        logger.warning(f"Failed to log prompt: {str(e)}")
 
 
 def list_prompt_history(n: int) -> None:

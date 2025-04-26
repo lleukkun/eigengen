@@ -1,7 +1,7 @@
 import os
 import sys
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pygments.style
 from prompt_toolkit import PromptSession
@@ -82,7 +82,7 @@ class EggChat:
         initial_file_content (str): Aggregated and formatted contents from target files.
         kbm: ChatKeyBindingsManager responsible for custom keybindings during chat sessions.
     """
-    def __init__(self, config: EggConfig, user_files: Optional[List[str]]):
+    def __init__(self, config: EggConfig, user_files: Optional[list[str]]):
         """
         Initialize an EggChat session with configuration settings and optional file context.
 
@@ -104,7 +104,7 @@ class EggChat:
             self.mode = "programmer"
 
         self.quoting_state = {"current_index": -1, "code_blocks": None, "cycle_iterator": None}
-        self.messages: List[Dict[str, str]] = []
+        self.messages: list[tuple[str, str]] = []
         self.pre_fill = ""
 
         # Find the Git repository root (if available)
@@ -184,7 +184,7 @@ class EggChat:
             str: The aggregated response from the assistant.
         """
         full_message = self._prepare_full_message(user_message)
-        message_list = self.messages + [{"role": "user", "content": full_message}]
+        message_list = self.messages + [("user", full_message)]
         answer_chunks = []
         if use_progress:
             with ProgressIndicator() as _:
@@ -263,8 +263,8 @@ class EggChat:
                 utils.pipe_output_via_pager(formatted_response)
                 print("")
 
-                self.messages.append({"role": "user", "content": original_message})
-                self.messages.append({"role": "assistant", "content": answer})
+                self.messages.append(("user", original_message))
+                self.messages.append(("assistant", answer))
 
             except KeyboardInterrupt:
                 self.pre_fill = ""
@@ -319,8 +319,8 @@ class EggChat:
             utils.pipe_output_via_pager(formatted_response)
             print("")
 
-            self.messages.append({"role": "user", "content": initial_prompt})
-            self.messages.append({"role": "assistant", "content": answer})
+            self.messages.append(("user", initial_prompt))
+            self.messages.append(("assistant", answer))
 
     def handle_command(self, prompt_input: str) -> bool:
         """
@@ -410,7 +410,7 @@ class EggChat:
             bool: True after attempting the file merging process.
         """
         last_assistant_message = next(
-            (msg["content"] for msg in reversed(self.messages) if msg["role"] == "assistant"), ""
+            (msg[1] for msg in reversed(self.messages) if msg[0] == "assistant"), ""
         )
 
         changes = utils.extract_change_descriptions(last_assistant_message)
