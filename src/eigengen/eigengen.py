@@ -5,6 +5,8 @@ This script handles command-line arguments and initiates different modes of oper
 such as indexing files, entering chat mode, listing history, and processing prompts.
 """
 
+#ruff: noqa: T201
+
 import argparse
 import logging
 import sys
@@ -29,7 +31,7 @@ def parse_arguments() -> argparse.Namespace:
     model_strings = [f"'{s}'" for s in MODEL_SPEC_STRINGS]
     model_help = "Model string examples:\n" + "\n".join(model_strings)
     parser = argparse.ArgumentParser("eigengen",
-                                     description="Eigengen is an LLM front end for programming.",
+                                     description="Eigengen is an LLM front end for programming",
                                      epilog=model_help,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
@@ -53,6 +55,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--high", action="store_true", help="Use high reasoning effort for chat (requires LLM support)")
     parser.add_argument("--low", action="store_true", help="Use low reasoning effort for chat (requires LLM support)")
     parser.add_argument("--gui", action="store_true", help="Launch the graphical user interface")
+    parser.add_argument("--inline", action="store_true", help="Process the source code inline @egg instructions")
 
     args = parser.parse_args()
     # only one of --general and --programmer can be specified
@@ -112,6 +115,10 @@ def handle_modes(config: EggConfig) -> None:
             egg_chat.auto_chat(config.args.prompt, diff_mode=True)
         else:
             egg_chat.auto_chat(config.args.prompt, diff_mode=False)
+        return
+    if config.args.inline:
+        egg_chat = chat.EggChat(config, list(user_files or []))
+        egg_chat.auto_chat("handle @egg inline instructions", diff_mode=True, interactive=True)
         return
 
     # Otherwise, enter interactive chat mode.

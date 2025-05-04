@@ -7,7 +7,8 @@ from eigengen.progress import ProgressIndicator
 logger = logging.getLogger(__name__)
 
 
-def apply_changes(pm: providers.ProviderManager, filepath: str, original_content: str, changes: str) -> str:
+def apply_changes(pm: providers.ProviderManager, filepath: str, original_content: str, changes: str,
+                  use_progress: bool = False) -> str:
     """
     Applies changes to the original content using the LLM.
     """
@@ -17,8 +18,8 @@ def apply_changes(pm: providers.ProviderManager, filepath: str, original_content
         ("user", f"{encoded_original_content}\n{changes}"),
     ]
     response = ""
-    with ProgressIndicator() as _:
-        chunks = pm.process_request(providers.ModelType.SMALL, providers.ReasoningAmount.LOW, system_prompt, messages)
+    with ProgressIndicator(use_progress) as _:
+        chunks = pm.process_request(providers.ModelType.SMALL, providers.ReasoningAmount.MEDIUM, system_prompt, messages)
         response = "".join(chunks)
 
     blocks = utils.extract_code_blocks(response)
@@ -57,7 +58,7 @@ def meld_changes(
         # It's acceptable if the file does not exist; it will be created.
         original_content = ""
 
-    new_content = apply_changes(pm, filepath, original_content, changes)
+    new_content = apply_changes(pm, filepath, original_content, changes, use_progress=True)
     diff_output = produce_diff(filepath, original_content, new_content)
 
     # Show the diff preview to the user.

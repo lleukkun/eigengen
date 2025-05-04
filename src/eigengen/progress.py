@@ -16,13 +16,14 @@ class ProgressIndicator:
     using prompt_toolkit for colored outputs.
     """
 
-    def __init__(self, interval: float = 0.1, word: str = "~o~"):
+    def __init__(self, show_visual: bool = True, interval: float = 0.1, word: str = "~o~"):
         self.interval = interval
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self.word = word
         self.space_avail = 6 + len(self.word)
         self.total_size = self.space_avail + 2 * 4  # the opening/closing parts
+        self.show_visual = show_visual
 
         # Configuration for animation
         self.animation_frames = self._generate_animation_frames()
@@ -65,10 +66,11 @@ class ProgressIndicator:
         try:
             print("\033[?25l", end="")  # Hide the cursor
             while self._running:
-                frame = next(self.animation_frames)
-                print("\r", end="", flush=False)
-                print_formatted_text(frame, end="", style=self.style, flush=True)
-                time.sleep(self.interval)
+                if self.show_visual:
+                    frame = next(self.animation_frames)
+                    print("\r", end="", flush=False)
+                    print_formatted_text(frame, end="", style=self.style, flush=True)
+                    time.sleep(self.interval)
         finally:
             # Clear the line after stopping
             print(" " * self.total_size + "\r", end="", flush=True)

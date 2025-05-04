@@ -1,3 +1,5 @@
+"""Provider module for wrapping multiple LLM backends behind a unified interface."""
+
 import dataclasses
 import json
 import logging
@@ -35,18 +37,41 @@ OLLAMA_BASE_URL: str = "http://localhost:11434"
 
 
 class ReasoningAmount(Enum):
+    """
+    Enumeration for controlling the amount of reasoning effort applied.
+
+    LOW:   Use minimal reasoning to maximize speed.
+    MEDIUM: Balanced reasoning depth and latency.
+    HIGH:  Maximum reasoning depth at the cost of increased latency.
+    """
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
 class ModelType(Enum):
+    """
+    Enumeration for selecting a model size profile.
+
+    LARGE: Use the larger, more capable model.
+    SMALL: Use the smaller, faster model.
+    """
     LARGE = "large"
     SMALL = "small"
 
 
 @dataclasses.dataclass
 class ModelSpec:
+    """
+    Specification of a pair of models (large and small) for a given provider.
+
+    Attributes:
+        provider: Name of the backend provider (e.g., "openai", "anthropic").
+        large_name: Identifier of the large model.
+        large_temperature: Sampling temperature for the large model.
+        small_name: Identifier of the small model.
+        small_temperature: Sampling temperature for the small model.
+    """
     provider: str
     large_name: str
     large_temperature: float
@@ -56,17 +81,34 @@ class ModelSpec:
 
 @dataclasses.dataclass
 class ModelParams:
+    """
+    Runtime parameters for selecting a specific model instance.
+
+    Attributes:
+        name: Model identifier to send to the backend.
+        temperature: Sampling temperature for generation.
+    """
     name: str
     temperature: float
 
 
 class Provider(Protocol):
+    """
+    Protocol for providers implementing a unified chat interface.
+
+    Methods:
+        get_model_params: Return the desired model settings (name and temperature).
+        make_request: Stream tokens from the backend given a conversation.
+    """
     model_spec: ModelSpec
 
     def __init__(self, model_spec: ModelSpec) -> None:
         self.model_spec = model_spec
 
     def get_model_params(self, model_type: ModelType) -> ModelParams:
+        """
+        Return the ModelParams for the requested ModelType.
+        """
         if model_type == ModelType.LARGE:
             return ModelParams(name=self.model_spec.large_name, temperature=self.model_spec.large_temperature)
         else:
@@ -84,14 +126,27 @@ class Provider(Protocol):
 
 @dataclasses.dataclass
 class ProviderParams:
+    """
+    Convenience container for the two ModelParams (large and small) of a provider.
+    """
     large_model: ModelParams
     small_model: ModelParams
 
 
 def parse_model_spec(input_str: str) -> ModelSpec:
     """
-    Parses model string using regex with strict format validation.
-    Format: provider:large_name@temperature:small_name@temperature
+    Parse a model specification string of the form:
+        provider;large_name@temp;small_name@temp
+
+    Args:
+        input_str: A string matching the pattern
+            provider;large_model_name@temperature;small_model_name@temperature
+
+    Returns:
+        A ModelSpec instance.
+
+    Raises:
+        ValueError: If the input_str does not conform to the required format.
     """
     pattern = r"^([^;]+);([^;@]+)@(\d+\.?\d*|\.\d+);([^;@]+)@(\d+\.?\d*|\.\d+)$"
     match = re.fullmatch(pattern, input_str)
@@ -106,6 +161,13 @@ def parse_model_spec(input_str: str) -> ModelSpec:
 
 class ProviderManager:
     def __init__(self, model_identifier: str, config: config.EggConfig):
+        """
+        Initialize the ProviderManager.
+
+        Args:
+            model_identifier: A spec string parsed by parse_model_spec.
+            config: Global EggConfig containing API keys and settings.
+        """
         self.spec = parse_model_spec(model_identifier)
         self.config = config
         self.provider = create_provider(self.spec, self.config)
@@ -118,13 +180,16 @@ class ProviderManager:
         messages: list[tuple[str, str]],
     ) -> Generator[str, None, None]:
         """
-        Processes a request by interfacing with the specified model and handling the conversation flow.
+        Make a streaming request to the configured provider and yield response chunks.
+
         Args:
-            model (providers.Model): The Model instance to use.
-            messages (list[dict[str, str]]): The list of messages in the conversation.
-            system_message (str): The system message to use.
+            model_type: Whether to use LARGE or SMALL model.
+            reasoning_effort: Degree of reasoning to apply.
+            system_message: The system-level prompt.
+            messages: Sequence of (“role”, “content”) tuples for conversation.
+
         Yields:
-            str: Chunks of the final answer as they are generated.
+            Response text in incremental chunks.
         """
 
         final_answer: str = ""
@@ -138,11 +203,29 @@ class ProviderManager:
 
 class OllamaProvider(Provider):
     def __init__(self, model_spec: ModelSpec):
+        """
+        Provider for Ollama local chat API.
+
+        Args:
+            model_spec: Specification of the large and small Ollama models.
+        """
         super().__init__(model_spec)
 
     def make_request(
         self, model_type: ModelType, messages: list[tuple[str, str]], system_message: str, reasoning_effort=None
     ) -> Generator[str, None, None]:
+        """
+        Issue a streaming chat completion request to an Ollama server.
+
+        Args:
+            model_type: Selection of large or small model.
+            messages: List of (role, content) tuples.
+            system_message: The system directive.
+            reasoning_effort: Ignored by Ollama.
+
+        Yields:
+            Content strings as they arrive.
+        """
         headers: dict[str, str] = {"Content-Type": "application/json"}
         model_params = self.get_model_params(model_type)
         ollama_messages: list[dict[str, str]] = []
@@ -168,6 +251,13 @@ class OllamaProvider(Provider):
 
 class AnthropicProvider(Provider):
     def __init__(self, client: anthropic.Anthropic, model_spec: ModelSpec):
+        """
+        Provider for Anthropic Claude endpoints.
+
+        Args:
+            client: Configured Anthropich client instance.
+            model_spec: Specification of Claude model names and temperatures.
+        """
         super().__init__(model_spec)
         self.client: anthropic.Anthropic = client
 
@@ -176,6 +266,21 @@ class AnthropicProvider(Provider):
         system_message: str,
         reasoning_effort=ReasoningAmount.MEDIUM
     ) -> Generator[str, None, None]:
+        """
+        Stream responses from Anthropic Claude models with optional thinking budgets.
+
+        Args:
+            model_type: LARGE or SMALL model selection.
+            messages: Conversation history as (role, content).
+            system_message: System prompt to prepend.
+            reasoning_effort: How much internal thinking tokens to budget.
+
+        Yields:
+            Text chunks as received from the stream.
+
+        Raises:
+            IOError: If the request fails after retrying.
+        """
         if len(messages) < 1:
             return
 
@@ -227,6 +332,13 @@ class AnthropicProvider(Provider):
 
 class OpenAIProvider(Provider):
     def __init__(self, client: openai.OpenAI, model_spec: ModelSpec):
+        """
+        Provider for OpenAI (and compatible) chat endpoints.
+
+        Args:
+            client: An OpenAI-compatible client instance.
+            model_spec: Specification of model names and temperatures.
+        """
         super().__init__(model_spec)
         self.client: openai.OpenAI = client
         self.max_retries = 5
@@ -237,6 +349,23 @@ class OpenAIProvider(Provider):
         system_message: str,
         reasoning_effort: ReasoningAmount = ReasoningAmount.MEDIUM
     ) -> Generator[str, None, None]:
+        """
+        Stream or single-shot chat completions from OpenAI-like models.
+
+        Applies provider-specific parameter mapping and retry logic.
+
+        Args:
+            model_type: LARGE or SMALL to choose the correct model parameters.
+            messages: History as (role, content).
+            system_message: System-level prompt.
+            reasoning_effort: Adjusts parameters for applicable model families.
+
+        Yields:
+            Generated tokens or full response when streaming is disabled.
+
+        Raises:
+            IOError: When retries are exhausted.
+        """
         model_params = self.get_model_params(model_type)
 
         # map to openai specifics
@@ -258,9 +387,9 @@ class OpenAIProvider(Provider):
             try:
                 params = {}
 
-                use_stream = True if model_params.name not in ["o1", "o1-mini", "o3", "o3-mini", "o4-mini"] else False
+                use_stream = True if model_params.name not in ["o1", "o1-mini", "o3", "o3-mini", "o4-mini", "grok-3-mini-latest"] else False
 
-                if model_params.name in ["o4-mini", "o3", "o3-mini", "deepseek-reasoner"]:
+                if model_params.name in ["o4-mini", "o3", "o3-mini", "deepseek-reasoner", "grok-3-mini-latest"]:
                     if reasoning_effort == ReasoningAmount.LOW:
                         params["reasoning_effort"] = "low"
                     elif reasoning_effort == ReasoningAmount.MEDIUM:
@@ -293,6 +422,13 @@ class OpenAIProvider(Provider):
 
 class MistralProvider(Provider):
     def __init__(self, client: Mistral, model_spec: ModelSpec):
+        """
+        Provider for Mistral AI chat API.
+
+        Args:
+            client: Authenticated Mistral client.
+            model_spec: Names and temperatures for Mistral models.
+        """
         super().__init__(model_spec)
         self.client: Mistral = client
         self.max_retries = 5
@@ -301,7 +437,21 @@ class MistralProvider(Provider):
     def make_request(
         self, model_type: ModelType, messages: list[tuple[str, str]], system_message: str, reasoning_effort=None
     ) -> Generator[str, None, None]:
+        """
+        Stream chat completions from a Mistral endpoint with retry logic.
 
+        Args:
+            model_type: Which model variant to call.
+            messages: A list of (role, content) pairs.
+            system_message: The system-level instruction.
+            reasoning_effort: Currently not used by Mistral; reserved.
+
+        Yields:
+            Partial text segments from the Mistral stream.
+
+        Raises:
+            IOError: If the maximum number of retries is reached.
+        """
         model_params = self.get_model_params(model_type)
 
         mistral_messages: list[ChatCompletionStreamRequestMessages] = []
@@ -341,6 +491,19 @@ class MistralProvider(Provider):
 
 
 def get_api_key(provider_name: str, config: config.EggConfig) -> str:
+    """
+    Resolve an API key by checking environment first, then config object.
+
+    Args:
+        provider_name: The lowercase name of the provider (e.g., "openai").
+        config: EggConfig containing any fallback API keys.
+
+    Returns:
+        The API key string.
+
+    Raises:
+        ValueError: When no API key is found in env or config.
+    """
     env_var_name = f"{provider_name.upper()}_API_KEY"
     api_key = os.environ.get(env_var_name, None)
     if api_key:
@@ -357,6 +520,19 @@ def get_api_key(provider_name: str, config: config.EggConfig) -> str:
 
 def create_provider(model_spec: ModelSpec,
                     config: config.EggConfig) -> Provider:
+    """
+    Factory to build the appropriate Provider instance based on ModelSpec.provider.
+
+    Args:
+        model_spec: Parsed model specification.
+        config: Configuration holding API credentials.
+
+    Returns:
+        A concrete Provider implementation.
+
+    Raises:
+        ValueError: If the provider name is unrecognized.
+    """
     if model_spec.provider == "ollama":
         return OllamaProvider(model_spec=model_spec)
     elif model_spec.provider == "anthropic":

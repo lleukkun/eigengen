@@ -186,16 +186,7 @@ class EggChat:
         full_message = self._prepare_full_message(user_message)
         message_list = self.messages + [("user", full_message)]
         answer_chunks = []
-        if use_progress:
-            with ProgressIndicator() as _:
-                for chunk in self.pm.process_request(
-                    providers.ModelType.LARGE,
-                    self.reasoning_effort,
-                    prompts.get_prompt(self.mode),
-                    message_list,
-                ):
-                    answer_chunks.append(chunk)
-        else:
+        with ProgressIndicator(use_progress) as _:
             for chunk in self.pm.process_request(
                 providers.ModelType.LARGE,
                 self.reasoning_effort,
@@ -272,7 +263,7 @@ class EggChat:
             except EOFError:
                 break
 
-    def auto_chat(self, initial_prompt: str, diff_mode: bool = False) -> None:
+    def auto_chat(self, initial_prompt: str, diff_mode: bool = False, interactive: bool = False) -> None:
         """
         Execute a non-interactive single prompt and display the assistant's response.
 
@@ -290,37 +281,40 @@ class EggChat:
         style = Style.from_dict({"assistant": "ansigreen"})
 
         # Use the provided prompt and append any initial file context
-        answer = self._get_answer(initial_prompt, use_progress=False)
-
+        answer = self._get_answer(initial_prompt, use_progress=interactive)
+        self.messages.append(("user", initial_prompt))
+        self.messages.append(("assistant", answer))
         if diff_mode:
-            changes = utils.extract_change_descriptions(answer)
-            diff_found = False
-            for file_path, change_list in changes.items():
-                if file_path:
-                    # Prefer file path relative to the current working directory if it exists.
-                    full_path = os.path.abspath(file_path)
+            if interactive:
+                self.handle_meld()
+                return
+            else:
+                changes = utils.extract_change_descriptions(answer)
+                diff_found = False
+                for file_path, change_list in changes.items():
+                    if file_path:
+                        # Prefer file path relative to the current working directory if it exists.
+                        full_path = os.path.abspath(file_path)
 
-                    try:
-                        with open(full_path, "r", encoding="utf-8") as f:
-                            original_content = f.read()
-                    except Exception:
-                        original_content = ""
-                    new_content = meld.apply_changes(self.pm, full_path, original_content, "\n".join(change_list))
-                    diff_text = meld.produce_diff(full_path, original_content, new_content)
-                    print(diff_text)
-                    diff_found = True
-            if not diff_found:
-                print("No changes with file paths found in the response. No diff to show.")
-            return
+                        try:
+                            with open(full_path, "r", encoding="utf-8") as f:
+                                original_content = f.read()
+                        except Exception:
+                            original_content = ""
+                        new_content = meld.apply_changes(self.pm, full_path, original_content, "\n".join(change_list),
+                                                         use_progress=interactive)
+                        diff_text = meld.produce_diff(full_path, original_content, new_content)
+                        print(diff_text)
+                        diff_found = True
+                if not diff_found:
+                    print("No changes with file paths found in the response. No diff to show.")
+                return
         else:
             timestamp = datetime.now().strftime(TIME_FORMAT)
             print_formatted_text(FormattedText([("class:assistant", f"\n[{timestamp}][Assistant] >")]), style=style)
             formatted_response = utils.get_formatted_response_with_syntax_highlighting(self.config.color_scheme, answer)
             utils.pipe_output_via_pager(formatted_response)
             print("")
-
-            self.messages.append(("user", initial_prompt))
-            self.messages.append(("assistant", answer))
 
     def handle_command(self, prompt_input: str) -> bool:
         """
