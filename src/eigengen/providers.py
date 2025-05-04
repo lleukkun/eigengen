@@ -33,8 +33,6 @@ from eigengen import config, log
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_BASE_URL: str = "http://localhost:11434"
-
 
 class ReasoningAmount(Enum):
     """
@@ -199,54 +197,6 @@ class ProviderManager:
 
         # Log the request and response
         log.log_request_response(self.spec.large_name, messages, final_answer)
-
-
-class OllamaProvider(Provider):
-    def __init__(self, model_spec: ModelSpec):
-        """
-        Provider for Ollama local chat API.
-
-        Args:
-            model_spec: Specification of the large and small Ollama models.
-        """
-        super().__init__(model_spec)
-
-    def make_request(
-        self, model_type: ModelType, messages: list[tuple[str, str]], system_message: str, reasoning_effort=None
-    ) -> Generator[str, None, None]:
-        """
-        Issue a streaming chat completion request to an Ollama server.
-
-        Args:
-            model_type: Selection of large or small model.
-            messages: List of (role, content) tuples.
-            system_message: The system directive.
-            reasoning_effort: Ignored by Ollama.
-
-        Yields:
-            Content strings as they arrive.
-        """
-        headers: dict[str, str] = {"Content-Type": "application/json"}
-        model_params = self.get_model_params(model_type)
-        ollama_messages: list[dict[str, str]] = []
-
-        ollama_messages.append({ "role": "system", "content": system_message })
-        for message in messages:
-            ollama_messages.append({ "role": message[0], "content": message[1]})
-
-        data: dict[str, Any] = {
-            "model": model_params.name,
-            "messages": ollama_messages,
-            "stream": True,
-            "options": {"temperature": model_params.temperature},
-        }
-        response = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, data=json.dumps(data), stream=True)
-        response.raise_for_status()
-
-        for line in response.iter_lines():
-            if line:
-                content = json.loads(line)["message"]["content"]
-                yield content
 
 
 class AnthropicProvider(Provider):
@@ -534,7 +484,9 @@ def create_provider(model_spec: ModelSpec,
         ValueError: If the provider name is unrecognized.
     """
     if model_spec.provider == "ollama":
-        return OllamaProvider(model_spec=model_spec)
+        api_key="ollama"
+        client = openai.OpenAI(api_key=api_key, base_url="http://localhost:11434/v1")
+        return OpenAIProvider(client, model_spec=model_spec)
     elif model_spec.provider == "anthropic":
         api_key = get_api_key("anthropic", config)
         client = anthropic.Anthropic(api_key=api_key)
