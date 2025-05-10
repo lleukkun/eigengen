@@ -49,18 +49,17 @@ def parse_arguments() -> argparse.Namespace:
         "--list-history", nargs="?", const=5, type=int, metavar="N", help="List the last N prompts (default 5)"
     )
     parser.add_argument("--general", action="store_true", help="Use general chat mode")
-    parser.add_argument("--programmer", action="store_true", help="Use programmer chat mode")
+    parser.add_argument("--code", action="store_true", help="Use code generation chat mode")
     parser.add_argument("--tutor", action="store_true", help="Use tutor chat mode")
     parser.add_argument("--rag", action="store_true", help="Enable Retrieval Augmented Generation functionality")
     parser.add_argument("--high", action="store_true", help="Use high reasoning effort for chat (requires LLM support)")
     parser.add_argument("--low", action="store_true", help="Use low reasoning effort for chat (requires LLM support)")
     parser.add_argument("--gui", action="store_true", help="Launch the graphical user interface")
-    parser.add_argument("--inline", action="store_true", help="Process the source code inline @egg instructions")
+    parser.add_argument("--inline", action="store_true", help="Process the source code inline @@egg instructions")
 
     args = parser.parse_args()
-    # only one of --general and --programmer can be specified
-    if args.general and args.programmer:
-        parser.error("Only one of --general and --programmer can be specified")
+    if args.general and args.code:
+        parser.error("Only one of --general and --code can be specified")
     if args.low and args.high:
         parser.error("Only one of --low and --high can be specified")
     return args

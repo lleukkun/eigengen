@@ -50,7 +50,7 @@ CHAT_HELP = (
     "                      the specified file paths.\n"
     "                      If no paths are provided, changes will be applied\n"
     "                      to all files referenced in the latest assistant message.\n"
-    "/mode                 Mode of the system: general, programmer (default)\n"
+    "/mode                 Mode of the system: general, code (default)\n"
     "/quote <path>         Read and quote the contents of a file into the buffer.\n"
     "/reset                Clear all messages.\n"
     "\nKeyboard Shortcuts:\n"
@@ -71,7 +71,7 @@ class EggChat:
     Attributes:
         config (EggConfig): Configuration settings including model, prompt, and chat options.
         pm: The provider manager instance responsible for handling model requests.
-        mode (str): Operational mode, either "general" or "programmer".
+        mode (str): Operational mode, either "general" or "code".
         quoting_state (dict): State object for managing code block quoting (cycling, indexing, etc.).
         messages (List[Dict[str, str]]): History of conversation messages.
         pre_fill (str): Prefilled text for upcoming prompts.
@@ -101,7 +101,7 @@ class EggChat:
         elif config.args.tutor:
             self.mode = "tutor"
         else:
-            self.mode = "programmer"
+            self.mode = "code"
 
         self.quoting_state = {"current_index": -1, "code_blocks": None, "cycle_iterator": None}
         self.messages: list[tuple[str, str]] = []
@@ -428,7 +428,7 @@ class EggChat:
         Process the '/mode' command for displaying or switching the operational mode.
 
         If invoked without arguments, the current mode is displayed. If an argument is provided,
-        it attempts to change the mode to either "general" or "programmer".
+        it attempts to change the mode to either "general" or "code".
 
         Args:
             *args: Additional arguments provided with the command.
@@ -440,12 +440,12 @@ class EggChat:
             print(f"Current mode: {self.mode}")
         else:
             new_mode = args[0].strip()
-            if new_mode in ["general", "programmer"]:
+            if new_mode in ["general", "code"]:
                 self.mode = new_mode
                 print(f"Mode switched to: {new_mode}")
             else:
                 print(f"Unsupported mode: {new_mode}")
-                print("Supported modes are: general, programmer")
+                print("Supported modes are: general, code")
         return True
 
     def handle_exit(self) -> bool:
