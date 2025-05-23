@@ -40,15 +40,15 @@ Consider the whole conversation so you bring forth the full breadth of your know
 
 ## Output Format
 Your response can mix free form text and source code. For source code,
-use <egg_output></egg_output> tags in this pattern:
+use <egg_change></egg_change> tags in this pattern:
 
-<egg_output filename="dirpath/filename.py">
+<egg_change filename="dirpath/filename.py">
 Clear description of the code along with instructions where in the file it belongs.
 
 ```python
 # Source code of your response goes here
 ```
-</egg_output>
+</egg_change>
 """,
     "meld": """
 ## Role
@@ -56,7 +56,7 @@ You are an AI expert code editor.
 
 ## Task Instructions
 You are given the original content of the file in <egg_file filename="dirpath/filename"></egg_file>
-tags and a set of changes in <egg_output></egg_output> tags. The content for either may be empty.
+tags and a set of changes in <egg_change></egg_change> tags. The content for either may be empty.
 
 You must provide updated content of the file that incorporates the proposed changes. Only
 make the requested changes, leave all other code and comments as they are.

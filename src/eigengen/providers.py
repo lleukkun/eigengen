@@ -1,7 +1,6 @@
 """Provider module for wrapping multiple LLM backends behind a unified interface."""
 
 import dataclasses
-import json
 import logging
 import os
 import random
@@ -9,11 +8,10 @@ import re
 import time
 from abc import abstractmethod
 from enum import Enum
-from typing import Any, Generator, Protocol, cast
+from typing import Generator, Protocol, cast
 
 import anthropic
 import openai
-import requests
 from mistralai import (
     AssistantMessage,
     ChatCompletionStreamRequestMessages,
@@ -244,7 +242,8 @@ class AnthropicProvider(Provider):
         base_delay = 1
         model_params = self.get_model_params(model_type)
         extra_params = {}
-        if model_params.name.startswith("claude-3.7"):
+        if model_params.name in ["claude-opus-4-20250514", "claude-sonnet-4-20250514"] :
+            extra_params["max_tokens"] = 32000
             if reasoning_effort == ReasoningAmount.LOW:
                 extra_params["thinking"] = { "type": "enabled",
                                              "budget_tokens": 2000 }
@@ -254,9 +253,8 @@ class AnthropicProvider(Provider):
             elif reasoning_effort == ReasoningAmount.HIGH:
                 extra_params["thinking"] = { "type": "enabled",
                                              "budget_tokens": 24000 }
-        max_tokens = 8192
-        if "thinking" in extra_params:
-            max_tokens += extra_params["thinking"]["budget_tokens"]
+        else:
+            extra_params["max_tokens"] = 8192
 
         for attempt in range(max_retries):
             try:
@@ -264,7 +262,6 @@ class AnthropicProvider(Provider):
                     model=model_params.name,
                     temperature=model_params.temperature,
                     messages=anthropic_messages,
-                    max_tokens=max_tokens,
                     system=system_message,
                     **extra_params,
                 ) as stream:
@@ -346,7 +343,7 @@ class OpenAIProvider(Provider):
                         params["reasoning_effort"] = "medium"
                     elif reasoning_effort == ReasoningAmount.HIGH:
                         params["reasoning_effort"] = "high"
-                if model_params.name not in ["o1", "o3-mini", "o3", "o4-mini"]:
+                if model_params.name not in ["o1", "o3-mini", "o3", "o4-mini", "claude-opus-4-20250514", "claude-sonnet-4-20250514"]:
                     params["temperature"] = model_params.temperature
 
                 response = self.client.chat.completions.create(
