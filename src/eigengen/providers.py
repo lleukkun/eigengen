@@ -515,5 +515,9 @@ def create_provider(model_spec: ModelSpec,
         api_key = get_api_key("xai", config)
         client = openai.OpenAI(api_key=api_key, base_url="https://api.x.ai/v1")
         return OpenAIProvider(client, model_spec)
+    elif model_spec.provider == "cerebras":
+        api_key = get_api_key("cerebras", config)
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.cerebras.ai/v1")
+        return OpenAIProvider(client, model_spec)
     else:
         raise ValueError(f"Invalid provider name: {model_spec.provider}")
